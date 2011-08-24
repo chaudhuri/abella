@@ -23,3 +23,4 @@ src/version.ml
 src/abella
 src/unit_test
 abella
+_build
