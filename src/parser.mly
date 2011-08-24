@@ -46,7 +46,7 @@
 %token SPLIT SPLITSTAR UNFOLD KEEP CLEAR SPECIFICATION SEMICOLON
 %token THEOREM DEFINE PLUS CODEFINE SET ABBREV UNABBREV QUERY SHOW
 %token PERMUTE BACKCHAIN QUIT UNDERSCORE AS SSPLIT
-%token COLON RARROW FORALL NABLA EXISTS STAR AT HASH OR AND LBRACK RBRACK
+%token COLON RARROW FORALL FORALLP NABLA EXISTS STAR AT HASH OR AND LBRACK RBRACK
 %token KIND TYPE KKIND TTYPE SIG MODULE ACCUMSIG ACCUM END CLOSE
 
 %token <int> NUM
@@ -317,6 +317,7 @@ binder:
   | FORALL                               { Metaterm.Forall }
   | EXISTS                               { Metaterm.Exists }
   | NABLA                                { Metaterm.Nabla }
+  | FORALLP                              { Metaterm.Forallp }
 
 binding_list:
   | paid binding_list                    { $1::$2 }

@@ -1,8 +1,11 @@
-OCB = ocamlbuild -use-ocamlfind -classic-display
+VERSION = 1.4.0-forallp
+
+OCB = ocamlbuild -use-ocamlfind -classic-display -no-links
 
 .PHONY: all
-all: src/version.ml src/abella.ml src/abella.native src/abella.cma
+all: vstamp src/abella.ml src/abella.native src/abella.cma
 	${RM} src/abella.ml
+	ln -sf _build/src/abella.native abella
 
 %.native:
 	${OCB} $@
@@ -10,10 +13,9 @@ all: src/version.ml src/abella.ml src/abella.native src/abella.cma
 %.cma:
 	${OCB} $@
 
-src/version.ml:
-	if test ! -e $@ ; then \
-	  echo 'let version = "$(VERSION)"' > $@ ; \
-	fi
+.PHONY: vstamp
+vstamp:
+	echo 'let version = "$(VERSION)"' > src/version.ml
 
 src/abella.ml: src/main.ml
 	cp $< $@

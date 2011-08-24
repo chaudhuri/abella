@@ -523,10 +523,10 @@ let umetaterm_to_string t =
 let umetaterm_to_formatted_string t =
   metaterm_to_formatted_string (umetaterm_to_metaterm [] t)
 
-let check_meta_logic_quantification_type ty =
+let check_meta_logic_quantification_type q ty =
   iter_ty
     (fun bty ->
-       if bty = "prop" then
+       if q <> Forallp && bty = "prop" then
          failwith "Cannot quantify over type prop")
     ty
 
@@ -535,9 +535,9 @@ let check_meta_quantification t =
     match t with
       | True | False | Eq _ | Obj _ | Pred _ -> ()
       | And(a, b) | Or(a, b) | Arrow(a, b) -> aux a; aux b
-      | Binding(_, tids, body) ->
+      | Binding(q, tids, body) ->
           List.iter
-            check_meta_logic_quantification_type
+            (check_meta_logic_quantification_type q)
             (List.map snd tids) ;
           aux body
   in

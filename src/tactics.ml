@@ -433,7 +433,7 @@ let rec set_restriction_at res stmt arg =
 let single_induction ind_arg ind_num stmt =
   let rec aux stmt =
     match stmt with
-      | Binding(Forall, bindings, body) ->
+      | Binding((Forall | Forallp), bindings, body) ->
           let (ih, goal) = aux body in
             (forall bindings ih, forall bindings goal)
       | Binding(Nabla, bindings, body) ->
@@ -455,7 +455,7 @@ let induction ind_args ind_num stmt =
 let coinduction res_num stmt =
   let rec aux stmt =
     match stmt with
-      | Binding(Forall, bindings, body) ->
+      | Binding((Forall | Forallp), bindings, body) ->
           let (ch, goal) = aux body in
             (forall bindings ch, forall bindings goal)
       | Binding(Nabla, bindings, body) ->
@@ -762,6 +762,12 @@ let search ~depth:n ~hyps ~clauses ~alldefs
           let body = replace_metaterm_vars alist body in
             metaterm_aux n hyps body ts
               ~sc:(fun w -> sc (WIntros(alist_to_ids alist, w)))
+      | Binding(Forallp, tids, body) ->
+          let ts = ts + 1 in
+          let alist = fresh_nameless_alist ~support:[] ~tag:Eigen ~ts tids in
+          let body = replace_metaterm_vars alist body in
+            metaterm_aux n hyps body ts
+              ~sc:(fun w -> sc (WIntros(alist_to_ids alist, w)))
       | Obj(obj, r) -> obj_aux n hyps obj r ts ~sc
       | Pred(_, Smaller _) | Pred(_, Equal _) -> ()
       | Pred(p, r) -> if n > 0 then def_aux n hyps p r ts ~sc
@@ -911,7 +917,7 @@ let take_from_binders binders withs =
 
 let rec instantiate_withs term withs =
   match term with
-    | Binding(Forall, binders, body) ->
+    | Binding((Forall | Forallp), binders, body) ->
         let binders', withs' = take_from_binders binders withs in
         let body, used_nominals =
           instantiate_withs (replace_metaterm_vars withs' body) withs

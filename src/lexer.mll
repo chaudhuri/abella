@@ -77,6 +77,7 @@ rule token = parse
 
 | ":"                { COLON }
 | "->"               { RARROW }
+| "forallp"          { FORALLP }
 | "forall"           { FORALL }
 | "nabla"            { NABLA }
 | "exists"           { EXISTS }
