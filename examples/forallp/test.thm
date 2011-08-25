@@ -23,3 +23,22 @@ induction on 2. intros. case H2.
  apply H1 with X = Y.
  apply H4 to H3. search.
 
+Define $nat : i -> prop by
+  $nat z
+; $nat (s X) := $nat X.
+
+Theorem th_nat_lem :
+   forall X, (  ( $nat (s X) -> $nat X )
+             /\ ( $nat X -> $nat (s X) ) ).
+skip.
+
+Theorem th_nat_inst :
+  forall X Y,
+    {pred X Y} -> $nat X -> $nat Y.
+intros.
+apply th_nat_lem.
+apply th_nat.
+apply H5 to H4 H2 H3 with X = X, Y = Y, nat = $nat.
+search.
+
+

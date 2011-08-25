@@ -911,6 +911,7 @@ let rec ensure_unique_nominals lst =
 
 let take_from_binders binders withs =
   let withs' =
+    (* List.find_all (fun (x, t) -> List.mem_assoc x binders) withs *)
     List.find_all (fun (x,t) -> try begin
                      match List.assoc x binders with
                        | Ty (_, "prop") -> begin match observe t with
