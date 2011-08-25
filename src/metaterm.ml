@@ -35,7 +35,6 @@ type binder =
   | Forall
   | Nabla
   | Exists
-  | Forallp
 
 type metaterm =
   | True
@@ -104,7 +103,6 @@ let binder_to_string b =
     | Forall -> "forall"
     | Nabla -> "nabla"
     | Exists -> "exists"
-    | Forallp -> "forallp"
 
 let format_metaterm fmt t =
   let rec aux pr_above t =

@@ -1,13 +1,21 @@
 Specification "test".
 
 Theorem th0 :
-  forallp (p:prop -> prop), (forallp q, p q) -> (forallp q, p q).
+  forall p, (forall (q:prop), p q) -> (forall q, p q).
 intros.
 apply H1 with q = q.
 search.
 
 Theorem th1 :
-  forall X Y, forallp nat,
+  forall p n, (forall x, p x -> p (s x)) -> p z -> {nat n} -> p n.
+induction on 3. intros. case H3.
+ search.
+ apply H1 to H2.
+ apply IH to H1 H2 H4 with p = p.
+ apply H1 to H6. search.
+
+Theorem th_nat :
+  forall X Y nat,
     (forall X, (  ( nat (s X) -> nat X )
                /\ ( nat X -> nat (s X) ) ) ) ->
     {pred X Y} -> nat X -> nat Y.

@@ -471,7 +471,7 @@ let ensure_no_logic_variable terms =
 let ensure_no_restrictions term =
   let rec aux t nested =
     match t with
-      | Binding((Forall | Nabla | Forallp), _, body) -> aux body true
+      | Binding((Forall | Nabla), _, body) -> aux body true
       | Arrow(left, right) -> aux left true; aux right true
       | Obj(_, Smaller i) | Obj(_, Equal i)
       | Pred(_, Smaller i) | Pred(_, Equal i) ->
@@ -484,7 +484,7 @@ let ensure_no_restrictions term =
 
 let toplevel_bindings stmt =
   let rec aux = function
-    | Binding((Forall | Forallp | Nabla), tids, t) -> tids @ (aux t)
+    | Binding((Forall | Nabla), tids, t) -> tids @ (aux t)
     | _ -> []
   in
     aux stmt
@@ -641,7 +641,7 @@ let next_restriction () =
 
 let rec nth_product n term =
   match term with
-    | Binding((Forall | Nabla | Forallp), _, body) -> nth_product n body
+    | Binding((Forall | Nabla), _, body) -> nth_product n body
     | Arrow(left, right) ->
         if n = 1 then
           left
@@ -768,7 +768,7 @@ let theorem thm =
 let intros () =
   let rec aux term =
     match term with
-      | Binding((Forall | Forallp), bindings, body) ->
+      | Binding(Forall, bindings, body) ->
           let support = metaterm_support body in
           let (alist, vars) =
             fresh_raised_alist ~sr:!sr ~tag:Eigen ~used:sequent.vars

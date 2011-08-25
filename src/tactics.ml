@@ -433,7 +433,7 @@ let rec set_restriction_at res stmt arg =
 let single_induction ind_arg ind_num stmt =
   let rec aux stmt =
     match stmt with
-      | Binding((Forall | Forallp), bindings, body) ->
+      | Binding(Forall, bindings, body) ->
           let (ih, goal) = aux body in
             (forall bindings ih, forall bindings goal)
       | Binding(Nabla, bindings, body) ->
@@ -455,7 +455,7 @@ let induction ind_args ind_num stmt =
 let coinduction res_num stmt =
   let rec aux stmt =
     match stmt with
-      | Binding((Forall | Forallp), bindings, body) ->
+      | Binding(Forall, bindings, body) ->
           let (ch, goal) = aux body in
             (forall bindings ch, forall bindings goal)
       | Binding(Nabla, bindings, body) ->
@@ -762,12 +762,6 @@ let search ~depth:n ~hyps ~clauses ~alldefs
           let body = replace_metaterm_vars alist body in
             metaterm_aux n hyps body ts
               ~sc:(fun w -> sc (WIntros(alist_to_ids alist, w)))
-      | Binding(Forallp, tids, body) ->
-          let ts = ts + 1 in
-          let alist = fresh_nameless_alist ~support:[] ~tag:Eigen ~ts tids in
-          let body = replace_metaterm_vars alist body in
-            metaterm_aux n hyps body ts
-              ~sc:(fun w -> sc (WIntros(alist_to_ids alist, w)))
       | Obj(obj, r) -> obj_aux n hyps obj r ts ~sc
       | Pred(_, Smaller _) | Pred(_, Equal _) -> ()
       | Pred(p, r) -> if n > 0 then def_aux n hyps p r ts ~sc
@@ -846,6 +840,13 @@ let apply_arrow term args =
     Context.reconcile !context_pairs ;
     (normalize result, !obligations)
 
+let abort_on_prop_bindings bs =
+  List.iter begin
+    fun (id, Ty (_, retty)) ->
+      if retty = "prop" then
+        failwith "Second order quantifiers must be explicitly instantiated with apply_with"
+  end bs
+
 let apply ?(used_nominals=[]) term args =
   let support =
     Some term :: args
@@ -855,6 +856,7 @@ let apply ?(used_nominals=[]) term args =
   in
     match term with
       | Binding(Forall, bindings, Binding(Nabla, nablas, body)) ->
+          abort_on_prop_bindings bindings ;
           let n = List.length nablas in
           let (nabla_ids, nabla_tys) = List.split nablas in
           (* Add dummy nominals in case nabla bound variables aren't used *)
@@ -890,6 +892,7 @@ let apply ?(used_nominals=[]) term args =
                         failwith "Failed to find instantiations for nabla quantified variables")
 
       | Binding(Forall, bindings, body) ->
+          abort_on_prop_bindings bindings ;
           apply_arrow (freshen_nameless_bindings ~support ~ts:0 bindings body) args
 
       | Arrow _ ->
@@ -908,7 +911,15 @@ let rec ensure_unique_nominals lst =
 
 let take_from_binders binders withs =
   let withs' =
-    List.find_all (fun (x,t) -> List.mem_assoc x binders) withs
+    List.find_all (fun (x,t) -> try begin
+                     match List.assoc x binders with
+                       | Ty (_, "prop") -> begin match observe t with
+                           | DB _ | Var _ -> true
+                           | _ -> failwith (Printf.sprintf
+                                              "Invalid propositional substitution %s = %s" x (term_to_string t))
+                         end
+                       | _ -> true
+                   end with Not_found -> false) withs
   in
   let binders' = List.remove_all
     (fun (x, ty) -> List.mem_assoc x withs) binders
@@ -917,7 +928,7 @@ let take_from_binders binders withs =
 
 let rec instantiate_withs term withs =
   match term with
-    | Binding((Forall | Forallp), binders, body) ->
+    | Binding(Forall, binders, body) ->
         let binders', withs' = take_from_binders binders withs in
         let body, used_nominals =
           instantiate_withs (replace_metaterm_vars withs' body) withs
@@ -973,46 +984,46 @@ let backchain_arrow term goal =
 
 let backchain ?(used_nominals=[]) term goal =
   let support = List.minus (metaterm_support goal) used_nominals in
-    match term with
-      | Binding(Forall, bindings, Binding(Nabla, nablas, body)) ->
-          let n = List.length nablas in
-          let (nabla_ids, nabla_tys) = List.split nablas in
-            support |> List.rev |> List.permute n
-              |> List.find_all
-                  (fun nominals -> nabla_tys = List.map (tc []) nominals)
-              |> List.find_some
-                (fun nominals ->
-                   try_with_state ~fail:None
-                     (fun () ->
-                        let support = List.minus support nominals in
-                        let raised_body =
-                          freshen_nameless_bindings ~support ~ts:0 bindings body
-                        in
-                        let alist = List.combine nabla_ids nominals in
-                        let permuted_body =
-                          replace_metaterm_vars alist raised_body
-                        in
-                          Some (backchain_arrow permuted_body goal)))
-              |> (function
-                    | Some v -> v
-                    | None ->
-                        failwith "Failed to find instantiations for nabla quantified variables")
+  match term with
+    | Binding(Forall, bindings, Binding(Nabla, nablas, body)) ->
+        let n = List.length nablas in
+        let (nabla_ids, nabla_tys) = List.split nablas in
+        support |> List.rev |> List.permute n
+    |> List.find_all
+        (fun nominals -> nabla_tys = List.map (tc []) nominals)
+    |> List.find_some
+        (fun nominals ->
+           try_with_state ~fail:None
+             (fun () ->
+                let support = List.minus support nominals in
+                let raised_body =
+                  freshen_nameless_bindings ~support ~ts:0 bindings body
+                in
+                let alist = List.combine nabla_ids nominals in
+                let permuted_body =
+                  replace_metaterm_vars alist raised_body
+                in
+                Some (backchain_arrow permuted_body goal)))
+    |> (function
+          | Some v -> v
+          | None ->
+              failwith "Failed to find instantiations for nabla quantified variables")
 
-      | Binding(Forall, bindings, body) ->
-          backchain_arrow (freshen_nameless_bindings ~support ~ts:0 bindings body) goal
+    | Binding(Forall, bindings, body) ->
+        backchain_arrow (freshen_nameless_bindings ~support ~ts:0 bindings body) goal
 
-      | Arrow _ ->
-          backchain_arrow term goal
+    | Arrow _ ->
+        backchain_arrow term goal
 
-      | _ -> failwith
-          ("Structure of backchained term must be a " ^
-             "substructure of the following.\n" ^
-             "forall A1 ... Ai, nabla z1 ... zj, H1 -> ... -> Hk -> C")
+    | _ -> failwith
+        ("Structure of backchained term must be a " ^
+           "substructure of the following.\n" ^
+           "forall A1 ... Ai, nabla z1 ... zj, H1 -> ... -> Hk -> C")
 
 
 let backchain_with term withs goal =
   let term, used_nominals = instantiate_withs term withs in
-    backchain term goal ~used_nominals
+  backchain term goal ~used_nominals
 
 (* Permute nominals *)
 
