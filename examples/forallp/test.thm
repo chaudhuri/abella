@@ -38,7 +38,5 @@ Theorem th_nat_inst :
 intros.
 apply th_nat_lem.
 apply th_nat.
-apply H5 to H4 H2 H3 with X = X, Y = Y, nat = $nat.
+apply H4 to H3 H1 H2 with X = X, Y = Y, nat = $nat.
 search.
-
-
