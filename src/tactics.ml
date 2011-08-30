@@ -915,7 +915,7 @@ let take_from_binders binders withs =
     List.find_all (fun (x,t) -> try begin
                      match List.assoc x binders with
                        | Ty (_, "prop") -> begin match observe t with
-                           | DB _ (* | Var _ *) -> true
+                           | DB _ | Var _ -> true
                            | _ -> failwith (Printf.sprintf
                                               "Invalid propositional substitution %s = %s" x (term_to_string t))
                          end
