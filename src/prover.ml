@@ -767,12 +767,12 @@ let monotone h t =
             (List.map (fun (id, ty) -> (id, nominal_var id ty)) ntids)
           in
           let t = type_uterm ~sr:!sr ~sign:!sign ~ctx t olistty in
-          let new_obj = { obj with context = Context.normalize [t] } in
+          let new_obj = { obj with context = Context.normalize (Context.of_list [t]) } in
             delay_mainline
               (Obj(new_obj, r))
               (Binding(Forall, [("X", oty)],
                        Arrow(member (Term.const "X" oty)
-                               (Context.context_to_term obj.context),
+                               (Context.to_term obj.context),
                              member (Term.const "X" oty)
                                t))) ;
       | _ -> failwith

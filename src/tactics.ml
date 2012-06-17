@@ -31,14 +31,14 @@ let freshen_clause ~used ~sr ?(support=[]) head body =
   let tids = capital_tids (head::body) in
   let (alist, vars) = fresh_raised_alist ~sr ~tag:Eigen ~used ~support tids in
     (List.map term_to_pair vars @ used,
-     replace_term_vars alist head,
-     List.map (replace_term_vars alist) body)
+     Term.replace_vars alist head,
+     List.map (Term.replace_vars alist) body)
 
 let freshen_def ~used ~sr ?(support=[]) head body =
   let tids = capital_tids [head] in
   let (alist, vars) = fresh_raised_alist ~sr ~tag:Eigen ~used ~support tids in
     (List.map term_to_pair vars,
-     replace_term_vars alist head,
+     Term.replace_vars alist head,
      replace_metaterm_vars alist body)
 
 let term_vars_alist tag terms =
@@ -59,14 +59,14 @@ let fresh_nameless_alist ~support ~tag ~ts tids =
 let freshen_nameless_clause ?(support=[]) ~ts head body =
   let tids = capital_tids (head::body) in
   let fresh_names = fresh_nameless_alist ~support ~tag:Logic ~ts tids in
-  let fresh_head = replace_term_vars fresh_names head in
-  let fresh_body = List.map (replace_term_vars fresh_names) body in
+  let fresh_head = Term.replace_vars fresh_names head in
+  let fresh_body = List.map (Term.replace_vars fresh_names) body in
     (fresh_head, fresh_body)
 
 let freshen_nameless_def ?(support=[]) ~ts head body =
   let tids = capital_tids [head] in
   let fresh_names = fresh_nameless_alist ~support ~tag:Logic ~ts tids in
-  let fresh_head = replace_term_vars fresh_names head in
+  let fresh_head = Term.replace_vars fresh_names head in
   let fresh_body = replace_metaterm_vars fresh_names body in
     (fresh_head, fresh_body)
 
@@ -102,20 +102,20 @@ let search_cut ~search_goal obj =
   let rec aux left right =
     match right with
       | d::ds ->
-          if search_goal (Obj(context_obj (left @ ds) d, Irrelevant)) then
+          if search_goal (Obj(context_obj_of_list (left @ ds) d, Irrelevant)) then
             aux left ds
           else
             aux (d::left) ds
       | [] -> left
   in
-    context_obj (aux [] (List.rev obj.context)) obj.term
+    context_obj_of_list (aux [] (List.rev (Context.to_list obj.context))) obj.term
 
 (* Object level instantiation *)
 
 (* inst t1 with n = t2 *)
 let object_inst t1 n t2 =
   if List.mem n (List.map term_to_name (metaterm_support t1)) then
-    map_on_objs (map_obj (replace_term_vars ~tag:Nominal [(n, t2)])) t1
+    map_on_objs (map_obj (Term.replace_vars ~tag:Nominal [(n, t2)])) t1
   else
     failwith ("Did not find " ^ n)
 
@@ -332,7 +332,7 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
                                        fresh_nominals rtys (pred (app head global_support))
                                      in
                                      let () = lift_all ~used ~sr nominals in
-                                     let head = replace_term_vars (List.combine rids nominals) head in
+                                     let head = Term.replace_vars (List.combine rids nominals) head in
                                      let (pids, ptys) = List.split (List.minus tids raised) in
                                        List.permute (List.length pids) support
                                    |> List.find_all
@@ -342,7 +342,7 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
                                           (fun permuted ->
                                              let support = List.minus support permuted in
                                              let head =
-                                               replace_term_vars (List.combine pids permuted) head
+                                               Term.replace_vars (List.combine pids permuted) head
                                              in
                                                make_case ~support ~used (head, body) term)))))
                 | _ -> failwith "Bad head in definition"))
@@ -530,7 +530,7 @@ let unfold_defs ~mdefs ~ts goal r =
              (fun nominals ->
                 let support = List.minus support nominals in
                 let alist = List.combine ids nominals in
-                let head = replace_term_vars alist head in
+                let head = Term.replace_vars alist head in
                 let head, body = freshen_nameless_def ~support ~ts head body in
                   match try_right_unify_cpairs head goal with
                     | None -> []

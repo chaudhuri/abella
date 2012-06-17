@@ -363,7 +363,7 @@ let type_uterm ~sr ~sign ~ctx t expected_ty =
   let eqns = (expected_ty, ty, (get_pos t, CArg)) :: eqns in
   let sub = unify_constraints eqns in
   let ctx = ctx @ (tyctx_to_nominal_ctx (apply_sub_tyctx sub nominal_tyctx)) in
-  let result = replace_term_vars ctx (uterm_to_term sub t) in
+  let result = Term.replace_vars ctx (uterm_to_term sub t) in
     term_ensure_fully_inferred result ;
     term_ensure_subordination sr result ;
     result
@@ -444,7 +444,7 @@ let type_uclause ~sr ~sign (head, body) =
   in
   let sub = unify_constraints eqns in
   let ctx = tyctx_to_ctx (apply_sub_tyctx sub tyctx) in
-  let convert p = replace_term_vars ctx (uterm_to_term sub p) in
+  let convert p = Term.replace_vars ctx (uterm_to_term sub p) in
   let (rhead, rbody) = (convert head, List.map convert body) in
     List.iter term_ensure_fully_inferred (rhead::rbody) ;
     List.iter (term_ensure_subordination sr) (rhead::rbody) ;
@@ -504,7 +504,7 @@ let umetaterm_to_metaterm sub t =
       | UFalse -> False
       | UEq(a, b) -> Eq(uterm_to_term sub a, uterm_to_term sub b)
       | UObj(l, g, r) ->
-          Obj({context = Context.normalize [uterm_to_term sub l] ;
+          Obj({context = Context.normalize (Context.of_list [uterm_to_term sub l]) ;
                term = uterm_to_term sub g}, r)
       | UArrow(a, b) -> Arrow(aux a, aux b)
       | UBinding(binder, tids, body) ->

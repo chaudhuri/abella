@@ -50,6 +50,7 @@ type metaterm =
 (* Constructions *)
 
 let context_obj ctx t = { context = ctx ; term = t }
+let context_obj_of_list ctx t = context_obj (Context.of_list ctx) t
 let obj t = { context = Context.empty ; term = t }
 
 let termobj t = Obj(obj t, Irrelevant)
@@ -93,7 +94,7 @@ let obj_to_string obj =
   let context =
     if Context.is_empty obj.context
     then ""
-    else (Context.context_to_string obj.context ^ " |- ")
+    else (Context.to_string obj.context ^ " |- ")
   in
   let term = term_to_string obj.term in
     "{" ^ context ^ term ^ "}"
@@ -236,7 +237,7 @@ let extract_pi t =
     | _ -> failwith "Check is_pi before calling extract_pi"
 
 let obj_to_member obj =
-  member obj.term (Context.context_to_term obj.context)
+  member obj.term (Context.to_term obj.context)
 
 let is_obj t =
   match t with
@@ -300,24 +301,8 @@ let fresh_raised_alist ~used ~sr ~tag ~support tids =
     (List.map2 (fun (id, t) support -> (id, app t support)) alist rsupports,
      List.map snd alist)
 
-let replace_term_vars ?tag alist t =
-  let rec aux t =
-    match observe (hnorm t) with
-      | Var v when List.mem_assoc v.name alist &&
-          (tag = None || tag = Some v.tag)
-          ->
-          List.assoc v.name alist
-      | Var _
-      | DB _ -> t
-      | Lam(i, t) -> lambda i (aux t)
-      | App(t, ts) -> app (aux t) (List.map aux ts)
-      | Susp _ -> assert false
-      | Ptr _ -> assert false
-  in
-    aux t
-
 let rec replace_metaterm_vars alist t =
-  let term_aux alist = replace_term_vars alist in
+  let term_aux alist = Term.replace_vars alist in
   let rec aux alist t =
     match t with
       | True | False -> t
@@ -345,7 +330,7 @@ let rec collect_terms t =
   match t with
     | True | False -> []
     | Eq(a, b) -> [a; b]
-    | Obj(obj, _) -> (Context.context_to_list obj.context) @ [obj.term]
+    | Obj(obj, _) -> (Context.to_list obj.context) @ [obj.term]
     | Arrow(a, b) -> (collect_terms a) @ (collect_terms b)
     | Binding(_, _, body) -> collect_terms body
     | Or(a, b) -> (collect_terms a) @ (collect_terms b)
@@ -356,7 +341,7 @@ let map_term_list f t = List.map f (collect_terms t)
 
 let term_support t = find_var_refs Nominal [t]
 
-let obj_support obj = find_var_refs Nominal (obj.term :: obj.context)
+let obj_support obj = find_var_refs Nominal (Context.to_list (Context.add obj.term obj.context))
 
 let metaterm_support t =
   let rec aux t =
@@ -423,7 +408,7 @@ let rec normalize_obj obj =
     {obj with context = Context.normalize obj.context}
 
 let rec normalize_binders alist t =
-  let term_aux t = replace_term_vars ~tag:Constant alist t in
+  let term_aux t = Term.replace_vars ~tag:Constant alist t in
   let rec aux t =
     match t with
       | True | False -> t
@@ -596,13 +581,13 @@ let derivable goal hyp =
               (fun perm_support_g ->
                  let alist = List.combine support_h_names perm_support_g in
                    try_right_unify goal.term
-                     (replace_term_vars alist hyp.term) &&
+                     (Term.replace_vars alist hyp.term) &&
                      (Context.subcontext
-                        (Context.map (replace_term_vars alist) hyp.context)
+                        (Context.map (Term.replace_vars alist) hyp.context)
                         goal.context))
 
 let metaterm_extract_tids aux_term t =
-  let aux_obj obj = aux_term obj.context @ aux_term [obj.term] in
+  let aux_obj obj = aux_term (Context.to_list obj.context) @ aux_term [obj.term] in
   let rec aux = function
     | True | False -> []
     | Eq(a, b) -> aux_term [a; b]

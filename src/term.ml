@@ -538,3 +538,20 @@ let fresh_tyvar =
     fun () ->
       incr count ;
       tyvar (string_of_int !count)
+
+let replace_vars ?tag alist t =
+  let rec aux t =
+    match observe (hnorm t) with
+    | Var v when List.mem_assoc v.name alist &&
+        (tag = None || tag = Some v.tag)
+        ->
+        List.assoc v.name alist
+    | Var _
+    | DB _ -> t
+    | Lam(i, t) -> lambda i (aux t)
+    | App(t, ts) -> app (aux t) (List.map aux ts)
+    | Susp _ -> assert false
+    | Ptr _ -> assert false
+  in
+  aux t
+

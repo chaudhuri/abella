@@ -24,7 +24,11 @@ open Debug
 (* Basic operations *)
 
 type elt = term
-type t = elt list
+type context = elt list
+type t = context
+
+let to_list ctx = ctx
+let of_list ctx = ctx
 
 let empty : t = []
 
@@ -55,7 +59,7 @@ let is_empty ctx = ctx = []
 let element_to_string elt =
   term_to_string elt
 
-let context_to_string ctx =
+let to_string ctx =
   let rec aux lst =
     match lst with
       | [] -> ""
@@ -127,9 +131,7 @@ let rec group pair_list =
         let pair_list' = List.remove_all_assoc ~cmp:eq a pair_list in
           (a, pairings)::(group pair_list')
 
-let context_to_list ctx = ctx
-
-let context_to_term ctx =
+let to_term ctx =
   let rec aux ctx =
     match ctx with
       | [] -> nil
@@ -152,7 +154,7 @@ let extract_singleton ctx =
     | [e] -> e
     | [] -> failwith "Contexts did not match"
     | _ -> failwith ("Contexts did not match: " ^
-                       (context_to_string ctx))
+                       (to_string ctx))
 
 (* For each context pair (ctx1, ctx2), make ctx2 a subcontext of ctx1 *)
 let reconcile pair_list =
@@ -167,13 +169,13 @@ let reconcile pair_list =
     List.iter (fun (var, ctx) ->
                  debug (Printf.sprintf "Trying to unify %s and %s"
                           (term_to_string var)
-                          (term_to_string (context_to_term ctx))) ;
-                 Unify.right_unify var (context_to_term ctx)) groups
+                          (term_to_string (to_term ctx))) ;
+                 Unify.right_unify var (to_term ctx)) groups
 
 (* Want to make hctx as large as possible but remain a subcontext of gctx *)
 let backchain_reconcile hctx gctx =
   let hctx, gctx = xor hctx gctx in
     match hctx with
-      | [hv] -> Unify.right_unify hv (context_to_term gctx)
+      | [hv] -> Unify.right_unify hv (to_term gctx)
       | [] -> ()
-      | _ -> failwith ("Contexts did not match: " ^ (context_to_string hctx))
+      | _ -> failwith ("Contexts did not match: " ^ (to_string hctx))

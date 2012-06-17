@@ -150,3 +150,5 @@ val tc : ty list -> term -> ty
 val tyvar : string -> ty
 val is_tyvar : string -> bool
 val fresh_tyvar : unit -> ty
+
+val replace_vars : ?tag:tag -> (id * term) list -> term -> term
