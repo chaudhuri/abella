@@ -27,6 +27,10 @@ open Printf
 open Debug
 open Accumulate
 
+module Extra = struct
+  open Hhw
+end
+
 let can_read_specification = ref true
 
 let interactive = ref true
