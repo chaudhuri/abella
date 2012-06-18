@@ -100,6 +100,7 @@ val add_dummies : env -> int -> int -> env
 
 (* Add abstractions. *)
 val lambda : ty list -> term -> term
+val un_lambda : term -> ty * term
 
 (** Abstract [t] over constant or variable named [id]. *)
 val abstract : string -> ty -> term -> term

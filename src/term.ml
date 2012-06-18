@@ -59,6 +59,10 @@ let rec lambda tys t =
       | Lam (tys',t') -> lambda (tys @ tys') t'
       | _ -> Lam (tys,t)
 
+let un_lambda t = match t with
+| Lam (ty :: tys, t) -> (ty, lambda tys t)
+| _ -> failwith "un_lambda"
+
 let app a b =
   if b = [] then
     a

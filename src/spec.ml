@@ -14,8 +14,17 @@ end : sig
   val bucket : string -> bucket
 end)
 
+module BMap = Map.Make (struct
+  type t = bucket
+  let compare : t -> t -> int = Pervasives.compare
+end)
+
+type quantifier =
+  | Pi of ty
+  | Sigma of ty
+
 type 'seq gen = {
-  tys : ty list ;
+  qvs : quantifier list ;
   seq : 'seq
 }
 
@@ -23,7 +32,7 @@ module type Basic =
 sig
   type seq
 
-  val make        : (bucket * term list) list -> seq
+  val make        : term list BMap.t -> seq
 
   val to_string   : seq -> string
 
