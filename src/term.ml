@@ -19,8 +19,7 @@
 (****************************************************************************)
 
 open Extensions
-
-type ty = Ty of ty list * string
+open Type
 
 type tag = Eigen | Constant | Logic | Nominal
 type id = string
@@ -361,22 +360,10 @@ let tag2str = function
   | Logic -> "l"
   | Nominal -> "n"
 
-let parenthesis x = "(" ^ x ^ ")"
-
 let rec list_range a b =
   if a > b then [] else a::(list_range (a+1) b)
 
 let abs_name = "x"
-
-let ty_to_string ty =
-  let rec aux nested ty =
-    match ty with
-      | Ty([], bty) -> bty
-      | Ty(tys, bty) ->
-          let res = String.concat " -> "(List.map (aux true) tys @ [bty]) in
-            if nested then parenthesis res else res
-  in
-    aux false ty
 
 let term_to_string term =
   let high_pr = 2 + get_max_priority () in
@@ -516,16 +503,6 @@ let has_eigen_head t =
 
 (* Typing *)
 
-let tyarrow tys ty =
-  match ty with
-    | Ty(tys', bty) -> Ty(tys @ tys', bty)
-
-let tybase bty =
-  Ty([], bty)
-
-let oty = tybase "o"
-let olistty = tybase "olist"
-
 let rec tc (tyctx:tyctx) t =
   match observe (hnorm t) with
     | DB i -> snd (List.nth tyctx (i-1))
@@ -540,14 +517,3 @@ let rec tc (tyctx:tyctx) t =
         tyarrow (get_ctx_tys idtys) (tc (List.rev_app idtys tyctx) t)
     | _ -> assert false
 
-let is_tyvar str =
-  str.[0] = '?'
-
-let tyvar str =
-  tybase ("?" ^ str)
-
-let fresh_tyvar =
-  let count = ref 0 in
-    fun () ->
-      incr count ;
-      tyvar (string_of_int !count)

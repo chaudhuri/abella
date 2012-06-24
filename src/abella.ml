@@ -17,6 +17,7 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Type
 open Term
 open Metaterm
 open Prover
@@ -76,7 +77,7 @@ let type_inference_error (pos, ct) exp act =
   match ct with
     | CArg ->
         eprintf "Expression has type %s but is used here with type %s\n%!"
-          (ty_to_string act) (ty_to_string exp)
+          (Type.to_string act) (Type.to_string exp)
     | CFun ->
         eprintf "Expression is applied to too many arguments\n%!"
 
@@ -194,7 +195,7 @@ let compile citem =
   comp_content := citem :: !comp_content
 
 let predicates (ktable, ctable) =
-  List.map fst (List.find_all (fun (_, Poly(_, Ty(_, ty))) -> ty = "o") ctable)
+  List.map fst (List.find_all (fun (_, Poly(_, Ty(_, ty))) -> ty = Tycon "o") ctable)
 
 let write_compilation () =
   marshal !comp_spec_sign ;
@@ -300,7 +301,7 @@ let import filename =
                               failwith
                                 (Printf.sprintf
                                    "Cannot close %s since it is now subordinate to %s"
-                                   ty (String.concat ", " xs)))
+                                   (arep ty) (String.concat ", " (List.map arep xs))))
                    ty_subords ;
                  close_types (List.map fst ty_subords))
           imp_content
@@ -560,7 +561,7 @@ let rec process () =
             add_global_consts (List.map (fun id -> (id, ty)) ids) ;
             compile (CType(ids, ty))
         | Close(ids) ->
-            close_types ids ;
+            close_types  ids ;
             compile
               (CClose(List.map
                         (fun id -> (id, Subordination.subordinates !sr id))

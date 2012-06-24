@@ -20,6 +20,7 @@
 
 (** Higher Order Pattern Unification *)
 
+open Type
 open Term
 open Extensions
 
@@ -408,7 +409,7 @@ let rigid_path_check v1 t2 =
  *
  * Example: Instead of binding X^0 to Y^0 c^1, we bind Y^0 to z\ X^0
  *)
-let reverse_bind (tyctx:(Term.id*Term.ty) list) t1 t2 =
+let reverse_bind (tyctx : tyctx) t1 t2 =
   match observe t1, observe t2 with
     | App(h, ts), Var v2 ->
         let pruneable t =
@@ -615,7 +616,7 @@ let makesubst tyctx h1 t2 a1 n =
   * arguments being given as lists. Exceptions are raised if
   * unification fails or if there are unequal numbers of arguments; the
   * latter will not arise if type checking has been done. *)
-let rec unify_list (tyctx:(Term.id*Term.ty) list) l1 l2 =
+let rec unify_list (tyctx : tyctx) l1 l2 =
   try
     List.iter2 (fun a1 a2 -> unify tyctx (hnorm a1) (hnorm a2)) l1 l2
   with

@@ -17,6 +17,7 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Type
 open Metaterm
 open Term
 open Typing
@@ -56,7 +57,7 @@ type top_command =
   | Query of umetaterm
   | Kind of id list
   | Type of id list * ty
-  | Close of id list
+  | Close of aty list
   | SSplit of id * id list
   | TopCommon of common_command
 
@@ -67,7 +68,7 @@ type compiled =
   | CImport of string
   | CKind of id list
   | CType of id list * ty
-  | CClose of (id * id list) list
+  | CClose of (aty * aty list) list
 
 type command =
   | Induction of int list * id option
@@ -139,7 +140,7 @@ let id_list_to_string ids =
 
 let idtys_to_string idtys =
   String.concat ",\t\n"
-    (List.map (fun (id, ty) -> id ^ " : " ^ (ty_to_string ty)) idtys)
+    (List.map (fun (id, ty) -> id ^ " : " ^ (Type.to_string ty)) idtys)
 
 let common_command_to_string cc =
   match cc with
@@ -169,9 +170,9 @@ let top_command_to_string tc =
     | Kind ids ->
         sprintf "Kind %s type" (id_list_to_string ids)
     | Type(ids, ty) ->
-        sprintf "Type %s %s" (id_list_to_string ids) (ty_to_string ty)
+        sprintf "Type %s %s" (id_list_to_string ids) (Type.to_string ty)
     | Close ids ->
-        sprintf "Close %s" (id_list_to_string ids)
+        sprintf "Close %s" (id_list_to_string (List.map arep ids))
     | SSplit(id, ids) ->
         if ids <> [] then
           sprintf "Split %s as %s" id (id_list_to_string ids)

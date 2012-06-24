@@ -1,6 +1,4 @@
 (****************************************************************************)
-(* Copyright (C) 2007-2009 Gacek                                            *)
-(*                                                                          *)
 (* This file is part of Abella.                                             *)
 (*                                                                          *)
 (* Abella is free software: you can redistribute it and/or modify           *)
@@ -17,14 +15,53 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
-open Type
-open Term
+open Extensions
 
-type sr
+type aty =
+  | Tyvar of string
+  | Tycon of string
 
-val empty : sr
-val query : sr -> ty -> ty -> bool
-val close : sr -> aty list -> sr
-val update : sr -> ty -> sr
-val ensure : sr -> ty -> unit
-val subordinates : sr -> aty -> aty list
+let arep = function
+  | Tyvar v -> v
+  | Tycon c -> c
+
+type ty = Ty of ty list * aty
+
+let tyarrow tys ty =
+  match ty with
+    | Ty(tys', bty) -> Ty(tys @ tys', bty)
+
+let tybase bty =
+  Ty([], Tycon bty)
+
+let tyvar tv =
+  Ty ([], Tyvar tv)
+
+let oty = tybase "o"
+let olistty = tybase "olist"
+
+let is_tyvar = function
+  | Tyvar _ -> true
+  | _ -> false
+
+let fresh_tyvar =
+  let count = ref 0 in
+    fun () ->
+      incr count ;
+      tyvar (string_of_int !count)
+
+let aty_to_string aty =
+  match aty with
+  | Tyvar s -> "'" ^ s
+  | Tycon s -> s
+
+let to_string ty =
+  let rec aux nested ty =
+    match ty with
+    | Ty([], bty) -> aty_to_string bty
+    | Ty(tys, bty) ->
+        let bty = aty_to_string bty in
+        let res = String.concat " -> "(List.map (aux true) tys @ [bty]) in
+        if nested then parenthesis res else res
+  in
+  aux false ty

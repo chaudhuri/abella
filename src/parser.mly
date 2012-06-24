@@ -30,7 +30,7 @@
       (Parsing.rhs_start_pos i, Parsing.rhs_end_pos i)
 
   let predefined id =
-    UCon(pos 0, id, Term.fresh_tyvar ())
+    UCon(pos 0, id, Type.fresh_tyvar ())
 
   let binop id t1 t2 =
     UApp(pos 0, UApp(pos 0, predefined id, t1), t2)
@@ -136,14 +136,14 @@ id:
 
 /* Annotated ID */
 aid:
-  | id                                   { ($1, Term.fresh_tyvar ()) }
+  | id                                   { ($1, Type.fresh_tyvar ()) }
   | id COLON ty                          { ($1, $3) }
 
 /* Parenthesized annotated ID */
 paid:
-  | id                                   { ($1, Term.fresh_tyvar ()) }
+  | id                                   { ($1, Type.fresh_tyvar ()) }
   | LPAREN id COLON ty RPAREN            { ($2, $4) }
-  | UNDERSCORE                           { ("_", Term.fresh_tyvar ()) }
+  | UNDERSCORE                           { ("_", Type.fresh_tyvar ()) }
   | LPAREN UNDERSCORE COLON ty RPAREN    { ("_", $4) }
 
 contexted_term:
@@ -219,8 +219,8 @@ id_list:
   | id COMMA id_list                     { $1::$3}
 
 ty:
-  | id                                   { Term.tybase $1 }
-  | ty RARROW ty                         { Term.tyarrow [$1] $3 }
+  | id                                   { Type.tybase $1 }
+  | ty RARROW ty                         { Type.tyarrow [$1] $3 }
   | LPAREN ty RPAREN                     { $2 }
 
 clause:
@@ -374,7 +374,7 @@ pure_top_command:
   | SPECIFICATION QSTRING DOT            { Types.Specification($2) }
   | KKIND id_list TYPE DOT               { Types.Kind($2) }
   | TTYPE id_list ty DOT                 { Types.Type($2, $3) }
-  | CLOSE id_list DOT                    { Types.Close($2) }
+  | CLOSE id_list DOT                    { Types.Close(List.map (fun a -> Type.Tycon a) $2) }
   | SSPLIT id DOT                        { Types.SSplit($2, []) }
   | SSPLIT id AS id_list DOT             { Types.SSplit($2, $4) }
 

@@ -18,14 +18,7 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
-(* Types *)
-
-type ty = Ty of ty list * string
-
-val tyarrow : ty list -> ty -> ty
-val tybase : string -> ty
-val oty : ty
-val olistty : ty
+open Type
 
 (* Variables *)
 
@@ -129,7 +122,6 @@ val has_eigen_head : term -> bool
 
 val hnorm : term -> term
 
-val ty_to_string : ty -> string
 val term_to_string : term -> string
 val prefix : tag -> string
 
@@ -150,7 +142,3 @@ val nominal_tids : term list -> (id * ty) list
 val all_tids : term list -> (id * ty) list
 
 val tc : tyctx -> term -> ty
-
-val tyvar : string -> ty
-val is_tyvar : string -> bool
-val fresh_tyvar : unit -> ty

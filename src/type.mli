@@ -1,6 +1,4 @@
 (****************************************************************************)
-(* Copyright (C) 2007-2009 Gacek                                            *)
-(*                                                                          *)
 (* This file is part of Abella.                                             *)
 (*                                                                          *)
 (* Abella is free software: you can redistribute it and/or modify           *)
@@ -17,14 +15,23 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
-open Type
-open Term
+type aty =
+  | Tyvar of string
+  | Tycon of string
 
-type sr
+val arep : aty -> string
 
-val empty : sr
-val query : sr -> ty -> ty -> bool
-val close : sr -> aty list -> sr
-val update : sr -> ty -> sr
-val ensure : sr -> ty -> unit
-val subordinates : sr -> aty -> aty list
+type ty = Ty of ty list * aty
+
+val tyarrow : ty list -> ty -> ty
+val tyvar   : string -> ty
+val tybase  : string -> ty
+
+val oty     : ty
+val olistty : ty
+
+val is_tyvar : aty -> bool
+
+val fresh_tyvar : unit -> ty
+
+val to_string : ty -> string

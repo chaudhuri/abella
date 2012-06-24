@@ -23,6 +23,8 @@ let (|>) x f = f x
 let curry f (x,y) = f x y
 let uncurry f x y = f (x,y)
 
+let parenthesis x = "(" ^ x ^ ")"
+
 module Option = struct
   let is_some x =
     match x with

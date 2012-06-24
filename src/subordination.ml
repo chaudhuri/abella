@@ -17,16 +17,17 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Type
 open Term
 open Extensions
 
-type sr = string Graph.t * string list
+type sr = aty Graph.t * aty list
 
-let empty = (Graph.empty, [])
+let empty : sr = (Graph.empty, [])
 
 let head (Ty(_, h)) = h
 
-let close (graph, closed) atys =
+let close (graph, closed : sr) atys =
   let closed = atys @ closed in
     List.iter
       (fun aty ->
@@ -34,20 +35,22 @@ let close (graph, closed) atys =
            | [] -> ()
            | xs -> failwith
                (Printf.sprintf "Cannot close %s without closing %s"
-                  aty (String.concat ", " xs)))
+                  (arep aty) (String.concat ", " (List.map arep xs))))
       atys ;
     (graph, closed)
 
-let query (graph, closed) a b =
+let query (graph, closed : sr) a b =
   Graph.is_path graph (head a) (head b) || not (List.mem (head b) closed)
 
-let add (graph, closed) a b =
+let add (graph, closed : sr) a b =
   if List.mem b closed then
     if Graph.is_path graph a b then
       (graph, closed)
     else
       failwith (Printf.sprintf
-                  "Type %s is closed and cannot be subordinated by %s" b a)
+                  "Type %s is closed and cannot be subordinated by %s"
+                  (arep b)
+                  (arep a))
   else
     (Graph.add_arc graph a b, closed)
 
@@ -68,10 +71,10 @@ let ensure (graph, _) ty =
              failwith
                (Printf.sprintf
                   "Type %s cannot be made subordinate to %s without explicit declaration"
-                  (head aty) target))
+                  (arep (head aty)) (arep target)))
         args ;
   in
     aux  ty
 
-let subordinates (graph, closed) a =
+let subordinates (graph, closed : sr) a =
   Graph.predecessors graph a

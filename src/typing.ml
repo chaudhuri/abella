@@ -17,10 +17,10 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Type
 open Term
 open Metaterm
 open Extensions
-
 
 (** Untyped terms *)
 
@@ -46,7 +46,7 @@ let change_pos p t =
 
 
 let predefined id pos =
-  UCon(pos, id, Term.fresh_tyvar ())
+  UCon(pos, id, Type.fresh_tyvar ())
 
 let binop id t1 t2 =
   let pos = (fst (get_pos t1), snd (get_pos t2)) in
@@ -83,7 +83,7 @@ let rec apply_bind_ty v ty = function
   | Ty(tys, bty) ->
       tyarrow
         (List.map (apply_bind_ty v ty) tys)
-        (if v = bty then ty else Ty([], bty))
+        (if Tyvar v = bty then ty else Ty([], bty))
 
 let apply_sub_ty s ty =
   List.fold_left (fun ty (v,vty) -> apply_bind_ty v vty ty) ty s
@@ -124,11 +124,12 @@ let lookup_type (ktable, _) id =
 
 let kind_check sign (Poly(ids, ty)) =
   let rec aux = function
-    | Ty(tys, bty) ->
+    | Ty(tys, Tyvar bty) ->
         if List.mem bty ids || lookup_type sign bty then
           List.iter aux tys
         else
           failwith ("Unknown type: " ^ bty)
+    | _ -> ()
   in
     aux ty
 
@@ -236,7 +237,7 @@ let infer_type_and_constraints ~sign tyctx t =
 
 let constraints_to_string eqns =
   let aux (ty1, ty2, _) =
-    (ty_to_string ty1) ^ " = " ^ (ty_to_string ty2)
+    (Type.to_string ty1) ^ " = " ^ (Type.to_string ty2)
   in
     String.concat "\n" (List.map aux eqns)
 
@@ -306,12 +307,12 @@ let unify_constraints eqns =
             if occurs bty1 ty2 then
               fail s
             else
-              add_sub bty1 ty2 s
+              add_sub (arep bty1) ty2 s
         | _, Ty([], bty2) when is_tyvar bty2 ->
             if occurs bty2 ty1 then
               fail s
             else
-              add_sub bty2 ty1 s
+              add_sub (arep bty2) ty1 s
         | Ty(ty1::tys1, bty1), Ty(ty2::tys2, bty2) ->
             let s = aux s (ty1, ty2) fail in
               aux s (Ty(tys1, bty1), Ty(tys2, bty2)) fail
@@ -372,9 +373,9 @@ let iter_ty f ty =
 let check_spec_logic_type ty =
   iter_ty
     (fun bty ->
-       if bty = "prop" then
+       if bty = Tycon "prop" then
          failwith "Cannot mention type prop in the specification logic" ;
-       if bty = "olist" then
+       if bty = Tycon "olist" then
          failwith "Cannot mention type olist in the specification logic")
     ty
 
@@ -382,7 +383,7 @@ let check_spec_logic_quantification_type ty =
   check_spec_logic_type ty ;
   iter_ty
     (fun bty  ->
-        if bty = "o" then
+        if bty = Tycon "o" then
           failwith "Cannot quantify over type o in the specification logic")
     ty
 
@@ -459,7 +460,7 @@ let type_uclause ~sr ~sign (head, body) =
   let get_pi_form ids body =
     (let pify id pi =
       let pos = get_pos pi in
-      let abs = ULam (pos, id, Term.fresh_tyvar (), pi) in
+      let abs = ULam (pos, id, Type.fresh_tyvar (), pi) in
       UApp (pos, predefined "pi" pos, abs)
     in
     List.fold_right pify ids body)
@@ -559,7 +560,7 @@ let umetaterm_to_formatted_string t =
 let check_meta_logic_quantification_type ty =
   iter_ty
     (fun bty ->
-       if bty = "prop" then
+       if bty = Tycon "prop" then
          failwith "Cannot quantify over type prop")
     ty
 
