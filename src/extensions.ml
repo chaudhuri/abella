@@ -289,3 +289,103 @@ module Either = struct
     let right x (l, r) = (l, x::r) in
       List.fold_right (either left right) eithers ([], [])
 end
+
+module ExtFormat : sig
+  type fmt = Format.formatter -> unit
+
+  val paren : fmt -> fmt
+
+  type prec = int
+
+  type fexp =
+    | Fatm of fmt
+    | Fapp of prec * fapp
+
+  and fapp =
+    | Finfix   of [`Left | `Right | `Non] * fexp * fmt * fexp
+    | Fprefix  of fmt * fexp
+    | Fpostfix of fexp * fmt
+
+  val linearize : fexp -> fmt
+end = struct
+  open Format
+
+  type fmt = formatter -> unit
+
+  type prec = int
+
+  type fexp =
+    | Fatm of fmt
+    | Fapp of prec * fapp
+
+  and fapp =
+    | Finfix   of [`Left | `Right | `Non] * fexp * fmt * fexp
+    | Fprefix  of fmt * fexp
+    | Fpostfix of fexp * fmt
+
+  let paren f =
+    fun ff ->
+      pp_print_string ff "(" ;
+      f ff ;
+      pp_print_string ff ")"
+
+  let prec_same fe1 fe2 =
+    match fe1, fe2 with
+    | Fatm _, Fatm _ -> true
+    | Fapp (p1, _), Fapp (p2, _) -> p1 = p2
+    | _ -> false
+
+  let prec_lt fe1 fe2 =
+    match fe1, fe2 with
+    | Fatm _, Fatm _ -> false
+    | _, Fatm _ -> true
+    | Fatm _, _ -> false
+    | Fapp (p1, _), Fapp (p2, _) -> p1 < p2
+
+  let assoc = function
+    | Fapp (_, Finfix (asc, _, _, _)) -> asc
+    | _ -> `Non
+
+  let rec linearize fe : fmt =
+    fun ff -> match fe with
+    | Fatm fa -> fa ff
+    | Fapp (prec, fapp) -> begin
+      match fapp with
+      | Finfix (asc, fel, fo, fer) ->
+          let fel =
+            if (prec_lt fel fe 
+                || (prec_same fel fe && asc = `Left
+                    && assoc fel = `Left))
+            then bracket fel
+            else fel
+          in
+          let fer =
+            if (prec_lt fer fe
+                || (prec_same fel fe && asc = `Right
+                    && assoc fer = `Right))
+            then bracket fer
+            else fer
+          in
+          linearize fel ff ;
+          fo ff ;
+          linearize fer ff
+      | Fprefix (fo, fec) ->
+          let fec = match fec with
+          | Fapp (_, Fprefix _) -> fec
+          | _ when prec_lt fec fe -> bracket fec
+          | _ -> fec
+          in
+          fo ff ;
+          linearize fec ff
+      | Fpostfix (fec, fo) ->
+          let fec = match fec with
+          | Fapp (_, Fpostfix _) -> fec
+          | _ when  prec_lt fec fe -> bracket fec
+          | _ -> fec
+          in
+          linearize fec ff ;
+          fo ff
+    end
+
+  and bracket fe = Fatm (paren (linearize fe))
+end
