@@ -31,7 +31,6 @@ type uterm =
   | ULam of pos * string * ty * uterm
   | UApp of pos * uterm * uterm
 
-
 let get_pos t =
   match t with
     | UCon(p, _, _) -> p
@@ -44,7 +43,6 @@ let change_pos p t =
     | ULam(_, id, ty, body) -> ULam(p, id, ty, body)
     | UApp(_, t1, t2) -> UApp(p, t1, t2)
 
-
 let predefined id pos =
   UCon(pos, id, Type.fresh_tyvar ())
 
@@ -52,14 +50,13 @@ let binop id t1 t2 =
   let pos = (fst (get_pos t1), snd (get_pos t2)) in
   UApp(pos, UApp(pos, predefined id pos, t1), t2)
 
-
 let uterm_head_name t =
   let rec aux = function
     | UCon(_, id, _) -> id
     | UApp(_, h, _) -> aux h
     | ULam _ -> assert false
   in
-    aux t
+  aux t
 
 (** Untyped metaterm *)
 
@@ -124,14 +121,17 @@ let lookup_type (ktable, _) id =
 
 let kind_check sign (Poly(ids, ty)) =
   let rec aux = function
-    | Ty(tys, Tyvar bty) ->
-        if List.mem bty ids || lookup_type sign bty then
+    | Ty(tys, bty) -> begin
+      match bty with
+      | Tyvar tv when List.mem tv ids ->
           List.iter aux tys
-        else
-          failwith ("Unknown type: " ^ bty)
-    | _ -> ()
+      | Tycon tc when lookup_type sign tc ->
+          List.iter aux tys
+      | _ ->
+          failwith ("Unknown type: " ^ arep bty)
+    end
   in
-    aux ty
+  aux ty
 
 let check_const (ktable, ctable) (id, pty) =
   begin try
