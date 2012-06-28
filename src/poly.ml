@@ -15,66 +15,40 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Extensions
+open Abella_types
+
 type ty =
-  | Tv    of string
-  | Tx    of int
-  | Kon   of ty list * string
-  | Arr   of ty * ty
+  | Tv  of id
+  | Kon of ty list * id
+  | Arr of ty * ty
 
-type sub =
-  | Shift of int
-  | Cons  of sub * ty
-
-let rec subst_tx ss n =
-  match ss, n with
-  | Shift m, _ -> Tx (n + m)
-  | Cons (_, ty), 0 -> ty
-  | Cons (ss, _), _ -> subst_tx ss (n - 1)
-
-and subst ss ty =
-  match ty with
-  | Tv _ -> ty
-  | Tx n -> subst_tx ss n
-  | Kon (tys, k) -> Kon (List.map (subst ss) tys, k)
-  | Arr (ta, tb) -> Arr (subst ss ta, subst ss tb)
-
-let rec ty_scan (maxx, vars as mv) ty =
+let __last_fresh_tv = ref 0
+let rec freshen1 vmap ty =
   match ty with
   | Tv n ->
-      if List.mem n vars then mv
-      else (maxx, n :: vars)
-  | Tx n -> (Pervasives.max maxx n, vars)
-  | Kon (tys, _) ->
-      List.fold_left ty_scan mv tys
-  | Arr (ta, tb) ->
-      ty_scan (ty_scan mv ta) tb
+      if IdMap.mem n vmap then
+        (vmap, IdMap.find n vmap)
+      else begin
+        let v = Tv ("?" ^ string_of_int !__last_fresh_tv) in
+        let vmap = IdMap.add n v vmap in
+        incr __last_fresh_tv ;
+        (vmap, v)
+      end
+  | Kon (tys, k) ->
+      let (vmap, tys) = List.fold_left begin
+        fun (vmap, tys) ty ->
+          let (vmap, ty) = freshen1 vmap ty in
+          (vmap, ty :: tys)
+      end (vmap, []) tys in
+      let tys = List.rev tys in
+      (vmap, Kon (tys, k))
+  | Arr (tya, tyb) ->
+      let (vmap, tya) = freshen1 vmap tya in
+      let (vmap, tyb) = freshen1 vmap tyb in
+      (vmap, Arr (tya, tyb))
 
-let rec replace_tvs shf vnums ty =
-  match ty with
-  | Tv n -> List.assoc n vnums
-  | Tx x -> Tx (x + shf)
-  | Kon (tys, k) -> Kon (List.map (replace_tvs shf vnums) tys, k)
-  | Arr (ta, tb) -> Arr (replace_tvs shf vnums ta, replace_tvs shf vnums tb)
-
-let abstract ty =
-  let (maxx, vars) = ty_scan (0, []) ty in
-  let sub = List.fold_right (fun v ss -> Cons (ss, Tv v)) vars (Shift 0) in
-  let (_, vnums) =
-    List.fold_left (fun (n, vnums) v -> (n + 1, (v, Tx n) :: vnums))
-      (0, []) vars in
-  let ty = replace_tvs (List.length vnums) vnums ty in
-  (sub, ty)
-
-let test ty =
-  let (ss, sty) = abstract ty in
-  (ty, subst ss sty)
-
-open Format
-open Extensions.ExtFormat
-
-let fmt_arrow ff =
-  Format.pp_print_string ff " ->" ;
-  Format.pp_print_space ff ()
+let freshen ty = snd (freshen1 IdMap.empty ty)
 
 let varify n =
   let rec digs k ds n =
@@ -83,9 +57,8 @@ let varify n =
   in
   let (k, ds) = digs 0 [] n in
   let ds = ref ds in
-  let str = String.create (k + 2) in
-  str.[0] <- '\'' ;
-  for i = 1 to k + 1 do
+  let str = String.create (k + 1) in
+  for i = 0 to k do
     match !ds with
     | d :: rest ->
         ds := rest ;
@@ -94,30 +67,63 @@ let varify n =
   done ;
   str
 
+let rec abstract1 vnext vmap ty =
+  match ty with
+  | Tv n ->
+      if IdMap.mem n vmap then
+        (vnext, vmap, IdMap.find n vmap)
+      else
+        let ty = Tv (varify vnext) in
+        let vmap = IdMap.add n ty vmap in
+        let vnext = vnext + 1 in
+        (vnext, vmap, ty)
+  | Kon (tys, k) ->
+      let (vnext, vmap, tys) = List.fold_left begin
+        fun (vnext, vmap, tys) ty ->
+          let (vnext, vmap, ty) = abstract1 vnext vmap ty in
+          (vnext, vmap, ty :: tys)
+      end (vnext, vmap, []) tys in
+      let tys = List.rev tys in
+      (vnext, vmap, Kon (tys, k))
+  | Arr (tya, tyb) ->
+      let (vnext, vmap, tya) = abstract1 vnext vmap tya in
+      let (vnext, vmap, tyb) = abstract1 vnext vmap tyb in
+      (vnext, vmap, Arr (tya, tyb))
+
+let abstract ty =
+  let (_, _, ty) = abstract1 0 IdMap.empty ty in
+  ty
+
+open Format
+open Extensions.ExtFormat
+
+let fmt_arrow ff =
+  Format.pp_print_string ff " ->" ;
+  Format.pp_print_space ff ()
+
 let rec ty_to_fexp ty =
   match ty with
-  | Tx n -> Fstr (varify n)
-  | Tv v -> Fstr ("\'" ^ v)
-  | Kon ([], n) -> Fstr n
+  | Tv v ->
+      Fstr ("\'" ^ v)
+  | Kon ([], n) ->
+      Fstr n
   | Kon (tys, kon) ->
-      Fatm begin
-        fun ff ->
-          pp_open_box ff 1 ;
+      Fatm begin fun ff ->
+        pp_open_box ff 1 ; begin
           intercalate
-            ~left:(fun ff -> pp_print_string ff "(")
-            ~right:(fun ff -> pp_print_string ff ")")
-            ~sep:(fun ff -> pp_print_string ff "," ; pp_print_space ff ())
+            ~left:(fmt_of_string "(")
+            ~right:(fmt_of_string ")")
+            ~sep:(fmt_of_format ",@ ")
             pp_ty tys ff ;
-          pp_print_break ff 1 2 ;
-          pp_print_string ff kon ;
+          pp_print_break ff 1 1 ;
+          pp_print_string ff kon
+        end ; pp_close_box ff ()
       end
   | Arr (ta, tb) ->
       Fapp (1, Finfix (`Right, ty_to_fexp ta, fmt_arrow, ty_to_fexp tb))
 
 and pp_ty ty ff =
-  Format.pp_open_box ff 0 ;
-  linearize (ty_to_fexp ty) ff ;
-  Format.pp_close_box ff ()
+  Format.fprintf ff "@[<b0>%t@]" (linearize (ty_to_fexp ty))
 
 let to_buffer buf ty =
   let ff = Format.formatter_of_buffer buf in

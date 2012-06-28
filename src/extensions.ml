@@ -61,12 +61,12 @@ module String = struct
       !count
 end
 
-module StringOrd = struct
+module IdOrd = struct
   type t = string
   let compare : t -> t -> int = Pervasives.compare
 end
-module StringSet = Set.Make (StringOrd)
-module StringMap = Map.Make (StringOrd)
+module IdSet = Set.Make (IdOrd)
+module IdMap = Map.Make (IdOrd)
 
 module List = struct
   include List
@@ -300,15 +300,18 @@ end
 module ExtFormat : sig
   type fmt = Format.formatter -> unit
 
-  val intercalate : ?left:fmt -> ?right:fmt -> ?sep:fmt -> ('a -> fmt) -> 'a list -> fmt
+  val fmt_of_string : string -> fmt
+  val fmt_of_format : (unit, Format.formatter, unit) format -> fmt
 
-  val paren : fmt -> fmt
+  val intercalate :
+    ?left:fmt -> ?right:fmt -> ?sep:fmt ->
+    ('a -> fmt) -> 'a list -> fmt
 
   type prec = int
 
   type fexp =
-    | Fstr of string
     | Fatm of fmt
+    | Fstr of string
     | Fapp of prec * fapp
 
   and fapp =
@@ -320,30 +323,42 @@ module ExtFormat : sig
 end = struct
   open Format
 
-  type fmt = formatter -> unit
+  type fmt = Format.formatter -> unit
+
+  let fmt_of_string s ff = pp_print_string ff s
+  let fmt_of_format f ff = Format.fprintf ff f
 
   let rec intercalate1 sep elf l ff =
     match l with
     | [] -> ()
-    | [x] -> elf x ff
+    | [x] ->
+        elf x ff
     | x :: l ->
         elf x ff ;
         sep ff ;
         intercalate1 sep elf l ff
         
   let intercalate ?left ?right ?sep elf l ff =
-    begin match left with Some left -> left ff | None -> () end ;
+    begin match left with
+    | Some outf -> outf ff
+    | None -> ()
+    end ;
     pp_open_box ff 0 ;
-    intercalate1 (match sep with Some sep -> sep | None -> fun ff -> ())
-      elf l ff ;
+    let sep = match sep with
+    | Some sep -> sep
+    | None -> (fun ff -> ()) in
+    intercalate1 sep elf l ff ;
     pp_close_box ff () ;
-    begin match right with Some right -> right ff | None -> () end
+    begin match right with
+    | Some outf -> outf ff
+    | None -> ()
+    end
 
   type prec = int
 
   type fexp =
-    | Fstr of string
     | Fatm of fmt
+    | Fstr of string
     | Fapp of prec * fapp
 
   and fapp =
@@ -351,24 +366,18 @@ end = struct
     | Fprefix  of fmt * fexp
     | Fpostfix of fexp * fmt
 
-  let paren f =
-    fun ff ->
-      pp_print_string ff "(" ;
-      f ff ;
-      pp_print_string ff ")"
-
   let prec_same fe1 fe2 =
     match fe1, fe2 with
-    | Fstr _, Fstr _
     | Fstr _, Fatm _
     | Fatm _, Fstr _
+    | Fstr _, Fstr _
     | Fatm _, Fatm _ -> true
     | Fapp (p1, _), Fapp (p2, _) -> p1 = p2
     | _ -> false
 
   let prec_lt fe1 fe2 =
     match fe1, fe2 with
-    | _, Fstr _
+    | _, Fstr _ 
     | _, Fatm _ -> true
     | Fstr _, _
     | Fatm _, _ -> false
@@ -378,48 +387,48 @@ end = struct
     | Fapp (_, Finfix (asc, _, _, _)) -> asc
     | _ -> `Non
 
-  let rec linearize fe : fmt =
-    fun ff -> match fe with
-    | Fatm fa -> fa ff
-    | Fstr s -> pp_print_string ff s
+  let rec linearize fe ff =
+    match fe with
+    | Fatm fmt -> fmt ff
+    | Fstr str -> pp_print_string ff str
     | Fapp (prec, fapp) -> begin
       match fapp with
       | Finfix (asc, fel, fo, fer) ->
           let fel =
-            if (prec_lt fel fe 
-                || (prec_same fel fe && asc = `Left
-                    && assoc fel = `Left))
-            then bracket fel
-            else fel
+            if (prec_lt fe fel 
+                || (prec_same fe fel && asc = `Left && assoc fel = `Left))
+            then linearize fel
+            else bracket fel
           in
           let fer =
-            if (prec_lt fer fe
-                || (prec_same fel fe && asc = `Right
-                    && assoc fer = `Right))
-            then bracket fer
-            else fer
+            if (prec_lt fe fer
+                || (prec_same fe fer && asc = `Right && assoc fer = `Right))
+            then linearize fer
+            else bracket fer
           in
-          linearize fel ff ;
+          fel ff ;
           fo ff ;
-          linearize fer ff
+          fer ff
       | Fprefix (fo, fec) ->
           let fec = match fec with
-          | Fapp (_, Fprefix _) -> fec
+          | Fapp (_, Fprefix _) -> linearize fec
           | _ when prec_lt fec fe -> bracket fec
-          | _ -> fec
+          | _ -> linearize fec
           in
           fo ff ;
-          linearize fec ff
+          fec ff
       | Fpostfix (fec, fo) ->
           let fec = match fec with
-          | Fapp (_, Fpostfix _) -> fec
+          | Fapp (_, Fpostfix _) -> linearize fec
           | _ when  prec_lt fec fe -> bracket fec
-          | _ -> fec
+          | _ -> linearize fec
           in
-          linearize fec ff ;
+          fec ff ;
           fo ff
     end
 
-  and bracket fe = Fatm (paren (linearize fe))
-    
+  and bracket fe ff =
+      pp_print_string ff "(" ;
+      linearize fe ff ;
+      pp_print_string ff ")"
 end
