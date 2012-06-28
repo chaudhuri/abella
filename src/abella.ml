@@ -17,6 +17,10 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+module Force = struct
+  module P = Poly
+end
+
 open Type
 open Term
 open Metaterm

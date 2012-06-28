@@ -61,6 +61,13 @@ module String = struct
       !count
 end
 
+module StringOrd = struct
+  type t = string
+  let compare : t -> t -> int = Pervasives.compare
+end
+module StringSet = Set.Make (StringOrd)
+module StringMap = Map.Make (StringOrd)
+
 module List = struct
   include List
 
@@ -293,11 +300,14 @@ end
 module ExtFormat : sig
   type fmt = Format.formatter -> unit
 
+  val intercalate : ?left:fmt -> ?right:fmt -> ?sep:fmt -> ('a -> fmt) -> 'a list -> fmt
+
   val paren : fmt -> fmt
 
   type prec = int
 
   type fexp =
+    | Fstr of string
     | Fatm of fmt
     | Fapp of prec * fapp
 
@@ -312,9 +322,27 @@ end = struct
 
   type fmt = formatter -> unit
 
+  let rec intercalate1 sep elf l ff =
+    match l with
+    | [] -> ()
+    | [x] -> elf x ff
+    | x :: l ->
+        elf x ff ;
+        sep ff ;
+        intercalate1 sep elf l ff
+        
+  let intercalate ?left ?right ?sep elf l ff =
+    begin match left with Some left -> left ff | None -> () end ;
+    pp_open_box ff 0 ;
+    intercalate1 (match sep with Some sep -> sep | None -> fun ff -> ())
+      elf l ff ;
+    pp_close_box ff () ;
+    begin match right with Some right -> right ff | None -> () end
+
   type prec = int
 
   type fexp =
+    | Fstr of string
     | Fatm of fmt
     | Fapp of prec * fapp
 
@@ -331,14 +359,18 @@ end = struct
 
   let prec_same fe1 fe2 =
     match fe1, fe2 with
+    | Fstr _, Fstr _
+    | Fstr _, Fatm _
+    | Fatm _, Fstr _
     | Fatm _, Fatm _ -> true
     | Fapp (p1, _), Fapp (p2, _) -> p1 = p2
     | _ -> false
 
   let prec_lt fe1 fe2 =
     match fe1, fe2 with
-    | Fatm _, Fatm _ -> false
+    | _, Fstr _
     | _, Fatm _ -> true
+    | Fstr _, _
     | Fatm _, _ -> false
     | Fapp (p1, _), Fapp (p2, _) -> p1 < p2
 
@@ -349,6 +381,7 @@ end = struct
   let rec linearize fe : fmt =
     fun ff -> match fe with
     | Fatm fa -> fa ff
+    | Fstr s -> pp_print_string ff s
     | Fapp (prec, fapp) -> begin
       match fapp with
       | Finfix (asc, fel, fo, fer) ->
@@ -388,4 +421,5 @@ end = struct
     end
 
   and bracket fe = Fatm (paren (linearize fe))
+    
 end
