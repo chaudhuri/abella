@@ -15,23 +15,25 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
-type aty =
-  | Tyvar of string
-  | Tycon of string
-
-val arep : aty -> string
-
 type ty = Ty of ty list * aty
+
+and aty =
+  | Tyvar of string
+  | Tycon of string * ty list
+
+val aty_head : aty -> string
 
 val tyarrow : ty list -> ty -> ty
 val tyvar   : string -> ty
-val tybase  : string -> ty
+val tybase  : string -> ty list -> ty
 
 val oty     : ty
 val olistty : ty
 
-val is_tyvar : aty -> bool
-
+val is_tyvar    : aty -> bool
 val fresh_tyvar : unit -> ty
 
 val to_string : ty -> string
+
+type ki = int
+val ki_to_string : ki -> string

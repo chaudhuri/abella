@@ -199,7 +199,7 @@ let compile citem =
   comp_content := citem :: !comp_content
 
 let predicates (ktable, ctable) =
-  List.map fst (List.find_all (fun (_, Poly(_, Ty(_, ty))) -> ty = Tycon "o") ctable)
+  List.map fst (List.find_all (fun (_, Poly(_, Ty(_, ty))) -> ty = Tycon ("o", [])) ctable)
 
 let write_compilation () =
   marshal !comp_spec_sign ;
@@ -289,7 +289,8 @@ let import filename =
                    add_defs ids CoInductive defs
              | CImport(filename) ->
                  aux filename
-             | CKind(ids) ->
+             | CKind(ids, _) ->
+                 ignore (failwith "BROKEN: import") ;
                  check_noredef ids;
                  add_global_types ids
              | CType(ids, ty) ->
@@ -305,7 +306,7 @@ let import filename =
                               failwith
                                 (Printf.sprintf
                                    "Cannot close %s since it is now subordinate to %s"
-                                   (arep ty) (String.concat ", " (List.map arep xs))))
+                                   (aty_head ty) (String.concat ", " (List.map aty_head xs))))
                    ty_subords ;
                  close_types (List.map fst ty_subords))
           imp_content
@@ -556,10 +557,11 @@ let rec process () =
               failwith ("Specification can only be read " ^
                           "at the begining of a development.")
         | Query(q) -> query q
-        | Kind(ids) ->
+        | Kind(ids, n) ->
+            ignore (failwith "BROKEN: process") ;
             check_noredef ids;
             add_global_types ids ;
-            compile (CKind ids)
+            compile (CKind (ids, n))
         | Type(ids, ty) ->
             check_noredef ids;
             add_global_consts (List.map (fun id -> (id, ty)) ids) ;

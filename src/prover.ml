@@ -78,7 +78,7 @@ let add_global_consts cs =
   sign := add_consts !sign cs
 
 let close_types ids =
-  let reps = List.map arep ids in
+  let reps = List.map aty_head ids in
   begin match List.minus reps (fst !sign) with
     | [] -> ()
     | xs -> failwith ("Unknown type(s): " ^ (String.concat ", " xs))
@@ -988,7 +988,7 @@ let permute_nominals ids form =
       (fun id ->
          try
            List.assoc id support_alist
-         with Not_found -> nominal_var id (tybase ""))
+         with Not_found -> nominal_var id (tybase "" []))
       ids
   in
   let result = Tactics.permute_nominals perm term in

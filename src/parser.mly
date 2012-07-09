@@ -191,9 +191,13 @@ sig_preamble:
   |                                      { [] }
 
 sig_body:
-  | KIND id_list TYPE DOT sig_body       { Types.SKind($2) :: $5 }
+  | KIND id_list ki DOT sig_body         { Types.SKind($2, $3) :: $5 }
   | TYPE id_list ty DOT sig_body         { Types.SType($2, $3) :: $5 }
   |                                      { [] }
+
+ki:
+  | TYPE                                 { 0 }
+  | TYPE RARROW ki                       { 1 + $3 }
 
 lpmod:
   | mod_header mod_preamble mod_body lpend
@@ -219,9 +223,18 @@ id_list:
   | id COMMA id_list                     { $1::$3}
 
 ty:
-  | id                                   { Type.tybase $1 }
+  | STRINGID aty_list                    { Type.tybase $1 $2 }
   | ty RARROW ty                         { Type.tyarrow [$1] $3 }
   | LPAREN ty RPAREN                     { $2 }
+
+aty:
+  | STRINGID                             { Type.tybase $1 [] }
+  | LPAREN STRINGID aty_list RPAREN      { Type.tybase $2 $3 }
+  | LPAREN ty RARROW ty RPAREN           { Type.tyarrow [$2] $4 }
+
+aty_list:
+  |                                      { [] }
+  | aty aty_list                         { $1 :: $2 }
 
 clause:
   | term DOT                             { ($1, []) }
@@ -372,9 +385,9 @@ pure_top_command:
   | QUERY metaterm DOT                   { Types.Query($2) }
   | IMPORT QSTRING DOT                   { Types.Import($2) }
   | SPECIFICATION QSTRING DOT            { Types.Specification($2) }
-  | KKIND id_list TYPE DOT               { Types.Kind($2) }
+  | KKIND id_list ki DOT                 { Types.Kind($2, $3) }
   | TTYPE id_list ty DOT                 { Types.Type($2, $3) }
-  | CLOSE id_list DOT                    { Types.Close(List.map (fun a -> Type.Tycon a) $2) }
+  | CLOSE id_list DOT                    { Types.Close(List.map (fun a -> Type.Tycon (a, [])) $2) }
   | SSPLIT id DOT                        { Types.SSplit($2, []) }
   | SSPLIT id AS id_list DOT             { Types.SSplit($2, $4) }
 

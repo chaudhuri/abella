@@ -55,7 +55,7 @@ type top_command =
   | Import of string
   | Specification of string
   | Query of umetaterm
-  | Kind of id list
+  | Kind of id list * ki
   | Type of id list * ty
   | Close of aty list
   | SSplit of id * id list
@@ -66,7 +66,7 @@ type compiled =
   | CDefine of (id * ty) list * defs
   | CCoDefine of (id * ty) list * defs
   | CImport of string
-  | CKind of id list
+  | CKind of id list * ki
   | CType of id list * ty
   | CClose of (aty * aty list) list
 
@@ -105,7 +105,7 @@ type any_command =
   | ACommon of common_command
 
 type sig_decl =
-  | SKind of string list
+  | SKind of string list * ki
   | SType of string list * ty
 
 type lpsig =
@@ -167,12 +167,13 @@ let top_command_to_string tc =
         sprintf "Specification \"%s\"" filename
     | Query q ->
         sprintf "Query %s" (umetaterm_to_formatted_string q)
-    | Kind ids ->
-        sprintf "Kind %s type" (id_list_to_string ids)
+    | Kind (ids, ki) ->
+        sprintf "Kind %s %s" (id_list_to_string ids)
+          (ki_to_string ki)
     | Type(ids, ty) ->
         sprintf "Type %s %s" (id_list_to_string ids) (Type.to_string ty)
     | Close ids ->
-        sprintf "Close %s" (id_list_to_string (List.map arep ids))
+        sprintf "Close %s" (id_list_to_string (List.map aty_head ids))
     | SSplit(id, ids) ->
         if ids <> [] then
           sprintf "Split %s as %s" id (id_list_to_string ids)

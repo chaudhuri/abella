@@ -62,7 +62,7 @@ let meta_or a b = Or(a, b)
 let meta_and a b = And(a, b)
 let pred p = Pred(p, Irrelevant)
 
-let propty = tybase "prop"
+let propty = tybase "prop" []
 
 let member_const = Term.const "member" (tyarrow [oty; olistty] propty)
 

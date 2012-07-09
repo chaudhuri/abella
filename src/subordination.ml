@@ -35,7 +35,7 @@ let close (graph, closed : sr) atys =
            | [] -> ()
            | xs -> failwith
                (Printf.sprintf "Cannot close %s without closing %s"
-                  (arep aty) (String.concat ", " (List.map arep xs))))
+                  (aty_head aty) (String.concat ", " (List.map aty_head xs))))
       atys ;
     (graph, closed)
 
@@ -49,8 +49,8 @@ let add (graph, closed : sr) a b =
     else
       failwith (Printf.sprintf
                   "Type %s is closed and cannot be subordinated by %s"
-                  (arep b)
-                  (arep a))
+                  (aty_head b)
+                  (aty_head a))
   else
     (Graph.add_arc graph a b, closed)
 
@@ -71,7 +71,7 @@ let ensure (graph, _) ty =
              failwith
                (Printf.sprintf
                   "Type %s cannot be made subordinate to %s without explicit declaration"
-                  (arep (head aty)) (arep target)))
+                  (aty_head (head aty)) (aty_head target)))
         args ;
   in
     aux  ty

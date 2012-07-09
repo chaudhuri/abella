@@ -69,7 +69,9 @@ let merge_signs signs =
     List.fold_left add_poly_consts (ktable, []) ctables
 
 let add_decl sign = function
-  | SKind(tynames) -> add_types sign tynames
+  | SKind(tynames, ki) ->
+      ignore (failwith "BROKEN: ki_name") ;
+      add_types sign tynames
   | SType(ids, ty) ->
       check_spec_logic_type ty ;
       add_consts sign (List.map (fun id -> (id, ty)) ids)

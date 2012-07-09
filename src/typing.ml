@@ -100,6 +100,66 @@ let tyctx_to_nominal_ctx tyctx =
 
 (** Tables / Signatures *)
 
+type ktable_ = int IdMap.t
+type ctable_ = ty IdMap.t
+type gsig = {
+  types  : ktable_ ;
+  consts : ctable_ ;
+}
+
+(* Types *)
+
+let lookup_type gsig id =
+  try IdMap.find id gsig.types
+  with Not_found -> failwith ("Unknown type constructor: " ^ id)
+
+let add_types gsig ids ki =
+  List.iter begin fun id ->
+    if is_capital_name id then
+      failwith ("Type constructors may not begin with a capital letter: " ^ id)
+  end ids ;
+  let types = List.fold_left begin
+    fun kt tn -> IdMap.add tn ki kt
+  end gsig.types ids in
+  { gsig with types = types }
+
+(* Constants *)
+
+let kind_check gsig ty =
+  let rec ok ty =
+    match ty with
+    | Ty (args, Tyvar tv) ->
+        List.iter ok args
+    | Ty (args, Tycon (tk, tkargs)) ->
+        List.iter ok args ;
+        if lookup_type gsig tk <> List.length tkargs then
+          failwith ("Insufficient args to type constructor: " ^ tk) ;
+        List.iter ok tkargs
+  in
+  ok ty
+
+let const_check gsig id ty =
+  if is_capital_name id then
+    failwith ("Constants may not begin with a capital letter: " ^ id) ;
+  begin try
+    let ty' = IdMap.find id gsig.consts in
+    if ty <> ty' then
+      failwith ("Constant " ^ id ^ " has inconsistent type declarations")
+  with Not_found -> () end ;
+  kind_check gsig ty
+
+let add_consts gsig ks =
+  let consts = List.fold_left begin
+    fun consts (id, ty) ->
+      const_check gsig id ty ;
+      IdMap.add id ty consts
+  end gsig.consts ks in
+  { gsig with consts = consts }
+
+
+
+(******************************************************************************)
+
 type ktable = string list
 type pty = Poly of string list * ty
 type ctable = (string * pty) list
@@ -125,10 +185,10 @@ let kind_check sign (Poly(ids, ty)) =
       match bty with
       | Tyvar tv when List.mem tv ids ->
           List.iter aux tys
-      | Tycon tc when lookup_type sign tc ->
+      | Tycon (tc, _) when lookup_type sign tc ->
           List.iter aux tys
       | _ ->
-          failwith ("Unknown type: " ^ arep bty)
+          failwith ("Unknown type: " ^ aty_head bty)
     end
   in
   aux ty
@@ -169,7 +229,7 @@ let lookup_const (_, ctable) id =
 
 let pervasive_sign =
   (["o"; "olist"; "prop"],
-   [("pi",     Poly(["A"], tyarrow [tyarrow [tybase "A"] oty] oty)) ;
+   [("pi",     Poly(["A"], tyarrow [tyarrow [tybase "A" []] oty] oty)) ;
     ("=>",     Poly([],    tyarrow [oty; oty] oty)) ;
     ("member", Poly([],    tyarrow [oty; olistty] propty)) ;
     ("::",     Poly([],    tyarrow [oty; olistty] olistty)) ;
@@ -307,12 +367,12 @@ let unify_constraints eqns =
             if occurs bty1 ty2 then
               fail s
             else
-              add_sub (arep bty1) ty2 s
+              add_sub (aty_head bty1) ty2 s
         | _, Ty([], bty2) when is_tyvar bty2 ->
             if occurs bty2 ty1 then
               fail s
             else
-              add_sub (arep bty2) ty1 s
+              add_sub (aty_head bty2) ty1 s
         | Ty(ty1::tys1, bty1), Ty(ty2::tys2, bty2) ->
             let s = aux s (ty1, ty2) fail in
               aux s (Ty(tys1, bty1), Ty(tys2, bty2)) fail
@@ -373,9 +433,9 @@ let iter_ty f ty =
 let check_spec_logic_type ty =
   iter_ty
     (fun bty ->
-       if bty = Tycon "prop" then
+       if bty = Tycon ("prop", []) then
          failwith "Cannot mention type prop in the specification logic" ;
-       if bty = Tycon "olist" then
+       if bty = Tycon ("olist", []) then
          failwith "Cannot mention type olist in the specification logic")
     ty
 
@@ -383,7 +443,7 @@ let check_spec_logic_quantification_type ty =
   check_spec_logic_type ty ;
   iter_ty
     (fun bty  ->
-        if bty = Tycon "o" then
+        if bty = Tycon ("o", []) then
           failwith "Cannot quantify over type o in the specification logic")
     ty
 
@@ -560,7 +620,7 @@ let umetaterm_to_formatted_string t =
 let check_meta_logic_quantification_type ty =
   iter_ty
     (fun bty ->
-       if bty = Tycon "prop" then
+       if bty = Tycon ("prop", []) then
          failwith "Cannot quantify over type prop")
     ty
 
