@@ -31,7 +31,7 @@ let aty_head = function
 
 let tyarrow tys ty =
   match ty with
-    | Ty(tys', bty) -> Ty(tys @ tys', bty)
+    | Ty (tys', bty) -> Ty (tys @ tys', bty)
 
 let tybase bty targs =
   Ty([], Tycon (bty, targs))
@@ -183,10 +183,13 @@ let equal_modulo tya tyb =
   in
   sweep_ty tya tyb
 
-type 'a ts = int * 'a
+type decl =
+  | Kind of ki
+  | Type of ty
+
 type sign = {
-  types  : ki ts IdMap.t ;
-  consts : ty ts IdMap.t ;
+  order : string list ;
+  decls : decl IdMap.t ;
 }
 
 let oty = tybase "o" []
@@ -195,33 +198,38 @@ let propty = tybase "prop" []
 let listty a = tybase "list" [a]
 
 let get_kind sg tc =
-  try snd (IdMap.find tc sg.types)
-  with Not_found ->
-    failwithf ~exc:"get_kind"
-      "Unknown type constructor: %s" tc
-
-let stamp sg =
-  IdMap.cardinal sg.types + IdMap.cardinal sg.consts
+  match IdMap.find_opt tc sg.decls with
+  | Some (Kind ki) -> ki
+  | _ ->
+      failwithf ~exc:"get_kind"
+        "Unknown type constructor: %s" tc
 
 let add_types sg tcs ki =
-  let ts = stamp sg in
-  let types = List.fold_left begin
-    fun types tc ->
-      match IdMap.find_opt tc types with
-      | Some (_, ki') when ki <> ki' ->
-          failwithf ~exc:"add_types"
-            "Type constructor %s already declared with kind %s"
-            tc (ki_to_string ki')
+  let exc = "add_types" in
+  let sg = List.fold_left begin
+    fun sg tc ->
+      match IdMap.find_opt tc sg.decls with
+      | Some (Kind ki') ->
+          if ki <> ki' then
+            failwithf ~exc
+              "Type constructor %s already declared with different kind %s"
+              tc (ki_to_string ki') ;
+          sg
+      | Some _ ->
+          failwithf ~exc
+            "Type constructor %s already present in signature" tc
       | _ ->
-          IdMap.add tc (ts, ki) types
-  end sg.types tcs in
-  { sg with types = types }
+          { order = tc :: sg.order ;
+            decls = IdMap.add tc (Kind ki) sg.decls }
+  end sg tcs in
+  sg
 
 let get_type sg kon =
-  try snd (IdMap.find kon sg.consts)
-  with Not_found ->
-    failwithf ~exc:"get_type"
-      "Unknown constant: %s" kon
+  match IdMap.find_opt kon sg.decls with
+  | Some (Type ty) -> ty
+  | _ ->
+      failwithf ~exc:"get_type"
+        "Unknown constant: %s" kon
 
 let check_kind sg ty =
   let rec ok ty =
@@ -241,64 +249,61 @@ let check_kind sg ty =
   ok ty
 
 let add_consts sg kons ty =
-  let ts = stamp sg in
+  let exc = "add_consts" in
   check_kind sg ty ;
   let ty = renumber ty in
-  let consts = List.fold_left begin
-    fun consts kon ->
-      match IdMap.find_opt kon consts with
-      | Some (_, ty') when ty <> ty' ->
-          failwithf ~exc:"add_consts"
-            "Constant %s already declared with incomparable type %s"
-            kon (to_string ty')
+  let sg = List.fold_left begin
+    fun sg kon ->
+      match IdMap.find_opt kon sg.decls with
+      | Some (Type ty') ->
+          if ty <> ty' then
+            failwithf ~exc
+              "Constant %s already declared with incomparable type %s"
+              kon (to_string ty') ;
+          sg
+      | Some _ ->
+          failwithf ~exc
+            "Constant %s already present in signature" kon
       | _ ->
-          IdMap.add kon (ts, ty) consts
-  end sg.consts kons in
-  { sg with consts = consts }
+          { order = kon :: sg.order ;
+            decls = IdMap.add kon (Type ty) sg.decls }
+  end sg kons in
+  sg
 
-let rec telescope l =
-  let rec spin l =
-    match l with
-    | (ts1, x1, _) :: (ts2, x2, th) :: l when ts1 = ts2 ->
-        spin ((ts1, x1 ^ "," ^ x2, th) :: l)
-    | h :: l ->
-        h :: spin l
-    | [] -> []
-  in
-  spin l
-          
 let sign_to_string sg =
-  let things = IdMap.fold begin
-    fun tc (ts, ki) things ->
-      (ts, tc, ("Kind", fun () -> ki_to_string ki)) :: things
-  end sg.types [] in
-  let things = IdMap.fold begin
-    fun kon (ts, ty) things ->
-      (ts, kon, ("Type", fun () -> to_string ty)) :: things
-  end sg.consts things in
-  let things =
-    List.fast_sort
-      (fun (ts1, _, _) (ts2, _, _) -> Pervasives.compare ts1 ts2)
-      things in
-  let things = telescope things in
-  let maxstr = List.fold_left begin
-    fun maxstr (_, x, _) -> Pervasives.max maxstr (String.length x)
-  end 0 things in
+  let maxstr = List.fold_left
+    (fun m d -> Pervasives.max m (String.length d)) 0 sg.order in
   let buf = Buffer.create 19 in
-  List.iter begin
-    fun (_, x, (desc, clasf)) ->
-      Printf.bprintf buf "%s  %-*s  %s.\n" desc maxstr x (clasf ())
-  end things ;
+  List.iter begin fun d ->
+    match IdMap.find d sg.decls with
+    | Kind ki ->
+        Printf.bprintf buf "Kind  %-*s  %s.\n"
+          maxstr d (ki_to_string ki)
+    | Type ty ->
+        Printf.bprintf buf "Type  %-*s  %s.\n"
+          maxstr d (to_string ty)
+  end (List.rev sg.order) ;
   Buffer.contents buf
 
-let pervasives = 
-  let sg = { types = IdMap.empty ; consts = IdMap.empty } in
-  let sg = add_types  sg ["prop"] 0 in
-  let sg = add_types  sg ["o"] 0 in
-  let sg = add_consts sg ["=>"] (tyarrow [oty ; oty] oty) in
-  let sg = add_consts sg ["pi";"sigma"] (tyarrow [tyarrow [tyvar "A"] oty] oty) in
-  let sg = add_types  sg ["list"] 1 in
-  let sg = add_consts sg ["nil"] (listty (tyvar "A")) in
-  let sg = add_consts sg ["::"] (tyarrow [tyvar "A" ; listty (tyvar "A")] (listty (tyvar "A"))) in
-  let sg = add_consts sg ["member"] (tyarrow [tyvar "A" ; listty (tyvar "A")] propty) in
-  sg
+let process sg decls =
+  List.fold_left begin fun sg decl ->
+    match decl with
+    | (tcs, Kind ki) ->
+        add_types sg tcs ki
+    | (kons, Type ty) ->
+        add_consts sg kons ty
+  end sg decls
+
+let spec_pervasives = 
+  process { order = [] ; decls = IdMap.empty }
+    [ ["o"],            Kind 0
+    ; ["=>"],           Type (tyarrow [oty ; oty] oty)
+    ; ["pi" ; "sigma"], Type (tyarrow [tyarrow [tyvar "A"] oty] oty) ]
+
+let import_spec_sign sg =
+  process sg
+    [ ["prop"],   Kind 0
+    ; ["list"],   Kind 1
+    ; ["nil"],    Type (listty (tyvar "A"))
+    ; ["::"],     Type (tyarrow [tyvar "A" ; listty (tyvar "A")] (listty (tyvar "A")))
+    ; ["member"], Type (tyarrow [tyvar "A" ; listty (tyvar "A")] propty) ]

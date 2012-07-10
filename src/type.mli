@@ -46,17 +46,21 @@ val olistty : ty (** DEPRECATED *)
 val propty  : ty
 val listty  : ty -> ty
 
-type 'a ts = int * 'a
+type decl =
+  | Kind of ki
+  | Type of ty
+
 type sign = {
-  types  : ki ts IdMap.t ;
-  consts : ty ts IdMap.t ;
+  order : string list ;
+  decls : decl IdMap.t ;
 }
-val pervasives : sign
 
 val get_kind   : sign -> string -> ki
-val add_types  : sign -> string list -> ki -> sign
+val get_type   : sign -> string -> ty
 
 val check_kind : sign -> ty -> unit
 
-val get_type   : sign -> string -> ty
-val add_consts : sign -> string list -> ty -> sign
+val process : sign -> (string list * decl) list -> sign
+
+val spec_pervasives  : sign
+val import_spec_sign : sign -> sign
