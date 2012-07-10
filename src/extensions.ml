@@ -25,6 +25,13 @@ let uncurry f x y = f (x,y)
 
 let parenthesis x = "(" ^ x ^ ")"
 
+let failwithf ?exc fmt =
+  Printf.ksprintf begin
+    fun msg -> match exc with
+    | None -> failwith msg
+    | Some exc -> Printf.eprintf "%s\n%!" msg ; failwith exc
+  end fmt
+
 module Option = struct
   let is_some x =
     match x with
@@ -66,7 +73,14 @@ module IdOrd = struct
   let compare : t -> t -> int = Pervasives.compare
 end
 module IdSet = Set.Make (IdOrd)
-module IdMap = Map.Make (IdOrd)
+module IdMap = struct
+  include Map.Make (IdOrd)
+  let find_opt e m =
+    try Some (find e m) with Not_found -> None
+  let of_alist l =
+    List.fold_left (fun m (x, v) -> add x v m) empty l
+  let to_alist m = bindings m
+end
 
 module List = struct
   include List

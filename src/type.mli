@@ -15,6 +15,8 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Extensions
+
 type ty = Ty of ty list * aty
 
 and aty =
@@ -27,9 +29,6 @@ val tyarrow : ty list -> ty -> ty
 val tyvar   : string -> ty
 val tybase  : string -> ty list -> ty
 
-val oty     : ty
-val olistty : ty
-
 val is_tyvar    : aty -> bool
 val fresh_tyvar : unit -> ty
 
@@ -37,3 +36,27 @@ val to_string : ty -> string
 
 type ki = int
 val ki_to_string : ki -> string
+
+val freshen : ty -> ty
+val renumber : ty -> ty
+val equal_modulo : ty -> ty -> bool
+
+val oty     : ty
+val olistty : ty (** DEPRECATED *)
+val propty  : ty
+val listty  : ty -> ty
+
+type 'a ts = int * 'a
+type sign = {
+  types  : ki ts IdMap.t ;
+  consts : ty ts IdMap.t ;
+}
+val pervasives : sign
+
+val get_kind   : sign -> string -> ki
+val add_types  : sign -> string list -> ki -> sign
+
+val check_kind : sign -> ty -> unit
+
+val get_type   : sign -> string -> ty
+val add_consts : sign -> string list -> ty -> sign
