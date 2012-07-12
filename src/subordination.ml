@@ -54,11 +54,17 @@ let add (graph, closed : sr) a b =
   else
     (Graph.add_arc graph a b, closed)
 
+let mono_atomic ty =
+  match ty with
+  | Ty ([], Tycon (_, [])) -> true
+  | _ -> false
+
 let update sr ty =
-  let rec aux sr (Ty(args, target)) =
-    let sr = List.fold_left aux sr args in
+  if not (mono_atomic ty) then sr else
+    let rec aux sr (Ty(args, target)) =
+      let sr = List.fold_left aux sr args in
       List.fold_left (fun sr ty -> add sr (head ty) target) sr args
-  in
+    in
     aux sr ty
 
 let ensure (graph, _) ty =
@@ -67,14 +73,14 @@ let ensure (graph, _) ty =
     let target_preds = Graph.predecessors graph target in
       List.iter
         (fun aty ->
-           if not (List.mem (head aty) target_preds) then
-             failwith
-               (Printf.sprintf
-                  "Type %s cannot be made subordinate to %s without explicit declaration"
-                  (aty_head (head aty)) (aty_head target)))
+          if not (List.mem (head aty) target_preds) then
+            failwith
+              (Printf.sprintf
+                 "Type %s cannot be made subordinate to %s without explicit declaration"
+                 (aty_head (head aty)) (aty_head target)))
         args ;
   in
-    aux  ty
+  if mono_atomic ty then aux ty
 
 let subordinates (graph, closed : sr) a =
   Graph.predecessors graph a

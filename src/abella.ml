@@ -76,27 +76,26 @@ let position_range (p1, p2) =
     else
       sprintf ": file %s, line %d, characters %d-%d" file line char1 char2
 
-let type_inference_error (pos, ct) exp act =
-  eprintf "Typing error%s.\n%!" (position_range pos) ;
-  match ct with
-    | CArg ->
-        eprintf "Expression has type %s but is used here with type %s\n%!"
-          (Type.to_string act) (Type.to_string exp)
-    | CFun ->
-        eprintf "Expression is applied to too many arguments\n%!"
+let type_inference_error prob =
+  eprintf "Typing error%s.\n%!" (position_range prob.position) ;
+  match prob.info with
+  | `Arg ->
+      eprintf "Expression has type %s but is used here with type %s\n%!"
+        (Type.to_string prob.actual) (Type.to_string prob.expected)
+  | `Fun ->
+      eprintf "Expression is applied to too many arguments\n%!"
 
 let teyjus_only_keywords =
   ["closed"; "exportdef"; "import"; "infix"; "infixl"; "infixr"; "local";
    "localkind"; "postfix"; "posfixl"; "prefix"; "prefixr"; "typeabbrev";
    "use_sig"; "useonly"; "sigma"]
 
-let warn_on_teyjus_only_keywords (ktable, ctable) =
-  let tokens = List.unique (ktable @ List.map fst ctable) in
-  let used_keywords = List.intersect tokens teyjus_only_keywords in
-    if used_keywords <> [] then
-      fprintf !out
-        "Warning: The following tokens are keywords in Teyjus: %s\n%!"
-        (String.concat ", " used_keywords)
+let warn_on_teyjus_only_keywords sign =
+  let used_keywords = List.intersect teyjus_only_keywords sign.order in
+  if used_keywords <> [] then
+    fprintf !out
+      "Warning: The following tokens are keywords in Teyjus: %s\n%!"
+      (String.concat ", " used_keywords)
 
 let update_subordination_sign sr sign =
   List.fold_left Subordination.update sr (sign_to_tys sign)
@@ -124,7 +123,7 @@ let ensure_no_restrictions term =
     failwith "Cannot use restrictions: *, @ or +"
 
 let untyped_ensure_no_restrictions term =
-  ensure_no_restrictions (umetaterm_to_metaterm [] term)
+  ensure_no_restrictions (umetaterm_to_metaterm IdMap.empty term)
 
 let warn_stratify names term =
   let rec aux nested term =
@@ -170,15 +169,15 @@ let check_defs names defs =
     defs
 
 let check_noredef ids =
-  let (_, ctable) = !sign in
-    List.iter (
-      fun id -> if List.mem id (List.map fst ctable) then
-        failwith (sprintf "%s is already defined" id)
-    ) ids
+  List.iter begin
+    fun id ->
+      if IdMap.mem id !sign.decls then
+        failwithf "%s is already defined" id
+  end ids
 
 (* Compilation and importing *)
 
-let comp_spec_sign = ref ([], [])
+let comp_spec_sign = ref { order = [] ; decls = IdMap.empty }
 let comp_spec_clauses = ref []
 let comp_content = ref []
 
@@ -198,8 +197,13 @@ let compile citem =
   ensure_finalized_specification () ;
   comp_content := citem :: !comp_content
 
-let predicates (ktable, ctable) =
-  List.map fst (List.find_all (fun (_, Poly(_, Ty(_, ty))) -> ty = Tycon ("o", [])) ctable)
+let predicates sign =
+  IdMap.fold begin
+    fun id decl ps ->
+      match decl with
+      | Tdecl (Ty (_, Tycon ("o", []))) -> id :: ps
+      | _ -> ps
+  end sign.decls []
 
 let write_compilation () =
   marshal !comp_spec_sign ;
@@ -214,15 +218,23 @@ let clauses_to_predicates clauses =
     List.map (fun c -> let (_,h,_) = Tactics.clausify c in h) clauses in
   List.unique (List.map term_head_name clause_heads)
 
+let sign_split sign =
+  IdMap.fold begin
+    fun id decl (ktab, ctab) ->
+      match decl with
+      | Tdecl ty -> (ktab, (id, ty) :: ctab)
+      | Kdecl ki -> ((id, ki) :: ktab, ctab)
+  end sign.decls ([], [])
+
 let ensure_valid_import imp_spec_sign imp_spec_clauses imp_predicates =
-  let (ktable, ctable) = !sign in
-  let (imp_ktable, imp_ctable) = imp_spec_sign in
+  let (ktable, ctable) = sign_split !sign in
+  let (imp_ktable, imp_ctable) = sign_split imp_spec_sign in
 
   (* 1. Imported ktable must be a subset of ktable *)
   let missing_types = List.minus imp_ktable ktable in
   let () = if missing_types <> [] then
-    failwith (sprintf "Imported file makes reference to unknown types: %s"
-                (String.concat ", " missing_types))
+      failwithf "Imported file makes reference to unknown types: %s"
+        (String.concat ", " (List.map fst missing_types))
   in
 
   (* 2. Imported ctable must be a subset of ctable *)
@@ -289,10 +301,9 @@ let import filename =
                    add_defs ids CoInductive defs
              | CImport(filename) ->
                  aux filename
-             | CKind(ids, _) ->
-                 ignore (failwith "BROKEN: import") ;
+             | CKind(ids, ki) ->
                  check_noredef ids;
-                 add_global_types ids
+                 add_global_types ids ki
              | CType(ids, ty) ->
                  check_noredef ids;
                  add_global_consts (List.map (fun id -> (id, ty)) ids)
@@ -482,8 +493,8 @@ let rec process_proof name =
           eprintf "Syntax error%s.\n%!" (position !lexbuf) ;
           Lexing.flush_input !lexbuf ;
           interactive_or_exit () ;
-      | TypeInferenceFailure(ci, exp, act) ->
-          type_inference_error ci exp act ;
+      | Unsolvable prob ->
+          type_inference_error prob ;
           interactive_or_exit ()
       | e ->
           eprintf "Error: %s\n%!" (Printexc.to_string e) ;
@@ -557,11 +568,10 @@ let rec process () =
               failwith ("Specification can only be read " ^
                           "at the begining of a development.")
         | Query(q) -> query q
-        | Kind(ids, n) ->
-            ignore (failwith "BROKEN: process") ;
+        | Kind(ids, ki) ->
             check_noredef ids;
-            add_global_types ids ;
-            compile (CKind (ids, n))
+            add_global_types ids ki ;
+            compile (CKind (ids, ki))
         | Type(ids, ty) ->
             check_noredef ids;
             add_global_consts (List.map (fun id -> (id, ty)) ids) ;
@@ -597,8 +607,8 @@ let rec process () =
         eprintf "Syntax error%s.\n%!" (position !lexbuf) ;
         Lexing.flush_input !lexbuf ;
         interactive_or_exit ()
-    | TypeInferenceFailure(ci, exp, act) ->
-        type_inference_error ci exp act ;
+    | Unsolvable prob ->
+        type_inference_error prob ;
         interactive_or_exit ()
     | e ->
         eprintf "Unknown error: %s\n%!" (Printexc.to_string e) ;

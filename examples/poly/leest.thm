@@ -1,0 +1,141 @@
+%% [0] poly specs
+
+Specification "leest".
+
+
+
+%% [1] GADTS
+
+Kind bool type.
+Type tt bool.
+Type ff bool.
+
+Kind nat type.
+Type z nat.
+Type s nat -> nat.
+
+Kind exp type -> type.
+Type bool_exp bool -> exp bool.
+Type nat_exp  nat  -> exp nat.
+Type if_exp   exp bool -> exp A -> exp A -> exp A.
+
+Define eval : exp A -> A -> prop by
+  eval (bool_exp B) B
+; eval (nat_exp N) N
+; eval (if_exp (bool_exp tt) E F) V := eval E V
+; eval (if_exp (bool_exp ff) E F) V := eval F V.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%% [2] generic prune
+
+Kind i type.
+Type $i i -> o.
+
+Define ctx : olist -> prop by
+  ctx nil
+; nabla x, ctx ($i x :: G) := ctx G.
+
+Theorem member_prune :
+  forall G E, nabla n,
+    member (E n) G -> exists F, E = x\ F.
+skip.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%% [3] ugliness 
+
+Type kcom  A -> B -> A.
+Type scom  (A -> B -> C) -> (A -> B) -> A -> C.
+
+%%% But what about subordination?
+%%%
+%%% Example of tms appearing in tys:
+%%%
+%%%     arr (kcom (abs x\ x) a) b
+%%%
+%%% where a and b are tys.
+%%%
+%%% In other words, ty is no longer strictly subordinate to tm.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%% [4] Possible fixes for subordination
+
+%%%  1. Solve a really hard problem
+%%%  2. Restrict signature constants to have atomic target types
+%%%       (still covers lists, etc.)
+%%%  3. Punish users that use such constants for their decadence
+%%%  4. 

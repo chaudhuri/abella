@@ -71,23 +71,6 @@ type umetaterm =
   | UAnd of umetaterm * umetaterm
   | UPred of uterm * restriction
 
-
-(** Type substitutions *)
-
-type tysub = (string * ty) list
-
-let rec apply_bind_ty v ty = function
-  | Ty(tys, bty) ->
-      tyarrow
-        (List.map (apply_bind_ty v ty) tys)
-        (if Tyvar v = bty then ty else Ty([], bty))
-
-let apply_sub_ty s ty =
-  List.fold_left (fun ty (v,vty) -> apply_bind_ty v vty ty) ty s
-
-let apply_sub_tyctx s tyctx =
-  List.map (fun (id, ty) -> (id, apply_sub_ty s ty)) tyctx
-
 let ids_to_fresh_tyctx ids =
   List.map (fun id -> (id, fresh_tyvar ())) ids
 
@@ -97,88 +80,16 @@ let tyctx_to_ctx tyctx =
 let tyctx_to_nominal_ctx tyctx =
   List.map (fun (id, ty) -> (id, nominal_var id ty)) tyctx
 
-
-(** Tables / Signatures *)
-
-type ktable = string list
-type pty = Poly of string list * ty
-type ctable = (string * pty) list
-type sign = ktable * ctable
-
-(** Kinds *)
-
-let add_types (ktable, ctable) ids =
-  List.iter
-    (fun id -> if is_capital_name id then
-       failwith ("Types may not begin with a capital letter: " ^ id))
-    ids ;
-  (ids @ ktable, ctable)
-
-let lookup_type (ktable, _) id =
-  List.mem id ktable
-
-(** Constants *)
-
-let kind_check sign (Poly(ids, ty)) =
-  let rec aux = function
-    | Ty(tys, bty) -> begin
-      match bty with
-      | Tyvar tv when List.mem tv ids ->
-          List.iter aux tys
-      | Tycon (tc, _) when lookup_type sign tc ->
-          List.iter aux tys
-      | _ ->
-          failwith ("Unknown type: " ^ aty_head bty)
-    end
-  in
-  aux ty
-
-let check_const (ktable, ctable) (id, pty) =
-  begin try
-    let pty' = List.assoc id ctable in
-      if pty <> pty' then
-        failwith ("Constant " ^ id ^ " has inconsistent type declarations")
-  with
-    | Not_found -> ()
-  end ;
-
-  if is_capital_name id then
-    failwith ("Constants may not begin with a capital letter: " ^ id) ;
-
-  kind_check (ktable, ctable) pty
-
-let add_poly_consts (ktable, ctable) idptys =
-  List.iter (check_const (ktable, ctable)) idptys ;
-  (ktable, idptys @ ctable)
-
-let add_consts sign idtys =
-  let idptys = List.map (fun (id, ty) -> (id, Poly([], ty))) idtys in
-    add_poly_consts sign idptys
-
-let freshen_ty (Poly(ids, ty)) =
-  let sub = ids_to_fresh_tyctx ids in
-    apply_sub_ty sub ty
-
-let lookup_const (_, ctable) id =
-  try
-    freshen_ty (List.assoc id ctable)
-  with
-    | Not_found -> failwith ("Unknown constant: " ^ id)
-
 (** Pervasive signature *)
 
-let pervasive_sign =
-  (["o"; "olist"; "prop"],
-   [("pi",     Poly(["A"], tyarrow [tyarrow [tybase "A" []] oty] oty)) ;
-    ("=>",     Poly([],    tyarrow [oty; oty] oty)) ;
-    ("member", Poly([],    tyarrow [oty; olistty] propty)) ;
-    ("::",     Poly([],    tyarrow [oty; olistty] olistty)) ;
-    ("nil",    Poly([],    olistty))])
-
 let sign_to_tys sign =
-  List.filter_map
-    (function (_, Poly([], ty)) -> Some ty | _ -> None)
-    (snd sign)
+  IdMap.fold begin
+    fun _ decl tys -> 
+      match decl with
+      | Tdecl (Ty ([], Tycon (_, [])) as ty) ->
+          ty :: tys
+      | _ -> tys
+  end sign.decls []
 
 let pervasive_sr =
   List.fold_left Subordination.update Subordination.empty
@@ -186,18 +97,10 @@ let pervasive_sr =
 
 (** Typing for terms *)
 
-type expected = ty
-type actual = ty
-(* A constraint contains the position of the 'actual' type *)
-type constraint_type = CFun | CArg
-type constraint_info = pos * constraint_type
-type constraints = (expected * actual * constraint_info) list
-exception TypeInferenceFailure of constraint_info * expected * actual
-
 let infer_type_and_constraints ~sign tyctx t =
   let eqns = ref [] in
-  let add_constraint expected actual pos =
-    eqns := (expected, actual, pos) :: !eqns
+  let add_constraint expected actual position info =
+    eqns := { expected ; actual ; position ; info } :: !eqns
   in
 
   let rec aux tyctx t =
@@ -207,10 +110,10 @@ let infer_type_and_constraints ~sign tyctx t =
             begin try
               List.assoc id tyctx
             with
-              | Not_found -> lookup_const sign id
+            | Not_found -> get_type sign id
             end
           in
-            add_constraint ty ty' (p, CArg) ;
+            add_constraint ty ty' p `Arg ;
             ty
       | ULam(_, id, ty, t) ->
           tyarrow [ty] (aux ((id, ty) :: tyctx) t)
@@ -222,12 +125,13 @@ let infer_type_and_constraints ~sign tyctx t =
               | Ty([], _) ->
                   let aty = fresh_tyvar () in
                   let rty = fresh_tyvar () in
-                    add_constraint (tyarrow [aty] rty) ty1 (get_pos t1, CFun) ;
+                    add_constraint (tyarrow [aty] rty) ty1 (get_pos t1) `Fun ;
                     (aty, rty)
               | Ty(aty::atys, bty) ->
                   (aty, Ty(atys, bty))
           in
-            add_constraint aty ty2 (get_pos t2, CArg) ;
+            add_constraint aty ty2 (get_pos t2) `Arg
+ ;
             rty
   in
 
@@ -248,84 +152,43 @@ let occurs v ty =
   in
     aux ty
 
-let rec contains_tyvar = function
-  | Ty(tys, bty) ->
-      is_tyvar bty || List.exists contains_tyvar tys
-
-let tid_ensure_fully_inferred (id, ty) =
-  if contains_tyvar ty then
-    failwith ("Type not fully determined for " ^ id)
-
-let term_ensure_fully_inferred t =
-  let rec aux t =
-    match observe (hnorm t) with
-      | Var v -> tid_ensure_fully_inferred (v.name, v.ty)
-      | DB i -> ()
-      | App(h, args) -> aux h ; List.iter aux args
-      | Lam(tys, body) -> aux body
-      | _ -> assert false
-  in
-    aux t
-
-let metaterm_ensure_fully_inferred t =
-  let rec aux t =
-    match t with
-      | True | False -> ()
-      | And(a, b) | Or(a, b) | Arrow(a, b) -> aux a; aux b
-      | Binding(_, tids, body) ->
-          List.iter tid_ensure_fully_inferred tids ;
-          aux body
-      | Eq(a, b) ->
-          term_ensure_fully_inferred a ;
-          term_ensure_fully_inferred b
-      | Obj(obj, _) ->
-          Context.iter term_ensure_fully_inferred obj.context ;
-          term_ensure_fully_inferred obj.term
-      | Pred(p, _) ->
-          term_ensure_fully_inferred p
-  in
-    aux t
-
-let apply_bind_constraints v ty eqns =
-  List.map (fun (x,y) -> (apply_bind_ty v ty x, apply_bind_ty v ty y)) eqns
-
-let apply_bind_sub v ty sub =
-  List.map (fun (x,y) -> (x, apply_bind_ty v ty y)) sub
-
-let unify_constraints eqns =
-  let add_sub v vty s =
-      (v, vty) :: (apply_bind_sub v vty s)
-  in
-
-  (* Unify a single constraint and call fail on failure *)
-  let rec aux s (ty1, ty2) fail =
-    let ty1 = apply_sub_ty s ty1 in
-    let ty2 = apply_sub_ty s ty2 in
-      match ty1, ty2 with
-        | _, _ when ty1 = ty2 -> s
-        | Ty([], bty1), _ when is_tyvar bty1 ->
-            if occurs bty1 ty2 then
-              fail s
-            else
-              add_sub (aty_head bty1) ty2 s
-        | _, Ty([], bty2) when is_tyvar bty2 ->
-            if occurs bty2 ty1 then
-              fail s
-            else
-              add_sub (aty_head bty2) ty1 s
-        | Ty(ty1::tys1, bty1), Ty(ty2::tys2, bty2) ->
-            let s = aux s (ty1, ty2) fail in
-              aux s (Ty(tys1, bty1), Ty(tys2, bty2)) fail
-        | ty1, ty2 -> fail s
-  in
-
-  let unify_single_constraint s (ty1, ty2, p) =
-    aux s (ty1, ty2)
-      (fun s -> raise (TypeInferenceFailure(p, apply_sub_ty s ty1,
-                                            apply_sub_ty s ty2)))
-  in
-
-    List.fold_left unify_single_constraint [] eqns
+(* let rec contains_tyvar = function
+ *   | Ty(tys, bty) ->
+ *       is_tyvar bty || List.exists contains_tyvar tys
+ * 
+ * let tid_ensure_fully_inferred (id, ty) =
+ *   if contains_tyvar ty then
+ *     failwith ("Type not fully determined for " ^ id)
+ * 
+ * let term_ensure_fully_inferred t =
+ *   let rec aux t =
+ *     match observe (hnorm t) with
+ *       | Var v -> tid_ensure_fully_inferred (v.name, v.ty)
+ *       | DB i -> ()
+ *       | App(h, args) -> aux h ; List.iter aux args
+ *       | Lam(tys, body) -> aux body
+ *       | _ -> assert false
+ *   in
+ *     aux t
+ * 
+ * let metaterm_ensure_fully_inferred t =
+ *   let rec aux t =
+ *     match t with
+ *       | True | False -> ()
+ *       | And(a, b) | Or(a, b) | Arrow(a, b) -> aux a; aux b
+ *       | Binding(_, tids, body) ->
+ *           List.iter tid_ensure_fully_inferred tids ;
+ *           aux body
+ *       | Eq(a, b) ->
+ *           term_ensure_fully_inferred a ;
+ *           term_ensure_fully_inferred b
+ *       | Obj(obj, _) ->
+ *           Context.iter term_ensure_fully_inferred obj.context ;
+ *           term_ensure_fully_inferred obj.term
+ *       | Pred(p, _) ->
+ *           term_ensure_fully_inferred p
+ *   in
+ *     aux t *)
 
 let uterms_extract_if test ts =
   let rec aux t =
@@ -342,14 +205,14 @@ let uterm_nominals_to_tyctx t =
 let uterm_to_term sub t =
   let rec aux t =
     match t with
-      | UCon(_, id, ty) -> const id (apply_sub_ty sub ty)
-      | ULam(_, id, ty, t) -> abstract id (apply_sub_ty sub ty) (aux t)
+      | UCon(_, id, ty) -> const id (apply_tysub sub ty)
+      | ULam(_, id, ty, t) -> abstract id (apply_tysub sub ty) (aux t)
       | UApp(_, t1, t2) -> app (aux t1) [aux t2]
   in
     aux t
 
 let uterm_to_string t =
-  term_to_string (uterm_to_term [] t)
+  term_to_string (uterm_to_term IdMap.empty t)
 
 let term_ensure_subordination sr t =
   let rec aux tyctx t =
@@ -398,6 +261,11 @@ let check_pi_quantification ts =
               | _ -> assert false)
        ts)
 
+let tyctx_apply_tysub sub tyctx =
+  List.map begin
+    fun (id, ty) -> (id, apply_tysub sub ty)
+  end tyctx
+
 let type_uterm ?expected_ty ~sr ~sign ~ctx t =
   let nominal_tyctx = uterm_nominals_to_tyctx t in
   let tyctx =
@@ -405,15 +273,20 @@ let type_uterm ?expected_ty ~sr ~sign ~ctx t =
       @ nominal_tyctx
   in
   let (ty, eqns) = infer_type_and_constraints ~sign tyctx t in
-  let eqns =
+  let expected_ty =
     match expected_ty with
-    | None -> eqns
-    | Some exp_ty -> (exp_ty, ty, (get_pos t, CArg)) :: eqns
+    | None -> fresh_tyvar ()
+    | Some ty -> ty
   in
-  let sub = unify_constraints eqns in
-  let ctx = ctx @ (tyctx_to_nominal_ctx (apply_sub_tyctx sub nominal_tyctx)) in
+  let eqns = { expected = expected_ty ;
+               actual = ty ;
+               position = get_pos t ;
+               info = `Arg } :: eqns
+  in
+  let sub = solve eqns in
+  let ctx = ctx @ (tyctx_to_nominal_ctx (tyctx_apply_tysub sub nominal_tyctx)) in
   let result = replace_term_vars ctx (uterm_to_term sub t) in
-    term_ensure_fully_inferred result ;
+    (* term_ensure_fully_inferred result ; *)
     term_ensure_subordination sr result ;
     check_pi_quantification [result];
     result
@@ -488,6 +361,9 @@ let type_uclause ~sr ~sign (head, body) =
 
 (** Typing for metaterms *)
 
+let typrob expected actual position info =
+  { expected ; actual ; position ; info }
+
 let infer_constraints ~sign ~tyctx t =
   let rec aux tyctx t =
     match t with
@@ -495,19 +371,19 @@ let infer_constraints ~sign ~tyctx t =
       | UEq(a, b) ->
           let (aty, aeqns) = infer_type_and_constraints ~sign tyctx a in
           let (bty, beqns) = infer_type_and_constraints ~sign tyctx b in
-            aeqns @ beqns @ [(aty, bty, (get_pos b, CArg))]
+          aeqns @ beqns @ [typrob aty bty (get_pos b) `Arg]
       | UObj(l, g, _) ->
           let (lty, leqns) = infer_type_and_constraints ~sign tyctx l in
           let (gty, geqns) = infer_type_and_constraints ~sign tyctx g in
-            leqns @ geqns @ [(olistty, lty, (get_pos l, CArg));
-                             (oty, gty, (get_pos g, CArg))]
+            leqns @ geqns @ [ typrob olistty lty (get_pos l) `Arg
+                            ; typrob oty gty (get_pos g) `Arg ]
       | UArrow(a, b) | UOr(a, b) | UAnd(a, b) ->
           (aux tyctx a) @ (aux tyctx b)
       | UBinding(_, tids, body) ->
           aux (List.rev_app tids tyctx) body
       | UPred(p, _) ->
           let (pty, peqns) = infer_type_and_constraints ~sign tyctx p in
-            peqns @ [(propty, pty, (get_pos p, CArg))]
+            peqns @ [typrob propty pty (get_pos p) `Arg]
   in
     aux tyctx t
 
@@ -543,7 +419,7 @@ let umetaterm_to_metaterm sub t =
       | UArrow(a, b) -> Arrow(aux a, aux b)
       | UBinding(binder, tids, body) ->
           Binding(binder,
-                  List.map_snd (apply_sub_ty sub) tids,
+                  List.map_snd (apply_tysub sub) tids,
                   aux body)
       | UOr(a, b) -> Or(aux a, aux b)
       | UAnd(a, b) -> And(aux a, aux b)
@@ -552,10 +428,10 @@ let umetaterm_to_metaterm sub t =
     aux t
 
 let umetaterm_to_string t =
-  metaterm_to_string (umetaterm_to_metaterm [] t)
+  metaterm_to_string (umetaterm_to_metaterm IdMap.empty t)
 
 let umetaterm_to_formatted_string t =
-  metaterm_to_formatted_string (umetaterm_to_metaterm [] t)
+  metaterm_to_formatted_string (umetaterm_to_metaterm IdMap.empty t)
 
 let check_meta_logic_quantification_type ty =
   iter_ty
@@ -604,29 +480,28 @@ let type_umetaterm ~sr ~sign ?(ctx=[]) t =
       @ nominal_tyctx
   in
   let eqns = infer_constraints ~sign ~tyctx t in
-  let sub = unify_constraints eqns in
-  let ctx = ctx @ (tyctx_to_nominal_ctx (apply_sub_tyctx sub nominal_tyctx))
+  let sub = solve eqns in
+  let ctx = ctx @ (tyctx_to_nominal_ctx (tyctx_apply_tysub sub nominal_tyctx))
   in
   let result = replace_metaterm_vars ctx (umetaterm_to_metaterm sub t) in
-    metaterm_ensure_fully_inferred result ;
+    (* metaterm_ensure_fully_inferred result ; *)
     metaterm_ensure_subordination sr result ;
     check_meta_quantification result ;
     result
-
 
 let type_udef ~sr ~sign (head, body) =
   let cids = umetaterm_extract_if is_capital_name head in
   let tyctx = ids_to_fresh_tyctx cids in
   let eqns1 = infer_constraints ~sign ~tyctx head in
   let eqns2 = infer_constraints ~sign ~tyctx body in
-  let sub = unify_constraints (eqns1 @ eqns2) in
-  let ctx = tyctx_to_ctx (apply_sub_tyctx sub tyctx) in
+  let sub = solve (eqns1 @ eqns2) in
+  let ctx = tyctx_to_ctx (tyctx_apply_tysub sub tyctx) in
   let (rhead, rbody) =
     (replace_metaterm_vars ctx (umetaterm_to_metaterm sub head),
      replace_metaterm_vars ctx (umetaterm_to_metaterm sub body))
   in
-    metaterm_ensure_fully_inferred rhead ;
-    metaterm_ensure_fully_inferred rbody ;
+    (* metaterm_ensure_fully_inferred rhead ;
+     * metaterm_ensure_fully_inferred rbody ; *)
     metaterm_ensure_subordination sr rhead ;
     metaterm_ensure_subordination sr rbody ;
     check_meta_quantification rbody ;

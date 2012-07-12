@@ -61,25 +61,27 @@ let sequent = {
 let sign = ref pervasive_sign
 let sr = ref pervasive_sr
 
-let add_global_types tys =
-  sign := add_types !sign tys
+let add_global_types tys ki =
+  sign := process !sign [tys, Kdecl ki]
 
 let locally_add_global_consts cs =
-  let local_sr = List.fold_left Subordination.update !sr (List.map snd cs)
-  and local_sign = add_consts !sign cs
-  in (local_sr, local_sign)
+  let local_sr = List.fold_left Subordination.update !sr (List.map snd cs) in
+  let local_sign = process !sign begin
+    List.map (fun (kon, ty) -> ([kon], Tdecl ty)) cs
+  end in
+  (local_sr, local_sign)
 
 let commit_global_consts local_sr local_sign =
   sr := local_sr ;
   sign := local_sign
 
 let add_global_consts cs =
-  sr := List.fold_left Subordination.update !sr (List.map snd cs) ;
-  sign := add_consts !sign cs
+  let (sr, sign) = locally_add_global_consts cs in
+  commit_global_consts sr sign
 
 let close_types ids =
   let reps = List.map aty_head ids in
-  begin match List.minus reps (fst !sign) with
+  begin match List.minus reps !sign.order with
     | [] -> ()
     | xs -> failwith ("Unknown type(s): " ^ (String.concat ", " xs))
   end ;

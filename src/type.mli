@@ -53,8 +53,8 @@ val equal_modulo : ty -> ty -> bool
 (****************************************************************************)
 
 type decl =
-  | Kind of ki
-  | Type of ty
+  | Kdecl of ki
+  | Tdecl of ty
 
 type sign = {
   order : string list ;
@@ -68,8 +68,7 @@ val check_kind : sign -> ty -> unit
 
 val process : sign -> (string list * decl) list -> sign
 
-val spec_pervasives  : sign
-val import_spec_sign : sign -> sign
+val pervasive_sign : sign
 
 (****************************************************************************)
 

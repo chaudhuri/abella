@@ -23,6 +23,15 @@
 
   module Types = Abella_types
 
+  let is_capital_name str =
+    'A' <= str.[0] && str.[0] <= 'Z'
+
+  let mk_atomic_type h args =
+    match h, args with
+    | "olist", [] -> Type.olistty
+    | _, [] when is_capital_name h -> Type.tyvar h
+    | _ -> Type.tybase h args
+
   let pos i =
     if i = 0 then
       (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())
@@ -223,13 +232,13 @@ id_list:
   | id COMMA id_list                     { $1::$3}
 
 ty:
-  | STRINGID aty_list                    { Type.tybase $1 $2 }
+  | STRINGID aty_list                    { mk_atomic_type $1 $2 }
   | ty RARROW ty                         { Type.tyarrow [$1] $3 }
   | LPAREN ty RPAREN                     { $2 }
 
 aty:
-  | STRINGID                             { Type.tybase $1 [] }
-  | LPAREN STRINGID aty_list RPAREN      { Type.tybase $2 $3 }
+  | STRINGID                             { mk_atomic_type $1 [] }
+  | LPAREN STRINGID aty_list RPAREN      { mk_atomic_type $2 $3 }
   | LPAREN ty RARROW ty RPAREN           { Type.tyarrow [$2] $4 }
 
 aty_list:

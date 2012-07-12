@@ -111,7 +111,6 @@ let apply_tysub sub ty =
   in
   sweep_ty ty
                  
-
 let freshen ?using ty =
   let using = match using with
   | None -> IdMap.empty
@@ -217,8 +216,8 @@ let equal_modulo tya tyb =
   sweep_ty tya tyb
 
 type decl =
-  | Kind of ki
-  | Type of ty
+  | Kdecl of ki
+  | Tdecl of ty
 
 type sign = {
   order : string list ;
@@ -226,13 +225,13 @@ type sign = {
 }
 
 let oty = tybase "o" []
-let olistty = tybase "olist" []
 let propty = tybase "prop" []
 let listty a = tybase "list" [a]
+let olistty = tybase "list" [oty]
 
 let get_kind sg tc =
   match IdMap.find_opt tc sg.decls with
-  | Some (Kind ki) -> ki
+  | Some (Kdecl ki) -> ki
   | _ ->
       failwithf ~exc:"get_kind"
         "Unknown type constructor: %s" tc
@@ -242,24 +241,24 @@ let add_types sg tcs ki =
   let sg = List.fold_left begin
     fun sg tc ->
       match IdMap.find_opt tc sg.decls with
-      | Some (Kind ki') ->
+      | Some (Kdecl ki') ->
           if ki <> ki' then
             failwithf ~exc
-              "Type constructor %s already declared with different kind %s"
+              "Tdecl constructor %s already declared with different kind %s"
               tc (ki_to_string ki') ;
           sg
       | Some _ ->
           failwithf ~exc
-            "Type constructor %s already present in signature" tc
+            "Tdecl constructor %s already present in signature" tc
       | _ ->
           { order = tc :: sg.order ;
-            decls = IdMap.add tc (Kind ki) sg.decls }
+            decls = IdMap.add tc (Kdecl ki) sg.decls }
   end sg tcs in
   sg
 
 let get_type sg kon =
   match IdMap.find_opt kon sg.decls with
-  | Some (Type ty) -> ty
+  | Some (Tdecl ty) -> snd (freshen ty)
   | _ ->
       failwithf ~exc:"get_type"
         "Unknown constant: %s" kon
@@ -275,7 +274,7 @@ let check_kind sg ty =
         let ki_gpt = List.length tcargs in
         if ki_exp <> ki_gpt then
           failwithf ~exc:"get_kind"
-            "Type constructor %s expects %d arg(s), but got %d"
+            "Tdecl constructor %s expects %d arg(s), but got %d"
             tc ki_exp ki_gpt ;
         List.iter ok tcargs
   in
@@ -288,7 +287,7 @@ let add_consts sg kons ty =
   let sg = List.fold_left begin
     fun sg kon ->
       match IdMap.find_opt kon sg.decls with
-      | Some (Type ty') ->
+      | Some (Tdecl ty') ->
           if ty <> ty' then
             failwithf ~exc
               "Constant %s already declared with incomparable type %s"
@@ -299,7 +298,7 @@ let add_consts sg kons ty =
             "Constant %s already present in signature" kon
       | _ ->
           { order = kon :: sg.order ;
-            decls = IdMap.add kon (Type ty) sg.decls }
+            decls = IdMap.add kon (Tdecl ty) sg.decls }
   end sg kons in
   sg
 
@@ -309,11 +308,11 @@ let sign_to_string sg =
   let buf = Buffer.create 19 in
   List.iter begin fun d ->
     match IdMap.find d sg.decls with
-    | Kind ki ->
-        Printf.bprintf buf "Kind  %-*s  %s.\n"
+    | Kdecl ki ->
+        Printf.bprintf buf "Kdecl  %-*s  %s.\n"
           maxstr d (ki_to_string ki)
-    | Type ty ->
-        Printf.bprintf buf "Type  %-*s  %s.\n"
+    | Tdecl ty ->
+        Printf.bprintf buf "Tdecl  %-*s  %s.\n"
           maxstr d (to_string ty)
   end (List.rev sg.order) ;
   Buffer.contents buf
@@ -321,25 +320,22 @@ let sign_to_string sg =
 let process sg decls =
   List.fold_left begin fun sg decl ->
     match decl with
-    | (tcs, Kind ki) ->
+    | (tcs, Kdecl ki) ->
         add_types sg tcs ki
-    | (kons, Type ty) ->
+    | (kons, Tdecl ty) ->
         add_consts sg kons ty
   end sg decls
 
-let spec_pervasives = 
+let pervasive_sign = 
   process { order = [] ; decls = IdMap.empty }
-    [ ["o"],            Kind 0
-    ; ["=>"],           Type (tyarrow [oty ; oty] oty)
-    ; ["pi" ; "sigma"], Type (tyarrow [tyarrow [tyvar "A"] oty] oty) ]
-
-let import_spec_sign sg =
-  process sg
-    [ ["prop"],   Kind 0
-    ; ["list"],   Kind 1
-    ; ["nil"],    Type (listty (tyvar "A"))
-    ; ["::"],     Type (tyarrow [tyvar "A" ; listty (tyvar "A")] (listty (tyvar "A")))
-    ; ["member"], Type (tyarrow [tyvar "A" ; listty (tyvar "A")] propty) ]
+    [ ["o"], Kdecl 0
+    ; ["=>"], Tdecl (tyarrow [oty ; oty] oty)
+    ; ["pi"], Tdecl (tyarrow [tyarrow [tyvar "A"] oty] oty)
+    ; ["prop"], Kdecl 0
+    ; ["list"], Kdecl 1
+    ; ["nil"], Tdecl (listty (tyvar "A"))
+    ; ["::"], Tdecl (tyarrow [tyvar "A" ; listty (tyvar "A")] (listty (tyvar "A")))
+    ; ["member"], Tdecl (tyarrow [tyvar "A" ; listty (tyvar "A")] propty) ]
 
 type typrob = {
   expected : ty ;

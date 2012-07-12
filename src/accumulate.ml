@@ -18,6 +18,7 @@
 (****************************************************************************)
 
 open Abella_types
+open Type
 open Typing
 open Extensions
 open Format
@@ -63,18 +64,26 @@ let read_lp ext parser name =
 let read_lpsig = read_lp ".sig" Parser.lpsig
 let read_lpmod = read_lp ".mod" Parser.lpmod
 
+let union_signs sign1 sign2 =
+  List.fold_right begin
+    fun id sign ->
+      { order = id :: sign.order ;
+        decls = IdMap.add id (IdMap.find id sign2.decls) sign.decls }
+  end sign1.order sign1
+
 let merge_signs signs =
-  let (ktables, ctables) = List.split signs in
-  let ktable = List.flatten ktables in
-    List.fold_left add_poly_consts (ktable, []) ctables
+  match signs with
+  | sign :: signs ->
+      List.fold_left union_signs sign signs
+  | _ ->
+      failwith "merge_sign: empty list of signatures"
 
 let add_decl sign = function
   | SKind(tynames, ki) ->
-      ignore (failwith "BROKEN: ki_name") ;
-      add_types sign tynames
+      process sign [tynames, Kdecl ki]
   | SType(ids, ty) ->
       check_spec_logic_type ty ;
-      add_consts sign (List.map (fun id -> (id, ty)) ids)
+      process sign [ids, Tdecl ty]
 
 let rec get_sign_accum_sigs filename =
   try match H.find sig_cache filename with
@@ -92,6 +101,7 @@ let rec get_sign_accum_sigs filename =
           let sign = List.fold_left add_decl sign decls in
             H.replace sig_cache filename (Some(sign, accums)) ;
             (sign, accums)
+
 and get_sign filename = fst (get_sign_accum_sigs filename)
 
 let merge_named_clauses ncs =
