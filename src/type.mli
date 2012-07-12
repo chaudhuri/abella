@@ -32,19 +32,25 @@ val tybase  : string -> ty list -> ty
 val is_tyvar    : aty -> bool
 val fresh_tyvar : unit -> ty
 
+(****************************************************************************)
+
 val to_string : ty -> string
 
 type ki = int
 val ki_to_string : ki -> string
 
-val freshen : ty -> ty
-val renumber : ty -> ty
+(****************************************************************************)
+
+type tysub = ty IdMap.t
+
+val apply_tysub : tysub -> ty -> ty
+
+val freshen : ?using:tysub -> ty -> tysub * ty
+val renumber : ?using:tysub -> ty -> tysub * ty
+
 val equal_modulo : ty -> ty -> bool
 
-val oty     : ty
-val olistty : ty (** DEPRECATED *)
-val propty  : ty
-val listty  : ty -> ty
+(****************************************************************************)
 
 type decl =
   | Kind of ki
@@ -64,3 +70,28 @@ val process : sign -> (string list * decl) list -> sign
 
 val spec_pervasives  : sign
 val import_spec_sign : sign -> sign
+
+(****************************************************************************)
+
+val oty     : ty
+val olistty : ty (** DEPRECATED *)
+val propty  : ty
+val listty  : ty -> ty
+
+
+(****************************************************************************)
+
+type typrob = {
+  expected : ty ;
+  actual   : ty ;
+  position : Lexing.position * Lexing.position ;
+  info     : [`Fun | `Arg] ;
+}
+
+exception Unsolvable of typrob
+
+val typrobs_to_string : typrob list -> string
+
+val typrob_apply_tysub : tysub -> typrob -> typrob
+
+val solve : typrob list -> tysub

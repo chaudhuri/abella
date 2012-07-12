@@ -43,24 +43,24 @@ let is_tyvar = function
   | Tyvar _ -> true
   | _ -> false
 
-let fresh =
+let fresh_tyvar =
   let count = ref 0 in
     fun () ->
       incr count ;
-      Tyvar (Printf.sprintf "'%d" !count)
+      Ty ([], Tyvar (Printf.sprintf "'%d" !count))
 
-let fresh_tyvar () = Ty ([], fresh ())
-
-let ki_to_string ki =
-  let buf = Buffer.create 19 in
+let ki_to_buffer buf ki =
   for i = 1 to ki do
     Buffer.add_string buf "type -> "
   done ;
-  Buffer.add_string buf "type" ;
+  Buffer.add_string buf "type"
+
+let ki_to_string ki =
+  let buf = Buffer.create 19 in
+  ki_to_buffer buf ki ;
   Buffer.contents buf
 
-let to_string ty =
-  let buf = Buffer.create 19 in
+let to_buffer buf ty =
   let rec p_args tys =
     match tys with
     | [] -> ()
@@ -85,36 +85,64 @@ let to_string ty =
           p_ty true ty
         end tys
   in
-  p_ty false ty ;
+  p_ty false ty
+
+let to_string ty =
+  let buf = Buffer.create 19 in
+  to_buffer buf ty ;
   Buffer.contents buf
 
-let freshen ty =
-  let rec sweep_ty fmap (Ty (tys, aty)) =
-    let (fmap, tys) = sweep_tys fmap tys in
-    let (fmap, aty) = sweep_aty fmap aty in
-    (fmap, Ty (tys, aty))
-  and sweep_tys fmap tys =
-    let (fmap, tys) = List.fold_left begin
-      fun (fmap, tys) ty ->
-        let (fmap, ty) = sweep_ty fmap ty in
-        (fmap, ty :: tys)
-    end (fmap, []) tys in
-    (fmap, List.rev tys)
-  and sweep_aty fmap aty =
+type tysub = ty IdMap.t
+
+let apply_tysub sub ty =
+  let rec sweep_ty ty =
+    match ty with
+    | Ty (tys, aty) ->
+        tyarrow (List.map sweep_ty tys) (sweep_aty aty)
+  and sweep_aty aty =
+    match aty with
+    | Tyvar v -> begin
+      match IdMap.find_opt v sub with
+      | Some ty -> ty
+      | None -> Ty ([], aty)
+    end 
+    | Tycon (tc, tys) ->
+        Ty ([], Tycon (tc, List.map sweep_ty tys))
+  in
+  sweep_ty ty
+                 
+
+let freshen ?using ty =
+  let using = match using with
+  | None -> IdMap.empty
+  | Some using -> using
+  in
+  let rec sweep_ty using (Ty (tys, aty)) =
+    let (using, tys) = sweep_tys using tys in
+    let (using, aty) = sweep_aty using aty in
+    (using, tyarrow tys aty)
+  and sweep_tys using tys =
+    let (using, tys) = List.fold_left begin
+      fun (using, tys) ty ->
+        let (using, ty) = sweep_ty using ty in
+        (using, ty :: tys)
+    end (using, []) tys in
+    (using, List.rev tys)
+  and sweep_aty using aty =
     match aty with
     | Tyvar v ->
         begin
-          try (fmap, IdMap.find v fmap)
+          try (using, IdMap.find v using)
           with Not_found ->
-            let fv = fresh () in
-            let fmap = IdMap.add v fv fmap in
-            (fmap, fv)
+            let fv = fresh_tyvar () in
+            let using = IdMap.add v fv using in
+            (using, fv)
         end
     | Tycon (k, tys) ->
-        let (fmap, tys) = sweep_tys fmap tys in
-        (fmap, Tycon (k, tys))
+        let (using, tys) = sweep_tys using tys in
+        (using, tybase k tys)
   in
-  snd (sweep_ty IdMap.empty ty)
+  sweep_ty using ty
 
 let varify n =
   let rec digs k ds n =
@@ -133,29 +161,34 @@ let varify n =
   done ;
   str
 
-let renumber ty =
-  let mapping = ref IdMap.empty in
-  let last = ref 0 in
+let renumber ?using ty =
+  let mapping = ref begin
+    match using with
+    | None -> IdMap.empty
+    | Some using -> using
+  end in
+  let last = ref (IdMap.cardinal !mapping) in
   let rec sweep_ty (Ty (tys, aty)) =
     let tys = sweep_tys tys in
     let aty = sweep_aty aty in
-    Ty (tys, aty)
+    tyarrow tys aty
   and sweep_tys tys = List.map sweep_ty tys
   and sweep_aty aty =
     match aty with
     | Tyvar v ->
         begin match IdMap.find_opt v !mapping with
-        | Some aty -> aty
+        | Some ty -> ty
         | None ->
-            let next = Tyvar (varify !last) in
+            let next = tyvar (varify !last) in
             incr last ;
             mapping := IdMap.add v next !mapping ;
             next
         end
     | Tycon (k, tys) ->
-        Tycon (k, sweep_tys tys)
+        tybase k (sweep_tys tys)
   in
-  sweep_ty ty
+  let ty = sweep_ty ty in
+  (!mapping, ty)
 
 let equal_modulo tya tyb =
   let mapped = ref IdMap.empty in
@@ -251,7 +284,7 @@ let check_kind sg ty =
 let add_consts sg kons ty =
   let exc = "add_consts" in
   check_kind sg ty ;
-  let ty = renumber ty in
+  let ty = snd (renumber ty) in
   let sg = List.fold_left begin
     fun sg kon ->
       match IdMap.find_opt kon sg.decls with
@@ -307,3 +340,94 @@ let import_spec_sign sg =
     ; ["nil"],    Type (listty (tyvar "A"))
     ; ["::"],     Type (tyarrow [tyvar "A" ; listty (tyvar "A")] (listty (tyvar "A")))
     ; ["member"], Type (tyarrow [tyvar "A" ; listty (tyvar "A")] propty) ]
+
+type typrob = {
+  expected : ty ;
+  actual   : ty ;
+  position : Lexing.position * Lexing.position ;
+  info     : [`Fun | `Arg] ;
+}
+
+let typrob_to_buffer buf prob =
+  to_buffer buf prob.expected ;
+  Buffer.add_string buf " = " ;
+  to_buffer buf prob.actual ;
+  Buffer.add_string buf "\n"
+
+let typrobs_to_string probs =
+  let buf = Buffer.create 19 in
+  List.iter (typrob_to_buffer buf) probs ;
+  Buffer.contents buf
+
+let occurs v ty =
+  let rec sweep_ty ty =
+    match ty with
+    | Ty (tys, aty) ->
+        List.exists sweep_ty tys || sweep_aty aty
+  and sweep_aty aty =
+    match aty with
+    | Tyvar u ->
+        u = v
+    | Tycon (tc, tys) ->
+        List.exists sweep_ty tys
+  in
+  sweep_ty ty
+  
+let typrob_apply_tysub sub prob =
+  let expected = apply_tysub sub prob.expected in
+  let actual = apply_tysub sub prob.actual in
+  { prob with actual = actual ; expected = expected }
+
+let tysub_join sub1 sub2 =
+  let sub2 = IdMap.map (apply_tysub sub1) sub2 in
+  IdMap.merge begin
+    fun _ a b ->
+      match a, b with
+      | _, Some _ -> b
+      | _ -> a
+  end sub1 sub2
+
+let tysub_join1 v ty sub2 =
+  let sub1 = IdMap.singleton v ty in
+  tysub_join sub1 sub2
+
+exception Unsolvable of typrob
+
+let solve probs =
+  let rec unite sub tyexp tyact fail =
+    let tyexp = apply_tysub sub tyexp in
+    let tyact = apply_tysub sub tyact in
+    if tyexp = tyact then sub else
+      match tyexp, tyact with
+      | Ty ([], Tyvar u), tyd
+      | tyd, Ty ([], Tyvar u) ->
+          if occurs u tyd then
+            fail sub
+          else
+            tysub_join1 u tyd sub
+      | Ty ([], Tycon (tc1, tys1)), Ty ([], Tycon (tc2, tys2))
+        when tc1 = tc2 -> begin
+          let rec spin sub tys1 tys2 =
+            match tys1, tys2 with
+            | [], [] -> sub
+            | ty1 :: tys1, ty2 :: tys2 ->
+                let sub = unite sub ty1 ty2 fail in
+                let sub = spin sub tys1 tys2 in
+                sub
+            | _ -> fail sub
+          in
+          spin sub tys1 tys2
+        end
+      | Ty (ty1 :: tys1, aty1), Ty (ty2 :: tys2, aty2) ->
+          let sub = unite sub ty1 ty2 fail in
+          let sub = unite sub (Ty (tys1, aty1)) (Ty (tys2, aty2)) fail in
+          sub
+      | _ -> fail sub
+  in
+  let solve1 sub prob =
+    unite sub prob.expected prob.actual begin
+      fun sub -> raise (Unsolvable (typrob_apply_tysub sub prob))
+    end
+  in
+  List.fold_left solve1 IdMap.empty probs
+

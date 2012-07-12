@@ -100,66 +100,6 @@ let tyctx_to_nominal_ctx tyctx =
 
 (** Tables / Signatures *)
 
-type ktable_ = int IdMap.t
-type ctable_ = ty IdMap.t
-type gsig = {
-  types  : ktable_ ;
-  consts : ctable_ ;
-}
-
-(* Types *)
-
-let lookup_type gsig id =
-  try IdMap.find id gsig.types
-  with Not_found -> failwith ("Unknown type constructor: " ^ id)
-
-let add_types gsig ids ki =
-  List.iter begin fun id ->
-    if is_capital_name id then
-      failwith ("Type constructors may not begin with a capital letter: " ^ id)
-  end ids ;
-  let types = List.fold_left begin
-    fun kt tn -> IdMap.add tn ki kt
-  end gsig.types ids in
-  { gsig with types = types }
-
-(* Constants *)
-
-let kind_check gsig ty =
-  let rec ok ty =
-    match ty with
-    | Ty (args, Tyvar tv) ->
-        List.iter ok args
-    | Ty (args, Tycon (tk, tkargs)) ->
-        List.iter ok args ;
-        if lookup_type gsig tk <> List.length tkargs then
-          failwith ("Insufficient args to type constructor: " ^ tk) ;
-        List.iter ok tkargs
-  in
-  ok ty
-
-let const_check gsig id ty =
-  if is_capital_name id then
-    failwith ("Constants may not begin with a capital letter: " ^ id) ;
-  begin try
-    let ty' = IdMap.find id gsig.consts in
-    if ty <> ty' then
-      failwith ("Constant " ^ id ^ " has inconsistent type declarations")
-  with Not_found -> () end ;
-  kind_check gsig ty
-
-let add_consts gsig ks =
-  let consts = List.fold_left begin
-    fun consts (id, ty) ->
-      const_check gsig id ty ;
-      IdMap.add id ty consts
-  end gsig.consts ks in
-  { gsig with consts = consts }
-
-
-
-(******************************************************************************)
-
 type ktable = string list
 type pty = Poly of string list * ty
 type ctable = (string * pty) list
