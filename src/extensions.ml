@@ -79,7 +79,10 @@ module IdMap = struct
     try Some (find e m) with Not_found -> None
   let of_alist l =
     List.fold_left (fun m (x, v) -> add x v m) empty l
-  let to_alist m = bindings m
+  let to_alist m = 
+    let al = ref [] in
+    iter (fun k v -> al := (k, v) :: !al) m ;
+    List.rev !al
 end
 
 module List = struct
