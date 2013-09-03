@@ -90,18 +90,18 @@ intros. induction on 5 5. split.
   % {L, hyp B2 |- unfocus C} -> {L |- unfocus C}
   intros. case H5.
     case H3. apply IH to _ _ H8 _ H6. search.
-    case H6. case H9. 
-      case H8. search.
-      apply ctx_member to H1 H10. case H8.
-        apply IH1 to H1 H2 H11 H4 H7. search.
-    case H7. case H6. apply ctx_member to H1 H8. case H6.
+    case H6.
+      apply ctx_member to H1 H9. case H8.
+        apply IH1 to H1 H2 H10 H4 H7. search.
+      search.
+   apply ctx_member to H1 H7. case H6.
 
   % {L, hyp B2 |- focus B A} -> {L |- focus B A}
   intros. case H5.
     search.
     case H3. apply hyp_imp_form to H1 H2.
       apply IH to _ _ H8 _ H6. apply IH1 to _ _ H9 _ H7. search.
-    case H7. case H6. apply ctx_member to H1 H8. case H6.
+    apply ctx_member to H1 H7. case H6.
 
 Theorem conc-i_complete : forall L B,
   ctx L -> {form B} -> {L |- conc-i B} -> {L |- unfocus B}.

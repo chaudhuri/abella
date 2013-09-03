@@ -176,11 +176,10 @@ induction on 2. intros. case H2.
   apply IH to H1 H4 H3. apply IH to H1 H5 H3. search.
   apply IH to _ H4 H3. search.
   apply IH to H1 H4 H3. apply IH to H1 H5 H3. search.
-  case H5.
-    case H4. search.
-    apply pr1_worlds to H1 H6. case H4. case H7.
-      search.
-      search.
+  apply pr1_worlds to H1 H5. case H4. case H6.
+    search.
+    search.
+  search.
 
 Theorem pr1_subst_lem: forall A1 A2 B1 B2 L K J,
  ctxs L K J ->
