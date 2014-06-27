@@ -48,6 +48,7 @@ let () =
   maybe_make_version_file () ;
   dispatch begin function
     | After_rules ->
+      flag ["ocaml" ; "ocamlyacc"] (A "-v") ;
       flag ["ocaml" ; "compile"] (S [A "-annot" ; A "-g"]) ;
       flag ["ocaml" ; "link"] (A "-g") ;
       if Sys.os_type = "Unix" then

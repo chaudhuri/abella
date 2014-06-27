@@ -45,7 +45,7 @@
 %token IMP IF AMP COMMA DOT BSLASH LPAREN RPAREN TURN CONS EQ TRUE FALSE DEFEQ BANG
 %token SCHEMA INVERSION PROJECTION SYNC UNIQUE CLAUSEEQ
 %token SEMICOLON UNDERSCORE
-%token COLON RARROW FORALL NABLA EXISTS 
+%token COLON RARROW FORALL NABLA EXISTS
 %token LBRACE RBRACE LBRACK RBRACK
 
 %token <string> STRINGID QSTRING
@@ -67,10 +67,10 @@
 /* Higher */
 
 
-%start term top_command command
+%start term top_command command_list
 %type <Typing.uterm> term
 %type <Schema_types.top_command> top_command
-%type <Schema_types.command> command
+%type <Schema_types.command list> command_list
 
 %%
 
@@ -124,6 +124,7 @@ exp_list:
                                              [ULam(pos 0, id, ty, $3)] }
 
 
+/*
 clause:
   | clause_head DOT                      { ($1, []) }
   | clause_head CLAUSEEQ clause_body DOT { ($1, $3) }
@@ -139,6 +140,7 @@ clause_body:
   | term COMMA clause_body               { $1::$3 }
   | LPAREN term COMMA clause_body RPAREN { $2::$4 }
   | term                                 { [$1] }
+*/
 
 sclause_list:
   | existsopt nablaopt termopt_tup                { [($1,$2,$3)] }
@@ -158,9 +160,11 @@ termopt_list:
   | termopt                                 { [$1] }
   | termopt COMMA termopt_list                 { $1::$3}
 
+/*
 id_list:
   | id                                   { [$1] }
   | id COMMA id_list                     { $1::$3}
+*/
 
 ty:
   | id                                   { Term.tybase $1 }
@@ -192,14 +196,18 @@ hyp_list:
   | hyp                                  { [$1] }
 
 command:
-  | INVERSION hyp_list DOT                    { Schema_types.Inversion($2)}
-  | PROJECTION LPAREN perm_ids RPAREN hyp_list DOT    { Schema_types.Projection($3,$5)}
-  | UNIQUE hyp_list DOT                       { Schema_types.Unique($2)}
-  | SYNC hyp_list DOT                         { Schema_types.Sync($2)}
-  | EOF                                       { raise End_of_file }
+  | INVERSION hyp_list                   { Schema_types.Inversion($2)}
+  | PROJECTION LPAREN perm_ids RPAREN hyp_list
+                                         { Schema_types.Projection($3,$5)}
+  | UNIQUE hyp_list                      { Schema_types.Unique($2)}
+  | SYNC hyp_list                        { Schema_types.Sync($2)}
+
+command_list:
+  | command                              { [$1] }
+  | command SEMICOLON command_list       { $1 :: $3 }
 
 top_command:
-  | SCHEMA id DEFEQ sclause_list DOT          { Schema_types.SchemaDef($2,$4) }
+  | SCHEMA id DEFEQ sclause_list         { Schema_types.SchemaDef($2,$4) }
+/*
   | EOF                                       { raise End_of_file }
-
-
+*/

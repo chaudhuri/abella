@@ -57,6 +57,7 @@ let sequent = {
   next_subgoal_id = 1 ;
 }
 
+let lf_mode = ref false
 let sign = ref pervasive_sign
 let sr = ref pervasive_sr
 
