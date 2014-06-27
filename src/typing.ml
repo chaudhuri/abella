@@ -389,11 +389,8 @@ let uterm_to_term sub t =
       | UCon(_, id, ty) -> const id (apply_sub_ty sub ty)
       | ULam(_, id, ty, t) -> abstract id (apply_sub_ty sub ty) (aux t)
       | UApp(_, t1, t2) -> app (aux t1) [aux t2]
-(*      | UJudge
-      | UPi
-      | UAbs
-      | UImp
-      | UType *)
+      | _ -> (* error, should only use this with non-LF terms *)
+              failwith "Should use the translation to type LF terms."
   in
     aux t
 
@@ -629,6 +626,8 @@ let umetaterm_to_metaterm sub t =
           Obj(Sync (Sync.obj (Context.normalize [uterm_to_term sub l])
                 (uterm_to_term sub f) (uterm_to_term sub g)), r)
       | ULFObj(l, g, r) ->
+(*          LFObj(Async (Async.obj (Context.normalize [Translation.translate l]) 
+                                 (Translation.translate g)), r) *)
           Obj(Async (Async.obj (Context.normalize [uterm_to_term sub l])
                 (uterm_to_term sub g)), r) 
       | UArrow(a, b) -> Arrow(aux a, aux b)
