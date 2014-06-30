@@ -190,7 +190,9 @@ let pervasive_sign =
     ("::",     Poly([],    tyarrow [oty; olistty] olistty)) ;
     ("nil",    Poly([],    olistty)) ;
     ("lf::",   Poly([], tyarrow [lfjudgety; lfjudgelistty] lfjudgelistty)) ;
-    ("lfnil",  Poly([], lfjudgelistty))])
+    ("lfnil",  Poly([], lfjudgelistty)) ;
+    ("lfhas",  Poly([], tyarrow [lfobjty; lftypety] oty));
+    ("lfisty", Poly([], tyarrow [lftypety] oty))])
 
 let sign_to_tys sign =
   List.filter_map
@@ -249,8 +251,6 @@ let infer_type_and_constraints ~sign tyctx t =
       | UJudge(_, t1, t2) ->
           let ty1 = aux tyctx t1 in
           let ty2 = aux tyctx t2 in
- (*           add_constraint lfobjty ty1 (get_pos t1, CArg) ;
-            add_constraint lftypety ty2 (get_pos t2, CArg) ; *)
             lfjudgety
       | UPi(_, id, ty, body) ->
           let ty1 = aux tyctx ty in
@@ -626,10 +626,8 @@ let umetaterm_to_metaterm sub t =
           Obj(Sync (Sync.obj (Context.normalize [uterm_to_term sub l])
                 (uterm_to_term sub f) (uterm_to_term sub g)), r)
       | ULFObj(l, g, r) ->
-(*          LFObj(Async (Async.obj (Context.normalize [Translation.translate l]) 
-                                 (Translation.translate g)), r) *)
-          Obj(Async (Async.obj (Context.normalize [uterm_to_term sub l])
-                (uterm_to_term sub g)), r) 
+          LFObj(Async (Async.obj (Context.normalize [Translation.translate l]) 
+                                 (Translation.translate g)), r) 
       | UArrow(a, b) -> Arrow(aux a, aux b)
       | UBinding(binder, tids, body) ->
           Binding(binder,

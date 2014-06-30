@@ -7,16 +7,17 @@ exception TranslationError of string
   let counter = ref 0 in
   fun () -> (incr counter; "V" ^ (string_of_int (!counter))) 
 
-let is_type t = app (const "istype" (tyarrow [lftypety] oty)) [t]
+let is_type t = app (const "lfisty" (tyarrow [lftypety] oty)) [t]
 
 let has_type term ty pos =
-  app (const "hastype" (tyarrow [lfobjty; lftypety] oty)) [term; ty]
+  app (const "lfhas" (tyarrow [lfobjty; lftypety] oty)) [term; ty]
 
 let rec trans_type t =
   match t with
   | UCon(p, x, ty) -> lfobjty
   | UType(p) -> lftypety
   | UImp(p, t1, t2) -> tyarrow [trans_type t1] (trans_type t2)
+  | UPi(p, x, a, b) -> tyarrow [trans_type a] (trans_type b)
   | UApp(p, t1, t2) -> trans_type t1
   | _ -> raise (TranslationError "invalid type")
 
@@ -34,6 +35,9 @@ let rec translate t =
     let l = UJudge(pos, UCon(pos, x, (trans_type a)), a) in
     let l' = translate l in
     (* "forall x, l' => r'" *)
+    let tya = trans_type a in
+    app (const "pi" (tyarrow [tyarrow [tya] oty] oty))
+        [abstract x tya (app (const "=>" (tyarrow [oty; oty] oty)) [l'; r'])]
   in 
   match t with
     | UJudge(p, UAbs(q, x, a, b), UPi(q', x', a', b')) ->
