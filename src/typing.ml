@@ -18,6 +18,7 @@
 (****************************************************************************)
 
 open Term
+open Store
 open Metaterm
 open Extensions
 
@@ -104,22 +105,15 @@ let tyctx_to_nominal_ctx tyctx =
 
 (** Tables / Signatures *)
 
-type ktable = string list
-type pty = Poly of string list * ty
-type ctable = (string * pty) list
-type sign = ktable * ctable
+let add_types sign tys =
+  List.iter begin fun ty ->
+      if is_capital_name ty then
+        failwith ("Types may not begin with a capital letter: " ^ ty) ;
+  end tys ;
+  { sign with ktable = tys @ sign.ktable }
 
-(** Kinds *)
-
-let add_types (ktable, ctable) ids =
-  List.iter
-    (fun id -> if is_capital_name id then
-       failwith ("Types may not begin with a capital letter: " ^ id))
-    ids ;
-  (ids @ ktable, ctable)
-
-let lookup_type (ktable, _) id =
-  List.mem id ktable
+let lookup_type sign ty =
+  List.mem ty sign.ktable
 
 (** Constants *)
 
@@ -131,54 +125,54 @@ let kind_check sign (Poly(ids, ty)) =
         else
           failwith ("Unknown type: " ^ bty)
   in
-    aux ty
+  aux ty
 
-let check_const (ktable, ctable) (id, pty) =
+let check_const sign c =
   begin try
-    let pty' = List.assoc id ctable in
-      if pty <> pty' then
-        failwith ("Constant " ^ id ^ " has inconsistent type declarations")
+    let c' = List.find begin
+        fun c' -> c.cid = c'.cid
+      end sign.ctable in
+    if c.pty <> c'.pty then
+      failwith ("Constant " ^ c.cid ^ " has inconsistent type declarations")
   with
     | Not_found -> ()
   end ;
 
-  if is_capital_name id then
-    failwith ("Constants may not begin with a capital letter: " ^ id) ;
+  if is_capital_name c.cid then
+    failwith ("Constants may not begin with a capital letter: " ^ c.cid) ;
 
-  kind_check (ktable, ctable) pty
+  kind_check sign c.pty
 
-let add_poly_consts (ktable, ctable) idptys =
-  List.iter (check_const (ktable, ctable)) idptys ;
-  (ktable, idptys @ ctable)
+let add_poly_consts sign consts =
+  List.iter (check_const sign) consts ;
+  { sign with ctable = consts @ sign.ctable }
 
 let add_consts sign idtys =
-  let idptys = List.map (fun (id, ty) -> (id, Poly([], ty))) idtys in
-    add_poly_consts sign idptys
+  let consts = List.map begin fun (id, ty) ->
+      let cid  = id in
+      let pty  = pty_of_ty ty in
+      let term = const cid ty in
+      { cid ; pty ; term }
+    end idtys in
+  add_poly_consts sign consts
 
 let freshen_ty (Poly(ids, ty)) =
   let sub = ids_to_fresh_tyctx ids in
     apply_sub_ty sub ty
 
-let lookup_const (_, ctable) id =
+let lookup_const sign id =
   try
-    freshen_ty (List.assoc id ctable)
+    let const = List.find begin
+        fun const -> const.cid = id
+      end sign.ctable in
+    freshen_ty const.pty
   with
     | Not_found -> failwith ("Unknown constant: " ^ id)
 
-(** Pervasive signature *)
-
-let pervasive_sign =
-  (["o"; "olist"; "prop"],
-   [("pi",     Poly(["A"], tyarrow [tyarrow [tybase "A"] oty] oty)) ;
-    ("=>",     Poly([],    tyarrow [oty; oty] oty)) ;
-    ("member", Poly([],    tyarrow [oty; olistty] propty)) ;
-    ("::",     Poly([],    tyarrow [oty; olistty] olistty)) ;
-    ("nil",    Poly([],    olistty))])
-
 let sign_to_tys sign =
   List.filter_map
-    (function (_, Poly([], ty)) -> Some ty | _ -> None)
-    (snd sign)
+    (function {pty = Poly([], ty); _} -> Some ty | _ -> None)
+    sign.ctable
 
 let pervasive_sr =
   List.fold_left Subordination.update Subordination.empty
@@ -494,25 +488,6 @@ let type_uclause ~sr ~sign (cname, head, body) =
   end ;
   result
 
-(*
-  let tyctx = ids_to_fresh_tyctx cids in
-  let eqns =
-    List.fold_left (fun acc p ->
-                      let (pty, peqns) = infer_type_and_constraints ~sign tyctx p in
-                        acc @ peqns @ [(oty, pty, (get_pos p, CArg))])
-      [] (head::body)
-  in
-  let sub = unify_constraints eqns in
-  let ctx = tyctx_to_ctx (apply_sub_tyctx sub tyctx) in
-  let convert p = replace_term_vars ctx (uterm_to_term sub p) in
-  let (rhead, rbody) = (convert head, List.map convert body) in
-    List.iter term_ensure_fully_inferred (rhead::rbody) ;
-    List.iter (term_ensure_subordination sr) (rhead::rbody) ;
-    check_pi_quantification (rhead::rbody) ;
-    (rhead, rbody)
-*)
-
-
 (** Typing for metaterms *)
 
 let infer_constraints ~sign ~tyctx t =
@@ -526,23 +501,23 @@ let infer_constraints ~sign ~tyctx t =
       | UAsyncObj(l, g, _) ->
           let (lty, leqns) = infer_type_and_constraints ~sign tyctx l in
           let (gty, geqns) = infer_type_and_constraints ~sign tyctx g in
-            leqns @ geqns @ [(olistty, lty, (get_pos l, CArg));
-                             (oty, gty, (get_pos g, CArg))]
+            leqns @ geqns @ [(Ty.olist, lty, (get_pos l, CArg));
+                             (Ty.o, gty, (get_pos g, CArg))]
       | USyncObj(l, f, g, _) ->
           let (lty, leqns) = infer_type_and_constraints ~sign tyctx l in
           let (fty, feqns) = infer_type_and_constraints ~sign tyctx f in
           let (gty, geqns) = infer_type_and_constraints ~sign tyctx g in
             leqns @ feqns @ geqns @
-          [(olistty, lty, (get_pos l, CArg));
-           (oty, fty, (get_pos f, CArg));
-           (oty, gty, (get_pos g, CArg))]
+          [(Ty.olist, lty, (get_pos l, CArg));
+           (Ty.o, fty, (get_pos f, CArg));
+           (Ty.o, gty, (get_pos g, CArg))]
       | UArrow(a, b) | UOr(a, b) | UAnd(a, b) ->
           (aux tyctx a) @ (aux tyctx b)
       | UBinding(_, tids, body) ->
           aux (List.rev_app tids tyctx) body
       | UPred(p, _) ->
           let (pty, peqns) = infer_type_and_constraints ~sign tyctx p in
-            peqns @ [(propty, pty, (get_pos p, CArg))]
+            peqns @ [(Ty.prop, pty, (get_pos p, CArg))]
   in
     aux tyctx t
 

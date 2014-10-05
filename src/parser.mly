@@ -72,15 +72,14 @@
 
 %}
 
-%token IMP IF COMMA DOT BSLASH LPAREN RPAREN TURN CONS EQ TRUE FALSE DEFEQ
-%token IND INST APPLY CASE FROM SEARCH TO ON WITH INTROS CUT ASSERT CLAUSEEQ
-%token SKIP UNDO ABORT COIND LEFT RIGHT MONOTONE IMPORT BY
-%token SPLIT SPLITSTAR UNFOLD KEEP CLEAR SPECIFICATION SEMICOLON
-%token THEOREM DEFINE PLUS CODEFINE SET ABBREV UNABBREV QUERY SHOW
-%token PERMUTE BACKCHAIN QUIT UNDERSCORE AS SSPLIT RENAME
-%token COLON RARROW FORALL NABLA EXISTS WITNESS STAR AT HASH OR AND NOT
-%token LBRACE RBRACE LBRACK RBRACK
-%token KIND TYPE KKIND TTYPE SIG MODULE ACCUMSIG ACCUM END CLOSE
+%token ABBREV ABORT ACCUM ACCUMSIG AND APPLY AS ASSERT AT BACKCHAIN BSLASH BY
+%token CASE CLAUSEEQ CLEAR CLOSE CODEFINE COIND COLON COMMA CONS CUT DEFEQ
+%token DEFINE DOT END EQ EXISTS FALSE FORALL FROM HASH IF IMP IMPORT IND INST
+%token INTROS KEEP KIND KKIND LBRACE LBRACK LEFT LPAREN MODULE MONOTONE NABLA
+%token NOT ON OR PERMUTE PLUS QUERY QUIT RARROW RBRACE RBRACK RENAME RIGHT
+%token RPAREN SEARCH SEMICOLON SET SHOW SIG SKIP SPECIFICATION SPLIT SPLITSTAR
+%token SSPLIT STAR THEOREM TO TRUE TTYPE TURN TYPE UNABBREV UNDERSCORE UNDO
+%token UNFOLD WITH WITNESS
 
 %token <int> NUM
 %token <string> STRINGID QSTRING CLAUSENAME
@@ -123,51 +122,51 @@ hyp:
   | UNDERSCORE                           { "_" }
 
 id:
-  | STRINGID                             { $1 }
+  | ABBREV                               { "abbrev" }
+  | ABORT                                { "abort" }
+  | APPLY                                { "apply" }
+  | AS                                   { "as" }
+  | ASSERT                               { "assert" }
+  | BACKCHAIN                            { "backchain" }
+  | BY                                   { "by" }
+  | CASE                                 { "case" }
+  | CLEAR                                { "clear" }
+  | CLOSE                                { "Close" }
+  | CODEFINE                             { "CoDefine" }
+  | COIND                                { "coinduction" }
+  | CUT                                  { "cut" }
+  | DEFINE                               { "Define" }
+  | FROM                                 { "from" }
+  | IMPORT                               { "Import" }
   | IND                                  { "induction" }
   | INST                                 { "inst" }
-  | APPLY                                { "apply" }
-  | BACKCHAIN                            { "backchain" }
-  | CASE                                 { "case" }
-  | SEARCH                               { "search" }
-  | TO                                   { "to" }
-  | ON                                   { "on" }
-  | BY                                   { "by" }
-  | AS                                   { "as" }
-  | WITH                                 { "with" }
   | INTROS                               { "intros" }
-  | CUT                                  { "cut" }
-  | FROM                                 { "from" }
-  | ASSERT                               { "assert" }
-  | SKIP                                 { "skip" }
-  | WITNESS                              { "witness" }
-  | UNDO                                 { "undo" }
-  | ABORT                                { "abort" }
-  | COIND                                { "coinduction" }
-  | LEFT                                 { "left" }
-  | RIGHT                                { "right" }
-  | MONOTONE                             { "monotone" }
-  | SPLIT                                { "split" }
-  | UNFOLD                               { "unfold" }
   | KEEP                                 { "keep" }
-  | CLEAR                                { "clear" }
-  | ABBREV                               { "abbrev" }
-  | UNABBREV                             { "unabbrev" }
-  | RENAME                               { "rename" }
+  | KKIND                                { "Kind" }
+  | LEFT                                 { "left" }
+  | MONOTONE                             { "monotone" }
+  | ON                                   { "on" }
   | PERMUTE                              { "permute" }
-  | THEOREM                              { "Theorem" }
-  | IMPORT                               { "Import" }
-  | SPECIFICATION                        { "Specification" }
-  | DEFINE                               { "Define" }
-  | CODEFINE                             { "CoDefine" }
+  | QUERY                                { "Query" }
+  | QUIT                                 { "Quit" }
+  | RENAME                               { "rename" }
+  | RIGHT                                { "right" }
+  | SEARCH                               { "search" }
   | SET                                  { "Set" }
   | SHOW                                 { "Show" }
-  | QUIT                                 { "Quit" }
-  | QUERY                                { "Query" }
+  | SKIP                                 { "skip" }
+  | SPECIFICATION                        { "Specification" }
+  | SPLIT                                { "split" }
   | SSPLIT                               { "Split" }
-  | CLOSE                                { "Close" }
+  | STRINGID                             { $1 }
+  | THEOREM                              { "Theorem" }
+  | TO                                   { "to" }
   | TTYPE                                { "Type" }
-  | KKIND                                { "Kind" }
+  | UNABBREV                             { "unabbrev" }
+  | UNDO                                 { "undo" }
+  | UNFOLD                               { "unfold" }
+  | WITH                                 { "with" }
+  | WITNESS                              { "witness" }
 
 /* Annotated ID */
 aid:

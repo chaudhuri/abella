@@ -18,6 +18,7 @@
 (****************************************************************************)
 
 open Term
+open Store
 open Extensions
 open Debug
 
@@ -64,10 +65,6 @@ let context_to_string ctx =
   in
     aux ctx
 
-let cons = const "::" (tyarrow [oty; olistty] olistty)
-let nil = const "nil" olistty
-let imp = const "=>" (tyarrow [oty; oty] oty)
-
 let is_nil t =
   Term.is_head_name "nil" t
 
@@ -105,7 +102,7 @@ let union ctx1 ctx2 =
   match ctx2 with
     | [] -> ctx1
     | c::cs ->
-        if tc [] c = olistty then
+        if tc [] c = Ty.olist then
           c :: ctx1 @ cs
         else
           ctx1 @ ctx2
@@ -132,9 +129,9 @@ let context_to_list ctx = ctx
 let context_to_term ctx =
   let rec aux ctx =
     match ctx with
-      | [] -> nil
-      | [last] when tc [] last = olistty -> last
-      | head::tail -> app cons [head; aux tail]
+      | [] -> Const.nil.term
+      | [last] when tc [] last = Ty.olist -> last
+      | head::tail -> app Const.cons.term [head; aux tail]
   in
     aux (List.rev ctx)
 
@@ -143,7 +140,7 @@ let wellformed ctx =
     | [] -> true
     | head::tail ->
         let ty = tc [] head in
-          (ty = oty && aux tail) || (ty = olistty && tail = [])
+          (ty = Ty.o && aux tail) || (ty = Ty.olist && tail = [])
   in
     aux (List.rev ctx)
 

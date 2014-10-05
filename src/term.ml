@@ -581,10 +581,6 @@ let tyarrow tys ty =
 let tybase bty =
   Ty([], bty)
 
-let oty = tybase "o"
-let olistty = tybase "olist"
-let propty = tybase "prop"
-
 let rec tc (tyctx:tyctx) t =
   match observe (hnorm t) with
     | DB i -> snd (List.nth tyctx (i-1))

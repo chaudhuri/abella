@@ -17,6 +17,7 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Store
 open Abella_types
 open Typing
 open Extensions
@@ -64,9 +65,12 @@ let read_lpsig = read_lp ".sig" Parser.lpsig
 let read_lpmod = read_lp ".mod" Parser.lpmod
 
 let merge_signs signs =
-  let (ktables, ctables) = List.split signs in
+  let (ktables, ctables) =
+    signs
+    |> List.map (fun sign -> (sign.ktable, sign.ctable))
+    |> List.split in
   let ktable = List.flatten ktables in
-    List.fold_left add_poly_consts (ktable, []) ctables
+  List.fold_left add_poly_consts {ktable ; ctable = []} ctables
 
 let add_decl sign = function
   | SKind(tynames) -> add_types sign tynames

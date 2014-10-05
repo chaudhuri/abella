@@ -18,6 +18,7 @@
 (****************************************************************************)
 
 open Term
+open Store
 open Metaterm
 open Unify
 open Extensions
@@ -450,7 +451,7 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
   let create_sync ~used ~sr ~support async_obj r =
     let ctx,t = Async.get async_obj in
     let raise_result =
-      fresh_raised_alist ~sr ~tag:Eigen ~used ~support [("F", oty)] in
+      fresh_raised_alist ~sr ~tag:Eigen ~used ~support [("F", Ty.o)] in
     let f,fvar =
       match raise_result with
       | ([(_, f)], [fvar]) -> f,fvar
@@ -798,7 +799,7 @@ let search ~depth:n ~hyps ~clauses ~alldefs
     let wrap body = List.map (fun t -> Async.obj context t) body in
       foci
       (* ignore the elements in the context of type olist *)
-      |> List.find_all (fun cls -> not (tc [] cls = olistty))
+      |> List.find_all (fun cls -> not (tc [] cls = Ty.olist))
       |> List.map clausify
       |> List.find_all (fun (_, h, _) -> term_head_name h = p)
       |> List.map freshen_clause
@@ -839,7 +840,7 @@ let search ~depth:n ~hyps ~clauses ~alldefs
             if n > 0 then clause_aux n ctx (ctx @ clauses) term r ts ~sc;
             (* Also backchain the goal G in '{.. L ..|- G}' on clauses F 
                occurring in hypotheses of the form 'member F L' *)
-            let ctxs = List.find_all (fun cls -> tc [] cls = olistty)
+            let ctxs = List.find_all (fun cls -> tc [] cls = Ty.olist)
                 goal.Async.context in
             let get_member_foci hyp =
               if is_member hyp then

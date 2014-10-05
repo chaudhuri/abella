@@ -18,6 +18,7 @@
 (****************************************************************************)
 
 open Term
+open Store
 open Typing
 open Metaterm
 open Format
@@ -51,7 +52,7 @@ type sequent = {
 let sequent = {
   vars = [] ;
   hyps = [] ;
-  goal = termobj (const "placeholder" propty) ;
+  goal = termobj (const "placeholder" Ty.prop) ;
   count = 0 ;
   name = "" ;
   next_subgoal_id = 1 ;
@@ -76,16 +77,18 @@ let add_global_consts cs =
   sr := List.fold_left Subordination.update !sr (List.map snd cs) ;
   sign := add_consts !sign cs
 
-let close_types ids =
-  begin match List.minus ids (fst !sign) with
+let close_types tys =
+  begin match List.minus tys !sign.ktable with
     | [] -> ()
-    | xs -> failwith ("Unknown type(s): " ^ (String.concat ", " xs))
+    | tys ->
+        failwithf "Unknown type(s): %s" (String.concat ", " tys)
   end ;
-  begin match List.intersect ["o"; "olist"; "prop"] ids with
+  begin match List.intersect pervasive_sign.ktable tys with
     | [] -> ()
-    | xs -> failwith ("Cannot close " ^ (String.concat ", " xs))
+    | tys ->
+        failwithf "Cannot close %s" (String.concat ", " tys)
   end ;
-  sr := Subordination.close !sr ids
+  sr := Subordination.close !sr tys
 
 let add_subgoals ?(mainline) new_subgoals =
   let extend_name i =
@@ -157,8 +160,6 @@ let clauses : clauses ref = ref []
 
 let add_clauses new_clauses =
   clauses := !clauses @ new_clauses
-
-
 
 let parse_defs str =
   type_udefs ~sr:!sr ~sign:!sign (Parser.defs Lexer.token (Lexing.from_string str))
@@ -796,14 +797,14 @@ let monotone h t =
           let ctx = sequent.vars @
             (List.map (fun (id, ty) -> (id, nominal_var id ty)) ntids)
           in
-          let t = type_uterm ~expected_ty:olistty ~sr:!sr ~sign:!sign ~ctx t in
+          let t = type_uterm ~expected_ty:Ty.olist ~sr:!sr ~sign:!sign ~ctx t in
           let new_obj = Async.obj (Context.normalize [t]) obj_term in
             delay_mainline
               (Obj(Async new_obj, r))
-              (Binding(Forall, [("X", oty)],
-                       Arrow(member (Term.const "X" oty)
+              (Binding(Forall, [("X", Ty.o)],
+                       Arrow(member (Term.const "X" Ty.o)
                                (Context.context_to_term obj_context),
-                             member (Term.const "X" oty)
+                             member (Term.const "X" Ty.o)
                                t))) ;
       | _ -> failwith
           "Monotone can only be used on hypotheses of the form {...}"

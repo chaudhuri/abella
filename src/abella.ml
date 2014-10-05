@@ -25,6 +25,7 @@ let stratification_warnings_are_errors = false
 (* END global Abella configuration *)
 
 open Term
+open Store
 open Metaterm
 open Prover
 open Abella_types
@@ -92,8 +93,9 @@ let teyjus_only_keywords =
    "localkind"; "postfix"; "posfixl"; "prefix"; "prefixr"; "typeabbrev";
    "use_sig"; "useonly"; "sigma"]
 
-let warn_on_teyjus_only_keywords (ktable, ctable) =
-  let tokens = List.unique (ktable @ List.map fst ctable) in
+let warn_on_teyjus_only_keywords sign =
+  let consts = List.map const_id sign.ctable in
+  let tokens = List.unique (sign.ktable @ consts) in
   let used_keywords = List.intersect tokens teyjus_only_keywords in
     if used_keywords <> [] then
       fprintf !out
@@ -229,15 +231,15 @@ let check_defs names defs =
     defs
 
 let check_noredef ids =
-  let (_, ctable) = !sign in
-    List.iter (
-      fun id -> if List.mem id (List.map fst ctable) then
+  let cids = List.map const_id !sign.ctable in
+  List.iter (
+    fun id -> if List.mem id cids then
         failwithf "%s is already defined" id
-    ) ids
+  ) ids
 
 (* Compilation and importing *)
 
-let comp_spec_sign = ref ([], [])
+let comp_spec_sign = ref { ktable = [] ; ctable = [] }
 let comp_spec_clauses = ref []
 let comp_content = ref []
 
@@ -257,8 +259,14 @@ let compile citem =
   ensure_finalized_specification () ;
   comp_content := citem :: !comp_content
 
-let predicates (ktable, ctable) =
-  List.map fst (List.find_all (fun (_, Poly(_, Ty(_, ty))) -> ty = "o") ctable)
+let predicates sign =
+  sign.ctable
+  |> List.filter_map begin fun kon ->
+    match kon.pty with
+    | Poly (_, Ty (_, "o")) ->
+        Some kon.cid
+    | _ -> None
+  end
 
 let write_compilation () =
   marshal !comp_spec_sign ;
@@ -274,8 +282,8 @@ let clauses_to_predicates clauses =
   List.unique (List.map term_head_name clause_heads)
 
 let ensure_valid_import imp_spec_sign imp_spec_clauses imp_predicates =
-  let (ktable, ctable) = !sign in
-  let (imp_ktable, imp_ctable) = imp_spec_sign in
+  let (ktable, ctable) = !sign.ktable, !sign.ctable in
+  let (imp_ktable, imp_ctable) = imp_spec_sign.ktable, imp_spec_sign.ctable in
 
   (* 1. Imported ktable must be a subset of ktable *)
   let missing_types = List.minus imp_ktable ktable in
@@ -288,7 +296,7 @@ let ensure_valid_import imp_spec_sign imp_spec_clauses imp_predicates =
   let missing_consts = List.minus imp_ctable ctable in
   let () = if missing_consts <> [] then
     failwithf "Imported file makes reference to unknown constants: %s"
-      (String.concat ", " (List.map fst missing_consts))
+      (String.concat ", " (List.map const_id missing_consts))
   in
 
   (* 3. Imported clauses must be a subset of clauses *)

@@ -4,6 +4,10 @@ open Context
 open Unify
 open Term
 open Term.Notations
+open Store
+
+let oty = Ty.o
+let olistty = Ty.olist
 
 let tmty = tybase "tm"
 let eval = const "eval" (tyarrow [tmty; tmty] oty)

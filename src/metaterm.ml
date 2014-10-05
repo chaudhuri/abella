@@ -18,6 +18,7 @@
 (****************************************************************************)
 
 open Term
+open Store
 open Extensions
 open Format
 
@@ -87,10 +88,8 @@ let meta_or a b = Or(a, b)
 let meta_and a b = And(a, b)
 let pred p = Pred(p, Irrelevant)
 
-let member_const = Term.const "member" (tyarrow [oty; olistty] propty)
-
 let member e ctx =
-  pred (app member_const [e; ctx])
+  pred (app Const.member.term [e; ctx])
 
 let async_to_member obj =
   let (context, term) = Async.get obj in

@@ -24,9 +24,6 @@ type ty = Ty of ty list * string
 
 val tyarrow : ty list -> ty -> ty
 val tybase : string -> ty
-val oty : ty
-val olistty : ty
-val propty : ty
 
 (* Variables *)
 
