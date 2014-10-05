@@ -18,6 +18,7 @@
 (****************************************************************************)
 
 open Term
+open Extensions
 
 type pty = Poly of string list * ty
 let pty_of_ty ty = Poly ([], ty)
@@ -67,6 +68,58 @@ module Const = struct
     let ty    = tyarrow [Ty.o ; Ty.olist] Ty.prop in
     let term  = const cid ty in
     { cid ; pty = pty_of_ty ty ; term }
+
+  let constr =
+    let cid = "$" in
+    let ty = tyarrow [Ty.prop] Ty.o in
+    let term = const cid ty in
+    { cid ; pty = pty_of_ty ty ; term }
+end
+
+module Meta = struct
+  let __binarym cid =
+    let ty  = tyarrow [Ty.prop ; Ty.prop] Ty.prop in
+    let term = const cid ty in
+    { cid ; pty = pty_of_ty ty ; term }
+
+  let andm = __binarym "/\\"
+  let orm  = __binarym "\\/"
+  let impm = __binarym "->"
+
+  let __constm cid =
+    let ty  = Ty.prop in
+    let term = const cid ty in
+    { cid ; pty = pty_of_ty ty ; term }
+
+  let truem  = __constm "true"
+  let falsem = __constm "false"
+
+  let eqm =
+    let cid = "=" in
+    let ty  = tyarrow [tybase "A" ; tybase "A"] Ty.prop in
+    let term = const cid ty in
+    { cid ; pty = Poly(["A"], ty) ; term }
+
+  let __quantm cid =
+    let ty = tyarrow [tyarrow [tybase "A"] Ty.prop] Ty.prop in
+    let term = const cid ty in
+    { cid ; pty = Poly(["A"], ty) ; term }
+
+  let forallm = __quantm "forall"
+  let existsm = __quantm "exists"
+
+  let __meta_cids =
+    List.fold_right String.Set.add
+      [ andm.cid ; truem.cid ;
+        orm.cid ; falsem.cid ;
+        impm.cid ;
+        eqm.cid ;
+        forallm.cid ; existsm.cid ]
+      String.Set.empty
+
+  let is_meta_const c =
+    String.Set.mem c __meta_cids
+
 end
 
 let const_id    k = k.cid
@@ -85,5 +138,5 @@ let target_ty (Ty (_, b)) = b
 
 let pervasive_sign = {
   ktable = [target_ty Ty.o ; target_ty Ty.olist ; target_ty Ty.prop] ;
-  ctable = [Const.pi ; Const.imp ; Const.cons ; Const.nil ; Const.member] ;
+  ctable = [Const.pi ; Const.imp ; Const.cons ; Const.nil ; Const.member ; Const.constr] ;
 }
