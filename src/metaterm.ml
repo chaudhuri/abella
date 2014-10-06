@@ -158,13 +158,13 @@ let pretty_obj ~left ~right ~printer obj =
         left ; right ; indent = 3 ; trans = OPAQUE ; inner
       }
 
-let pretty_obj obj =
+let pretty_obj ~printer obj =
   let open Pretty in
   pretty_obj obj
     ~left:(STR "{") ~right:(STR "}")
-    ~printer:Term.core_printer
+    ~printer
 
-let rec pretty_metaterm mt =
+let rec pretty_metaterm ~printer mt =
   let open Format in
   match mt with
   | True ->
@@ -178,19 +178,19 @@ let rec pretty_metaterm mt =
       Pretty.(Opapp (30, Infix (NON, core_printer#print [] a,
                                 FMT " !=@ ", core_printer#print [] b)))
   | Obj(obj, r) ->
-      Pretty.(Opapp (50, Postfix (pretty_obj obj,
+      Pretty.(Opapp (50, Postfix (pretty_obj ~printer obj,
                                   STR (restriction_to_string r))))
   | Arrow(a, False) ->
-      Pretty.(Opapp (40, Prefix (STR "~ ", pretty_metaterm a)))
+      Pretty.(Opapp (40, Prefix (STR "~ ", pretty_metaterm ~printer a)))
   | Arrow(a, b) ->
-      Pretty.(Opapp (20, Infix (RIGHT, pretty_metaterm a,
-                                FMT " ->@ ", pretty_metaterm b)))
+      Pretty.(Opapp (20, Infix (RIGHT, pretty_metaterm ~printer a,
+                                FMT " ->@ ", pretty_metaterm ~printer b)))
   | Or(a, b) ->
-      Pretty.(Opapp (23, Infix (LEFT, pretty_metaterm a,
-                                FMT " \\/@ ", pretty_metaterm b)))
+      Pretty.(Opapp (23, Infix (LEFT, pretty_metaterm ~printer a,
+                                FMT " \\/@ ", pretty_metaterm ~printer b)))
   | And(a, b) ->
-      Pretty.(Opapp (27, Infix (LEFT, pretty_metaterm a,
-                                FMT " /\\@ ", pretty_metaterm b)))
+      Pretty.(Opapp (27, Infix (LEFT, pretty_metaterm ~printer a,
+                                FMT " /\\@ ", pretty_metaterm ~printer b)))
   | Binding(q, tids, a) ->
       let binds = Pretty.(FUN begin
           fun ff ->
@@ -203,7 +203,7 @@ let rec pretty_metaterm mt =
             end (List.tl tids) ;
             pp_print_string ff ", " ;
         end) in
-      let bod = pretty_metaterm a in
+      let bod = pretty_metaterm ~printer a in
       Pretty.(Opapp (1, Prefix (binds, bod)))
   | Pred(p, Irrelevant) ->
       Term.core_printer#print [] p
@@ -211,24 +211,104 @@ let rec pretty_metaterm mt =
       Pretty.(Opapp (60, Postfix (Term.core_printer#print [] p,
                                   STR (" " ^ restriction_to_string r))))
 
-let format_metaterm ff mt =
+let rec metaterm_of_term t =
+  let open Meta in
+  let failure () =
+    failwithf "Cannot project this term: %s"
+      (term_to_string ~printer:core_printer t)
+  in
+  match observe (hnorm t) with
+  | Var v ->
+      if v.name = truem.cid then True
+      else if v.name = falsem.cid then False
+      else failure ()
+  | App (h, ts) -> begin
+      match observe (hnorm h), ts with
+      | Var v, [t1 ; t2] when v.name = andm.cid ->
+          let mt1 = metaterm_of_term t1 in
+          let mt2 = metaterm_of_term t2 in
+          And (mt1, mt2)
+      | Var v, [t1 ; t2] when v.name = orm.cid ->
+          let mt1 = metaterm_of_term t1 in
+          let mt2 = metaterm_of_term t2 in
+          Or (mt1, mt2)
+      | Var v, [t1 ; t2] when v.name = impm.cid ->
+          let mt1 = metaterm_of_term t1 in
+          let mt2 = metaterm_of_term t2 in
+          Arrow (mt1, mt2)
+      | Var v, [t1 ; t2] when v.name = eqm.cid ->
+          Eq (t1, t2)
+      | Var v, [t1] when v.name = forallm.cid -> begin
+          match observe (hnorm t1) with
+          | Lam ([x, ty], t) -> begin
+              match metaterm_of_term t with
+              | Binding (q, vs, mt) when q = Forall ->
+                  Binding (Forall, (x, ty) :: vs, mt)
+              | mt ->
+                  Binding (Forall, [x, ty], mt)
+            end
+          | _ -> failure ()
+        end
+      | Var v, [t1] when v.name = existsm.cid -> begin
+          match observe (hnorm t1) with
+          | Lam ([x, ty], t) -> begin
+              match metaterm_of_term t with
+              | Binding (q, vs, mt) when q = Exists ->
+                  Binding (Exists, (x, ty) :: vs, mt)
+              | mt ->
+                  Binding (Exists, [x, ty], mt)
+            end
+          | _ -> failure ()
+        end
+      | _ -> failure ()
+    end
+  | _ -> failure ()
+
+class constrained_term_printer = object (self : 'self)
+  inherit Term.term_printer as super
+
+  method! print tycx t =
+    match term_head t with
+    | Some (h, [t]) when term_to_name h = Const.constr.cid ->
+        let mt = metaterm_of_term t in
+        let pp = pretty_metaterm ~printer:core_printer mt in
+        Pretty.(Bracket {
+            left = STR "$!(" ;
+            right = STR ")" ;
+            indent = 0 ;
+            trans = OPAQUE ;
+            inner = pp ;
+          })
+    | _ ->
+        super#print tycx t
+end
+
+let constrained_term_printer : term_printer = new constrained_term_printer
+let () = Term.default_printer := constrained_term_printer
+
+let format_metaterm ?printer ff mt =
+  let printer = Option.default constrained_term_printer printer in
   let open Format in
   pp_open_box ff 2 ; begin
-    pretty_metaterm mt |> Pretty.print ff ;
+    pretty_metaterm ~printer mt |> Pretty.print ff ;
   end ; pp_close_box ff ()
 
-let metaterm_to_string t =
+let format_metaterm_ ff mt = format_metaterm ff mt
+
+let metaterm_to_string ?printer t =
+  let printer = Option.default constrained_term_printer printer in
   let b = Buffer.create 50 in
   let fmt = formatter_of_buffer b in
     pp_set_margin fmt max_int ;
-    format_metaterm fmt t ;
+    format_metaterm ~printer fmt t ;
     pp_print_flush fmt () ;
     Buffer.contents b
 
-let metaterm_to_formatted_string t =
+let metaterm_to_formatted_string ?printer t =
+  let printer = Option.default constrained_term_printer printer in
   let b = Buffer.create 100 in
   let fmt = formatter_of_buffer b in
-    format_metaterm fmt t ;
+    format_metaterm ~printer fmt t ;
     pp_print_flush fmt () ;
     Buffer.contents b
 
@@ -237,7 +317,7 @@ let metaterm_to_formatted_string t =
 let map_on_objs f t =
   let rec aux t =
     match t with
-      | Obj(obj, r) -> Obj(f obj, r)
+      | Obj(obj, r) -> f obj r
       | Arrow(a, b) -> Arrow(aux a, aux b)
       | Binding(binder, bindings, body) -> Binding(binder, bindings, aux body)
       | Or(a, b) -> Or(aux a, aux b)
@@ -246,20 +326,21 @@ let map_on_objs f t =
   in
     aux t
 
-let map_obj f = function
+let map_obj f obj r =
+  match obj with
   | Async obj ->
       let (ctx, term) = Async.get obj in
-      Async (Async.obj (Context.map f ctx) (f term))
+      Obj (Async (Async.obj (Context.map f ctx) (f term)), r)
   | Sync obj ->
       let (ctx, focus, term) = Sync.get obj in
-      Sync (Sync.obj (Context.map f ctx) (f focus) (f term))
+      Obj (Sync (Sync.obj (Context.map f ctx) (f focus) (f term)), r)
 
 let map_terms f t =
   let rec aux t =
     match t with
       | True | False -> t
       | Eq(a, b) -> Eq(f a, f b)
-      | Obj(obj, r) -> Obj(map_obj f obj, r)
+      | Obj(obj, r) -> map_obj f obj r
       | Arrow(a, b) -> Arrow(aux a, aux b)
       | Binding(binder, bindings, body) ->
           Binding(binder, bindings, aux body)
@@ -428,7 +509,7 @@ let rec replace_metaterm_vars alist t =
     match t with
       | True | False -> t
       | Eq(a, b) -> Eq(term_aux alist a, term_aux alist b)
-      | Obj(obj, r) -> Obj(map_obj (term_aux alist) obj, r)
+      | Obj(obj, r) -> map_obj (term_aux alist) obj r
       | Arrow(a, b) -> Arrow(aux alist a, aux alist b)
       | Binding(binder, bindings, body) ->
           let alist = List.remove_assocs (List.map fst bindings) alist in
@@ -540,8 +621,7 @@ let rec normalize_obj obj =
       aux (move_imp_to_context async_obj)
     else if is_pi term then
       aux (replace_pi_with_nominal async_obj)
-    else
-      Async.obj (Context.normalize ctx) term
+    else Async.obj (Context.normalize ctx) term
   in
   let norm_ctx sync_obj =
     let ctx,focus,term = Sync.get sync_obj in
@@ -556,7 +636,7 @@ let normalize_binders =
   let rec aux rens used form = match form with
     | True | False -> form
     | Eq (a, b)    -> Eq (aux_term rens a, aux_term rens b)
-    | Obj (obj, r) -> Obj (map_obj (aux_term rens) obj, r)
+    | Obj (obj, r) -> map_obj (aux_term rens) obj r
     | Arrow (a, b) -> Arrow (aux rens used a, aux rens used b)
     | Or (a, b)    -> Or (aux rens used a, aux rens used b)
     | And (a, b)   -> And (aux rens used a, aux rens used b)
@@ -609,7 +689,7 @@ let rec replace_metaterm_typed_nominals alist t =
     match t with
       | True | False -> t
       | Eq(a, b) -> Eq(term_aux a, term_aux b)
-      | Obj(obj, r) -> Obj(map_obj term_aux obj, r)
+      | Obj(obj, r) -> map_obj term_aux obj r
       | Arrow(a, b) -> Arrow(aux a, aux b)
       | Binding(binder, bindings, body) ->
           Binding(binder, bindings, aux body)
@@ -637,9 +717,20 @@ let normalize_nominals t =
   let nominal_alist = List.combine shadowed nominals in
     replace_metaterm_typed_nominals nominal_alist t
 
+let normalize_constrained_obj obj r =
+  match obj with
+  | Sync _ -> Obj (obj, r)
+  | Async obj as asob -> begin
+      match term_head obj.Async.term with
+      | Some (h, [t]) when term_to_name h = Const.constr.cid ->
+          metaterm_of_term t
+      | _ ->
+          Obj (asob, r)
+    end
+
 let normalize term =
   term
-  |> map_on_objs normalize_obj
+  |> map_on_objs normalize_constrained_obj
   |> normalize_nominals
   |> normalize_binders
 

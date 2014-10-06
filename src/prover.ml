@@ -260,7 +260,7 @@ let format_display_subgoals fmt n =
                    fprintf fmt "@[<1>Subgoal %s%sis:@\n%a@]@\n@\n"
                      sequent.name
                      (if sequent.name = "" then "" else " ")
-                     format_metaterm (normalize sequent.goal)
+                     format_metaterm_ (normalize sequent.goal)
                  else
                    incr count)
       !subgoals ;

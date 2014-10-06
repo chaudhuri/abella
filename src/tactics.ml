@@ -415,7 +415,7 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
 
   let focus sync_obj r =
     let ctx,f,term = Sync.get sync_obj in
-    if (*has_eigen_head term or*) has_eigen_head f then
+    if has_eigen_head f then
       failwith "Cannot perform case-analysis on flexible head" ;
     let wrapper t =
       Obj (Async (Async.obj ctx t), reduce_inductive_restriction r)
@@ -425,19 +425,30 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
          let fresh_used, fresh_head, fresh_body =
            freshen_clause ~sr ~support ~used clause
          in
-         match try_left_unify_cpairs ~used:(fresh_used @ used)
-             fresh_head term
-         with
-         | Some cpairs ->
-             let new_vars =
-               term_vars_alist Eigen (fresh_head::term::fresh_body)
-             in
-             let wrapped_body = List.map wrapper fresh_body in
-             Some { bind_state = get_bind_state () ;
-                    new_vars = new_vars ;
-                    new_hyps = cpairs_to_eqs cpairs @ wrapped_body }
-         | None -> None))
-      (clausify f)
+         match term_head fresh_head with
+         | Some (h, [t]) when term_to_name h = Const.constr.cid ->
+             let hyp = Arrow (Metaterm.metaterm_of_term t, wrapper term) in
+             let new_vars = term_vars_alist Eigen (fresh_head :: fresh_body) in
+             let case = {
+               stateless_new_vars = new_vars ;
+               stateless_new_hyps = hyp :: List.map wrapper fresh_body ;
+             } in
+             Some (stateless_case_to_case case)
+         | _ -> begin
+             match try_left_unify_cpairs ~used:(fresh_used @ used)
+                     fresh_head term
+             with
+             | Some cpairs ->
+                 let new_vars =
+                   term_vars_alist Eigen (fresh_head::term::fresh_body)
+                 in
+                 let wrapped_body = List.map wrapper fresh_body in
+                 Some { bind_state = get_bind_state () ;
+                        new_vars = new_vars ;
+                        new_hyps = cpairs_to_eqs cpairs @ wrapped_body }
+             | None -> None
+           end)
+       (clausify f))
   in
 
   let clause_case async_obj r =

@@ -70,7 +70,7 @@ module Const = struct
     { cid ; pty = pty_of_ty ty ; term }
 
   let constr =
-    let cid = "$" in
+    let cid = "$!" in
     let ty = tyarrow [Ty.prop] Ty.o in
     let term = const cid ty in
     { cid ; pty = pty_of_ty ty ; term }
@@ -82,20 +82,20 @@ module Meta = struct
     let term = const cid ty in
     { cid ; pty = pty_of_ty ty ; term }
 
-  let andm = __binarym "/\\"
-  let orm  = __binarym "\\/"
-  let impm = __binarym "->"
+  let andm = __binarym "#<constraint_and>"
+  let orm  = __binarym "#<constraint_or>"
+  let impm = __binarym "#<constraint_imp>"
 
   let __constm cid =
     let ty  = Ty.prop in
     let term = const cid ty in
     { cid ; pty = pty_of_ty ty ; term }
 
-  let truem  = __constm "true"
-  let falsem = __constm "false"
+  let truem  = __constm "#<constraint_true>"
+  let falsem = __constm "#<constraint_false>"
 
   let eqm =
-    let cid = "=" in
+    let cid = "#<constraint_eq>" in
     let ty  = tyarrow [tybase "A" ; tybase "A"] Ty.prop in
     let term = const cid ty in
     { cid ; pty = Poly(["A"], ty) ; term }
@@ -105,8 +105,8 @@ module Meta = struct
     let term = const cid ty in
     { cid ; pty = Poly(["A"], ty) ; term }
 
-  let forallm = __quantm "forall"
-  let existsm = __quantm "exists"
+  let forallm = __quantm "#<constraint_forall>"
+  let existsm = __quantm "#<constraint_exists>"
 
   let __meta_cids =
     List.fold_right String.Set.add
@@ -138,5 +138,7 @@ let target_ty (Ty (_, b)) = b
 
 let pervasive_sign = {
   ktable = [target_ty Ty.o ; target_ty Ty.olist ; target_ty Ty.prop] ;
-  ctable = [Const.pi ; Const.imp ; Const.cons ; Const.nil ; Const.member ; Const.constr] ;
+  ctable = [Const.pi ; Const.imp ; Const.cons ; Const.nil ; Const.member ; Const.constr] @
+           [Meta.andm ; Meta.truem ; Meta.orm ; Meta.falsem ; Meta.impm] @
+           [Meta.eqm ; Meta.forallm ; Meta.existsm]
 }

@@ -128,7 +128,7 @@ val norm : term -> term
 
 val ty_to_string : ty -> string
 
-class type term_printer = object
+class term_printer : object
   method print : tyctx -> term -> Pretty.expr
 end
 val core_printer : term_printer

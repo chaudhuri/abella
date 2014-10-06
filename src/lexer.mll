@@ -77,6 +77,7 @@ rule token = parse
 | "|-"               { TURN }
 | "::"               { CONS }
 | "="                { EQ }
+| "$!("              { CONSTRAINT }
 
 | ":"                { COLON }
 | "->"               { RARROW }

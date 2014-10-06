@@ -477,14 +477,16 @@ class term_printer = object (self)
 end
 
 let core_printer = new term_printer
-let default_printer : term_printer ref = ref core_printer
+let default_printer = ref core_printer
 
-let format_term ?(printer=(!default_printer)) ?(cx=[]) ff t =
+let format_term ?printer ?(cx=[]) ff t =
+  let printer = Option.default !default_printer printer in
   Format.pp_open_box ff 2 ; begin
     Pretty.print ff (printer#print cx t) ;
   end ; Format.pp_close_box ff ()
 
-let term_to_string ?(printer=(!default_printer)) ?(cx=[]) t =
+let term_to_string ?printer ?(cx=[]) t =
+  let printer = Option.default !default_printer printer in
   let buf = Buffer.create 19 in
   let ff = Format.formatter_of_buffer buf in
   format_term ~printer ~cx ff t ;

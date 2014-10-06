@@ -449,8 +449,6 @@ let replace_underscores head body =
 let clause_map : term String.Map.t ref = ref String.Map.empty
 let seen_name cname = String.Map.mem cname !clause_map
 let register_clause name clause =
-  Printf.printf "Note: registered %S : %s\n%!" name
-    (Term.term_to_string clause) ;
   clause_map := String.Map.add name clause !clause_map
 let lookup_clause cname =
   if seen_name cname

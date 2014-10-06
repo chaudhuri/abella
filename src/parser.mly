@@ -21,6 +21,7 @@
 
   open Extensions
   open Typing
+  open Store
 
   module Types = Abella_types
 
@@ -40,6 +41,43 @@
     List.fold_left
       (fun h a -> UApp((fst (get_pos h), snd (get_pos a)), h, a))
       head args
+
+  let rec to_uterm umt =
+    let open Meta in
+    match umt with
+    | UTrue -> predefined truem.cid
+    | UFalse -> predefined falsem.cid
+    | UAnd (umt1, umt2) ->
+        let ut1 = to_uterm umt1 in
+        let ut2 = to_uterm umt2 in
+        nested_app (predefined andm.cid) [ut1 ; ut2]
+    | UOr (umt1, umt2) ->
+        let ut1 = to_uterm umt1 in
+        let ut2 = to_uterm umt2 in
+        nested_app (predefined orm.cid) [ut1 ; ut2]
+    | UArrow (umt1, umt2) ->
+        let ut1 = to_uterm umt1 in
+        let ut2 = to_uterm umt2 in
+        nested_app (predefined impm.cid) [ut1 ; ut2]
+    | UEq (ut1, ut2) ->
+        nested_app (predefined eqm.cid) [ut1 ; ut2]
+    | UBinding (q, vs, umt) -> begin
+        let qf = match q with
+        | Metaterm.Forall -> predefined forallm.cid
+        | Metaterm.Exists -> predefined existsm.cid
+        | Metaterm.Nabla ->
+            failwith "Canot use nabla inside constraints"
+        in
+        let ut = to_uterm umt in
+        let lexp = List.fold_right begin fun (v, ty) ut ->
+           ULam (pos 0, v, ty, ut)
+        end vs ut in
+        nested_app qf [lexp]
+      end
+    | _ -> failwith "Invalid constraint"
+
+  let constrain umt =
+    nested_app (predefined Const.constr.cid) [to_uterm umt]
 
   exception Illegal
   let is_illegal_constant k =
@@ -73,13 +111,13 @@
 %}
 
 %token ABBREV ABORT ACCUM ACCUMSIG AND APPLY AS ASSERT AT BACKCHAIN BSLASH BY
-%token CASE CLAUSEEQ CLEAR CLOSE CODEFINE COIND COLON COMMA CONS CUT DEFEQ
-%token DEFINE DOT END EQ EXISTS FALSE FORALL FROM HASH IF IMP IMPORT IND INST
-%token INTROS KEEP KIND KKIND LBRACE LBRACK LEFT LPAREN MODULE MONOTONE NABLA
-%token NOT ON OR PERMUTE PLUS QUERY QUIT RARROW RBRACE RBRACK RENAME RIGHT
-%token RPAREN SEARCH SEMICOLON SET SHOW SIG SKIP SPECIFICATION SPLIT SPLITSTAR
-%token SSPLIT STAR THEOREM TO TRUE TTYPE TURN TYPE UNABBREV UNDERSCORE UNDO
-%token UNFOLD WITH WITNESS
+%token CASE CLAUSEEQ CLEAR CLOSE CODEFINE COIND COLON COMMA CONS CONSTRAINT
+%token CUT DEFEQ DEFINE DOT END EQ EXISTS FALSE FORALL FROM HASH IF IMP
+%token IMPORT IND INST INTROS KEEP KIND KKIND LBRACE LBRACK LEFT LPAREN
+%token MODULE MONOTONE NABLA NOT ON OR PERMUTE PLUS QUERY QUIT RARROW RBRACE
+%token RBRACK RENAME RIGHT RPAREN SEARCH SEMICOLON SET SHOW SIG SKIP
+%token SPECIFICATION SPLIT SPLITSTAR SSPLIT STAR THEOREM TO TRUE TTYPE TURN
+%token TYPE UNABBREV UNDERSCORE UNDO UNFOLD WITH WITNESS
 
 %token <int> NUM
 %token <string> STRINGID QSTRING CLAUSENAME
@@ -206,6 +244,7 @@ term:
   | exp                                  { $1 }
 
 exp:
+  | CONSTRAINT metaterm RPAREN           { constrain $2 }
   | LPAREN term RPAREN                   { let left = fst (pos 1) in
                                            let right = snd (pos 3) in
                                              change_pos (left, right) $2 }
