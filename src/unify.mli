@@ -32,6 +32,8 @@ type unify_error =
 
 exception UnifyError of unify_error
 
+val unify_log : Format.formatter option ref
+
 val right_unify : ?used:(id * term) list -> term -> term -> unit
 val left_unify : ?used:(id * term) list -> term -> term -> unit
 

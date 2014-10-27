@@ -23,6 +23,12 @@
 open Term
 open Extensions
 
+let unify_log : Format.formatter option ref = ref None
+let log fmt =
+  match !unify_log with
+  | Some logf -> Format.fprintf logf fmt
+  | None -> Format.ifprintf Format.std_formatter fmt
+
 (* generate ids for n binders *)
 let gen_binder_ids n =
   List.map (fun i -> "z"^(string_of_int i)) (List.range 1 n)
@@ -737,6 +743,23 @@ and unify tyctx t1 t2 =
         let n = max (closing_depth t1) (closing_depth t2) in
         let tys = List.rev (List.take n tyctx) in
           handler (lambda tys t1) (lambda tys t2)
+
+type 'a result = Good of 'a | Bad of exn
+
+let pp_term cx formatter t =
+  Term.format_term ~cx formatter t
+
+let unify tyctx t1 t2 =
+  log "@[<v0><problem>@," ;
+  log "  <left>@[%a@]</left>@," (pp_term tyctx) t1 ;
+  log "  <right>@[%a@]</right>@," (pp_term tyctx) t2 ;
+  let result = try Good (unify tyctx t1 t2) with e -> Bad e in
+  match result with
+    | Good () ->
+        log "  <success>@[%a@]</success>@,</problem>@]@." (pp_term tyctx) t1
+    | Bad exn ->
+        log "  <bad />@,</problem>@]@." ;
+        raise exn
 
 let pattern_unify ~used t1 t2 =
   local_used := used ;

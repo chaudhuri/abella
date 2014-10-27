@@ -15,6 +15,7 @@
 *.out
 *.output
 *.html
+*.xml
 *.native
 !index.html
 src/lexer.ml

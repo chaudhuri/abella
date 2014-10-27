@@ -61,7 +61,7 @@ DETAILS_RHTML = $(CWD)/html-files/details.rhtml
             head -1 $(name).thm > title-line
 
             ruby $(ANNOTATE_THM) $(name).thm > $(name).html
-            $(ABELLA) -a $(name).thm > details
+            $(ABELLA) -L unif=$(name)-unif.xml -a $(name).thm > details
             erb $(DETAILS_RHTML) > $(name)-details.html
 
             rm -f name title-line spec-name spec-sig spec-mod \

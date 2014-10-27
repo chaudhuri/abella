@@ -685,6 +685,38 @@ let set_compile_out filename =
 
 let makefile = ref false
 
+let formatter_of_file file =
+  let chan = open_out_bin file in
+  let fmt = Format.formatter_of_out_channel chan in
+  at_exit begin fun () ->
+    Format.pp_print_flush fmt () ;
+    close_out chan ;
+  end ; fmt
+
+let parse_logging s =
+  if s = "help" then begin
+    [ "unif" ]
+    |> String.concat ", "
+    |> Printf.printf "Available loggable channels: %s\n" ;
+    exit 0
+  end ;
+  try Scanf.sscanf s "%s@=%s" begin
+      fun chan file ->
+        match chan with
+        | "unif" ->
+            Unify.unify_log := Some (formatter_of_file file) ;
+            Printf.fprintf !out "Sending %S logs to %S\n" chan file
+        | _ ->
+            Printf.eprintf "Unknown logging channel %S\n" chan ;
+            exit 1
+    end with
+  | End_of_file ->
+      Printf.eprintf "Unable to parse %S\n" s ;
+      exit 1
+  | Sys_error msg ->
+      Printf.eprintf "%s\n\t(processing %S)\n" msg s ;
+      exit 1
+
 let options =
   Arg.align
     [
@@ -695,7 +727,9 @@ let options =
       ("-c", Arg.String set_compile_out,
        "<file-name> Compile definitions and theorems in an importable format") ;
       ("-a", Arg.Set annotate, " Annotate mode") ;
-      ("-M", Arg.Set makefile, " Output dependencies in Makefile format")
+      ("-M", Arg.Set makefile, " Output dependencies in Makefile format") ;
+      ("-L", Arg.String parse_logging,
+       "<channel>=<file> Log <channel> into <file> (-L help for list)") ;
     ]
 
 let input_files = ref []
