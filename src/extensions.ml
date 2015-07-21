@@ -57,6 +57,12 @@ let provenance_to_string prov =
       bugf "output_provenance: %S != %S" posl.pos_fname posr.pos_fname
 
 let failwithf fmt = Printf.ksprintf failwith fmt
+
+exception Exit of int
+let really_exit = ref true
+let exit num =
+  if !really_exit then Pervasives.exit num else raise (Exit num)
+
 let maybe_guard ?guard f =
   match guard with
   | None -> f
