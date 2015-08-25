@@ -23,7 +23,7 @@ let (|>) x f = f x
 let curry f (x,y) = f x y
 let uncurry f x y = f (x,y)
 
-let bugf      fmt = Printf.ksprintf (fun s -> Printf.eprintf "%s\n%!" s ; failwith "Bug")
+let bugf      fmt = Printf.ksprintf (fun s -> Output.err_printf "%s\n%!" s ; failwith "Bug")
     ("[ABELLA BUG]\n" ^^ fmt ^^
      "\nPlease report this at https://github.com/abella-prover/abella/issues")
 

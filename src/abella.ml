@@ -17,6 +17,7 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Output
 open Term
 open Metaterm
 open Prover
@@ -24,7 +25,6 @@ open Checks
 open Abella_types
 open Typing
 open Extensions
-open Printf
 open Accumulate
 
 let can_read_specification = State.rref true
@@ -51,8 +51,8 @@ let perform_switch_to_interactive () =
   switch_to_interactive := false ;
   lexbuf := Lexing.from_channel stdin ;
   interactive := true ;
-  out := stdout ;
-  fprintf !out "Switching to interactive mode.\n%!"
+  out := Format.std_formatter ;
+  out_printf "Switching to interactive mode.\n%!"
 
 let interactive_or_exit () =
   if not !interactive then
@@ -69,16 +69,16 @@ let position_range (p1, p2) =
   if file = "" then
     ""
   else
-    sprintf ": file %s, line %d, characters %d-%d" file line char1 char2
+    Printf.sprintf ": file %s, line %d, characters %d-%d" file line char1 char2
 
 let type_inference_error (pos, ct) exp act =
-  eprintf "Typing error%s.\n%!" (position_range pos) ;
+  err_printf "Typing error%s.\n%!" (position_range pos) ;
   match ct with
   | CArg ->
-      eprintf "Expression has type %s but is used here with type %s\n%!"
+      err_printf "Expression has type %s but is used here with type %s\n%!"
         (ty_to_string act) (ty_to_string exp)
   | CFun ->
-      eprintf "Expression is applied to too many arguments\n%!"
+      err_printf "Expression is applied to too many arguments\n%!"
 
 let teyjus_only_keywords =
   ["closed"; "exportdef"; "import"; "infix"; "infixl"; "infixr"; "local";
@@ -89,7 +89,7 @@ let warn_on_teyjus_only_keywords (ktable, ctable) =
   let tokens = List.unique (ktable @ List.map fst ctable) in
   let used_keywords = List.intersect tokens teyjus_only_keywords in
   if used_keywords <> [] then
-    fprintf !out
+    out_printf
       "Warning: The following tokens are keywords in Teyjus: %s\n%!"
       (String.concat ", " used_keywords)
 
@@ -98,9 +98,9 @@ let update_subordination_sign sr sign =
 
 let read_specification name =
   clear_specification_cache () ;
-  fprintf !out "Reading specification %S%s\n%!" name
+  out_printf "Reading specification %S%s\n%!" name
     (if !load_path <> "." then
-       sprintf " (from %S)" !load_path
+       Printf.sprintf " (from %S)" !load_path
      else "") ;
   let read_sign = get_sign name in
   let () = warn_on_teyjus_only_keywords read_sign in
@@ -217,7 +217,7 @@ let maybe_make_importable ?(force=false) root =
     end in
   if not !Sys.interactive && force then
     let cmd = Printf.sprintf "%s %s -o %s.out -c %s" Sys.executable_name thm root thc in
-    Printf.eprintf "Running: %S.\n%!" cmd ;
+    err_printf "Running: %S.\n%!" cmd ;
     if Sys.command cmd <> 0 then
       failwithf "Could not create %S" thc
 
@@ -232,7 +232,7 @@ let import filename =
         let dig = (Marshal.from_channel ch : Digest.t) in
         let ver = (Marshal.from_channel ch : string) in
         if dig <> Version.self_digest then begin
-          Printf.printf
+          out_printf
             "Warning: %S was compiled with a different version (%s) of Abella; recompiling...\n%!"
             thc ver ;
           close_in ch ;
@@ -285,9 +285,9 @@ let import filename =
     end
   in
   if List.mem filename !imported then
-    fprintf !out "Ignoring import: %s has already been imported.\n%!" filename
+    out_printf "Ignoring import: %s has already been imported.\n%!" filename
   else begin
-    fprintf !out "Importing from %s\n%!" filename ;
+    out_printf "Importing from %s\n%!" filename ;
     aux filename
   end
 
@@ -309,14 +309,14 @@ let query q =
           ~def_unfold:Prover.def_unfold
           ~retype
           ~sc:(fun w ->
-              fprintf !out "Found solution:\n" ;
+              out_printf "Found solution:\n" ;
               List.iter
                 (fun (n, v) ->
-                   fprintf !out "%s = %s\n" n (term_to_string v))
+                   out_printf "%s = %s\n" n (term_to_string v))
                 ctx ;
-              fprintf !out "\n%!")
+              out_printf "\n%!")
       in
-      fprintf !out "No more solutions.\n%!"
+      out_printf "No more solutions.\n%!"
   | _ -> assert false
 
 let set_fail ~key ~expected v =
@@ -361,11 +361,11 @@ let set k v =
 
 let handle_search_witness w =
   if !witnesses then
-    fprintf !out "Witness: %s\n%!" (witness_to_string w)
+    out_printf "Witness: %s\n%!" (witness_to_string w)
 
 let term_witness (t, w) =
   if !witnesses then
-    fprintf !out "Witness: %s\n%!" (witness_to_string w)
+    out_printf "Witness: %s\n%!" (witness_to_string w)
 
 let suppress_proof_state_display = State.rref false
 
@@ -388,7 +388,7 @@ let rec process1 () =
     | Process_proof proc -> begin
         try process_proof1 proc.thm with
         | Prover.End_proof reason -> begin
-            fprintf !out "Proof %s.\n%!" begin
+            out_printf "Proof %s.\n%!" begin
               match reason with
               | `completed ->
                   proc.compile () ;
@@ -401,7 +401,7 @@ let rec process1 () =
       end
   end with
   | Failure "lexing: empty token" ->
-      if !annotate then fprintf !out "</pre>\n" ;
+      if !annotate then out_printf "</pre>\n" ;
       exit (if !interactive then 0 else 1)
   | Abella_types.Reported_parse_error ->
       State.Undo.undo () ;
@@ -409,7 +409,7 @@ let rec process1 () =
       interactive_or_exit ()
   | Parsing.Parse_error ->
       State.Undo.undo () ;
-      eprintf "Syntax error%s.\n%!" (position !lexbuf) ;
+      err_printf "Syntax error%s.\n%!" (position !lexbuf) ;
       Lexing.flush_input !lexbuf ;
       interactive_or_exit ()
   | TypeInferenceFailure(ci, exp, act) ->
@@ -419,16 +419,16 @@ let rec process1 () =
   | End_of_file ->
       write_compilation () ;
       if !switch_to_interactive then begin
-        if !annotate then fprintf !out "\n</pre>\n" ;
+        if !annotate then out_printf "\n</pre>\n" ;
         perform_switch_to_interactive ()
       end else begin
         match !current_state with
         | Process_top ->
-            if !annotate then fprintf !out "\n</pre>\n%!" ;
+            if !annotate then out_printf "\n</pre>\n%!" ;
             exit 0
         | _ ->
-            fprintf !out "Proof NOT completed.\n%!" ;
-            if !annotate then fprintf !out "</pre>\n%!" ;
+            out_printf "Proof NOT completed.\n%!" ;
+            if !annotate then out_printf "</pre>\n%!" ;
             exit 1
       end
   | e ->
@@ -438,17 +438,17 @@ let rec process1 () =
         | UserInterrupt -> "Interrupted (use ctrl-D to quit)"
         | _ -> Printexc.to_string e
       in
-      eprintf "Error: %s\n%!" msg ;
+      err_printf "Error: %s\n%!" msg ;
       interactive_or_exit ()
 
 and process_proof1 name =
   if not !suppress_proof_state_display then display !out ;
   suppress_proof_state_display := false ;
-  fprintf !out "%s < %!" name ;
+  out_printf "%s < %!" name ;
   let input = Parser.command Lexer.token !lexbuf in
   if not !interactive then begin
     let pre, post = if !annotate then "<b>", "</b>" else "", "" in
-    fprintf !out "%s%s.%s\n%!" pre (command_to_string input) post
+    out_printf "%s%s.%s\n%!" pre (command_to_string input) post
   end ;
   begin match input with
   | Induction(args, hn)      -> induction ?name:hn args
@@ -500,17 +500,17 @@ and process_proof1 name =
   | Common(Set(k, v))      -> set k v
   | Common(Show nm)        ->
       show nm ;
-      fprintf !out "\n%!" ;
+      out_printf "\n%!" ;
       suppress_proof_state_display := true
   | Common(Quit)           -> raise End_of_file
   end
 
 and process_top1 () =
-  fprintf !out "Abella < %!" ;
+  out_printf "Abella < %!" ;
   let input = Parser.top_command Lexer.token !lexbuf in
   if not !interactive then begin
     let pre, post = if !annotate then "<b>", "</b>" else "", "" in
-    fprintf !out "%s%s.%s\n%!" pre (top_command_to_string input) post
+    out_printf "%s%s.%s\n%!" pre (top_command_to_string input) post
   end ;
   begin match input with
   | Theorem(name, tys, thm) ->
@@ -584,18 +584,18 @@ and process_top1 () =
       compile (CClose(List.map (fun id -> (id, Subordination.subordinates !sr id)) ids))
   end ;
   if !interactive then flush stdout ;
-  fprintf !out "\n%!"
+  out_printf "\n%!"
 
 (* Command line and startup *)
 
-let welcome_msg = sprintf "Welcome to Abella %s\n" Version.version
+let welcome_msg = Printf.sprintf "Welcome to Abella %s\n" Version.version
 
 let usage_message = Printf.sprintf "%s [options] <theorem-file>" begin
     if !Sys.interactive then "abella" else Filename.basename Sys.executable_name
   end
 
 let set_output filename =
-  out := open_out filename
+  out := Format.formatter_of_out_channel (open_out filename)
 
 let set_compile_out filename =
   compile_out := Some (open_out_bin filename)
@@ -652,7 +652,7 @@ let set_input () =
         interactive := false ;
         lexbuf := lexbuf_from_file filename
     | fs ->
-        eprintf "Error: Multiple files specified as input: %s\n%!"
+        err_printf "Error: Multiple files specified as input: %s\n%!"
           (String.concat ", " fs) ;
         exit 1
 
@@ -662,11 +662,11 @@ let add_input filename =
 let number fn () =
   if !annotate then begin
     incr count ;
-    fprintf !out "<a name=\"%d\"></a>\n%!" !count ;
-    fprintf !out "<pre class=\"code\">\n%!" ;
+    out_printf "<a name=\"%d\"></a>\n%!" !count ;
+    out_printf "<pre class=\"code\">\n%!" ;
   end ;
   fn () ;
-  if !annotate then fprintf !out "</pre>\n%!"
+  if !annotate then out_printf "</pre>\n%!"
 
 let _ =
   Sys.set_signal Sys.sigint
@@ -679,7 +679,7 @@ let _ =
       List.iter Depend.print_deps !input_files ;
     end else begin
       set_input () ;
-      fprintf !out "%s%!" welcome_msg ;
+      out_printf "%s%!" welcome_msg ;
       State.Undo.set_enabled !interactive ;
       while true do number process1 () done
     end

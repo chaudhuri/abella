@@ -630,7 +630,7 @@ let normalize_binders =
               if List.mem_assoc v used then begin
                 let (fv, used) = fresh_wrt ~ts:0 Constant v ty used in
                 let rens = (v, fv) :: rens in
-                (* Printf.fprintf stderr "Freshened %s to %s [used = %s]\n%!" *)
+                (* err_printf "Freshened %s to %s [used = %s]\n%!" *)
                 (*   v (term_to_name fv) *)
                 (*   (String.concat "," (List.map fst used)) ; *)
                 let bvars = (term_to_name fv, ty) :: bvars in
@@ -643,7 +643,7 @@ let normalize_binders =
           end (rens, used, []) bvars
         in
         let bvars = List.rev rev_bvars in
-        (* Printf.fprintf stderr "Descended under: %s; used = %s\n%!" *)
+        (* err_printf "Descended under: %s; used = %s\n%!" *)
         (*   (String.concat "," (List.map fst bvars)) *)
         (*   (String.concat "," (List.map fst used)) ; *)
         binding binder bvars (aux rens used body)

@@ -17,6 +17,7 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Output
 open Accumulate
 open Extensions
 open Abella_types
@@ -38,7 +39,7 @@ let get_thm_depend filename =
     with
       | End_of_file -> ()
       | Parsing.Parse_error ->
-          eprintf "Syntax error%s.\n%!" (position lexbuf) ;
+          err_printf "Syntax error%s.\n%!" (position lexbuf) ;
           exit 1
     end ;
     (List.rev !specs, List.rev !imports)
@@ -50,7 +51,7 @@ let rec get_sig_depend filename =
   try
     match H.find sig_depend_cache filename with
       | None ->
-          eprintf "Error: Cyclic dependency in %s.sig\n%!" filename ;
+          err_printf "Error: Cyclic dependency in %s.sig\n%!" filename ;
           exit 1
       | Some deps -> deps
   with
@@ -67,7 +68,7 @@ let rec get_mod_depend filename =
   try
     match H.find mod_depend_cache filename with
       | None ->
-          eprintf "Error: Cyclic dependency in %s.mod\n%!" filename ;
+          err_printf "Error: Cyclic dependency in %s.mod\n%!" filename ;
           exit 1
       | Some deps -> deps
   with
@@ -86,7 +87,7 @@ let print_deps filename =
   let (specs, imports) = get_thm_depend filename in
   let spec_depends =
     List.unique (List.flatten_map get_sig_depend specs @
-                   List.flatten_map get_mod_depend specs)
+                 List.flatten_map get_mod_depend specs)
   in
   let depends =
     sprintf "%s.thm %s %s"
@@ -94,5 +95,5 @@ let print_deps filename =
       (String.concat " " (List.map (fun i -> i ^ ".thc") imports))
       (String.concat " " spec_depends)
   in
-    printf "%s.thc: %s\n%!" filename depends ;
-    printf "%s.out: %s\n%!" filename depends
+  out_printf "%s.thc: %s\n%!" filename depends ;
+  out_printf "%s.out: %s\n%!" filename depends

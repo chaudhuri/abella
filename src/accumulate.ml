@@ -17,6 +17,7 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Output
 open Abella_types
 open Typing
 open Extensions
@@ -57,7 +58,7 @@ let read_lp ext parser name =
       parser Lexer.token lexbuf
     with
       | Parsing.Parse_error ->
-          eprintf "Syntax error%s.\n%!" (position lexbuf) ;
+          err_printf "Syntax error%s.\n%!" (position lexbuf) ;
           failwith "Failed while reading specification"
 
 let read_lpsig = read_lp ".sig" Parser.lpsig

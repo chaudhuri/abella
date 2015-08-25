@@ -482,7 +482,7 @@ let replace_underscores head body =
 let clause_map : term Itab.t ref = ref Itab.empty
 let seen_name cname = Itab.mem cname !clause_map
 let register_clause name clause =
-  (* Printf.printf "Note: registered %S : %s\n%!" name *)
+  (* err_printf "Note: registered %S : %s\n%!" name *)
   (*   (Term.term_to_string clause) ; *)
   clause_map := Itab.add name clause !clause_map
 let lookup_clause cname =

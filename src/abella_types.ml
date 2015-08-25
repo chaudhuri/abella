@@ -20,7 +20,6 @@
 open Metaterm
 open Term
 open Typing
-open Printf
 open Extensions
 
 type uclause = string option * uterm * uterm list
@@ -195,7 +194,7 @@ let udef_to_string (head, body) =
   if body = UTrue then
     umetaterm_to_string head
   else
-    sprintf "%s := %s" (umetaterm_to_string head)
+    Printf.sprintf "%s := %s" (umetaterm_to_string head)
       (umetaterm_to_formatted_string body)
 
 let udef_clauses_to_string cls =
@@ -210,7 +209,7 @@ let set_value_to_string v =
   match v with
     | Str s -> s
     | Int d -> string_of_int d
-    | QStr s -> sprintf "%S" s
+    | QStr s -> Printf.sprintf "%S" s
 
 let id_list_to_string ids =
   String.concat ", " ids
@@ -232,15 +231,15 @@ let clearable_to_string cl =
 let common_command_to_string cc =
   match cc with
   | Back ->
-      sprintf "#<back>"
+      Printf.sprintf "#<back>"
   | Reset ->
-      sprintf "#<reset>"
+      Printf.sprintf "#<reset>"
   | Set(k, v) ->
-      sprintf "Set %s %s" k (set_value_to_string v)
+      Printf.sprintf "Set %s %s" k (set_value_to_string v)
   | Show nm ->
-      sprintf "Show %s" nm
+      Printf.sprintf "Show %s" nm
   | Quit ->
-      sprintf "Quit"
+      Printf.sprintf "Quit"
 
 let block_to_string t2s bl =
   let buf = Buffer.create 19 in
@@ -275,34 +274,34 @@ let gen_to_string tys =
 let top_command_to_string tc =
   match tc with
     | Theorem(name, tys, body) ->
-        sprintf "Theorem %s%s : \n%s" name (gen_to_string tys)
+        Printf.sprintf "Theorem %s%s : \n%s" name (gen_to_string tys)
           (umetaterm_to_formatted_string body)
     | Define(flavor, idtys, cls) ->
-        sprintf "%s %s by \n%s"
+        Printf.sprintf "%s %s by \n%s"
           (match flavor with Inductive -> "Define" | _ -> "CoDefine")
           (idtys_to_string idtys) (udef_clauses_to_string cls) ;
     | Schema sch ->
-        sprintf "Schema %s := %s" sch.sch_name
+        Printf.sprintf "Schema %s := %s" sch.sch_name
           (sch.sch_blocks |>
            List.map (fun bl -> block_to_string uterm_to_string bl) |>
            String.concat "; ")
     | Import filename ->
-        sprintf "Import \"%s\"" filename
+        Printf.sprintf "Import \"%s\"" filename
     | Specification filename ->
-        sprintf "Specification \"%s\"" filename
+        Printf.sprintf "Specification \"%s\"" filename
     | Query q ->
-        sprintf "Query %s" (umetaterm_to_formatted_string q)
+        Printf.sprintf "Query %s" (umetaterm_to_formatted_string q)
     | Kind ids ->
-        sprintf "Kind %s type" (id_list_to_string ids)
+        Printf.sprintf "Kind %s type" (id_list_to_string ids)
     | Type(ids, ty) ->
-        sprintf "Type %s %s" (id_list_to_string ids) (ty_to_string ty)
+        Printf.sprintf "Type %s %s" (id_list_to_string ids) (ty_to_string ty)
     | Close ids ->
-        sprintf "Close %s" (id_list_to_string ids)
+        Printf.sprintf "Close %s" (id_list_to_string ids)
     | SSplit(id, ids) ->
         if ids <> [] then
-          sprintf "Split %s as %s" id (id_list_to_string ids)
+          Printf.sprintf "Split %s as %s" id (id_list_to_string ids)
         else
-          sprintf "Split %s" id
+          Printf.sprintf "Split %s" id
     | TopCommon(cc) ->
         common_command_to_string cc
 
@@ -312,7 +311,7 @@ let withs_to_string ws =
 
 let hn_to_string = function
   | None -> ""
-  | Some hn -> sprintf "%s : " hn
+  | Some hn -> Printf.sprintf "%s : " hn
 
 let clearables_to_string cls =
   List.map clearable_to_string cls |> String.concat " "
@@ -324,65 +323,65 @@ let dbound_to_string = function
 let command_to_string c =
   match c with
     | Induction(is, hn) ->
-        sprintf "%sinduction on %s" (hn_to_string hn)
+        Printf.sprintf "%sinduction on %s" (hn_to_string hn)
           (String.concat " " (List.map string_of_int is))
     | CoInduction None -> "coinduction"
     | CoInduction (Some hn) -> "coinduction " ^ hn
     | Apply(h, [], [], hn) ->
-        sprintf "%sapply %s" (hn_to_string hn)
+        Printf.sprintf "%sapply %s" (hn_to_string hn)
           (clearable_to_string h)
     | Apply(h, hs, [], hn) ->
-        sprintf "%sapply %s to %s"
+        Printf.sprintf "%sapply %s to %s"
           (hn_to_string hn)
           (clearable_to_string h)
           (clearables_to_string hs)
     | Apply(h, [], ws, hn) ->
-        sprintf "%sapply %s with %s"
+        Printf.sprintf "%sapply %s with %s"
           (hn_to_string hn)
           (clearable_to_string h)
           (withs_to_string ws)
     | Apply(h, hs, ws, hn) ->
-        sprintf "%sapply %s to %s with %s"
+        Printf.sprintf "%sapply %s to %s with %s"
           (hn_to_string hn)
           (clearable_to_string h)
           (clearables_to_string hs)
           (withs_to_string ws)
     | Backchain(dbound, h, []) ->
-        sprintf "backchain%s %s"
+        Printf.sprintf "backchain%s %s"
           (dbound_to_string dbound)
           (clearable_to_string h)
     | Backchain(dbound, h, ws) ->
-        sprintf "backchain%s %s with %s"
+        Printf.sprintf "backchain%s %s with %s"
           (dbound_to_string dbound)
           (clearable_to_string h)
           (withs_to_string ws)
     | Cut(h1, h2, hn) ->
-        sprintf "%scut %s with %s"
+        Printf.sprintf "%scut %s with %s"
           (hn_to_string hn)
           (clearable_to_string h1)
           (clearable_to_string h2)
     | CutFrom(h, arg, t, hn) ->
-        sprintf "%scut %s from %s with %s"
+        Printf.sprintf "%scut %s from %s with %s"
           (hn_to_string hn) (uterm_to_string t)
           (clearable_to_string h)
           (clearable_to_string arg)
     | SearchCut(h, hn) ->
-        sprintf "%s cut %s" (hn_to_string hn)
+        Printf.sprintf "%s cut %s" (hn_to_string hn)
           (clearable_to_string h)
     | Inst(h, ws, hn) ->
-        sprintf "%s inst %s with %s" (hn_to_string hn)
+        Printf.sprintf "%s inst %s with %s" (hn_to_string hn)
           (clearable_to_string h)
           (withs_to_string ws)
     | Case(Keep (h, _), hn) ->
-        sprintf "%scase %s (keep)" (hn_to_string hn) h
+        Printf.sprintf "%scase %s (keep)" (hn_to_string hn) h
     | Case(Remove (h, _), hn) ->
-        sprintf "%scase %s" (hn_to_string hn) h
+        Printf.sprintf "%scase %s" (hn_to_string hn) h
     | Assert(t, hn) ->
-        sprintf "%sassert %s"
+        Printf.sprintf "%sassert %s"
           (hn_to_string hn)
           (umetaterm_to_formatted_string t)
     | Pick (dbound, bs, t) ->
-        sprintf "pick%s %s, %s"
+        Printf.sprintf "pick%s %s, %s"
           (dbound_to_string dbound)
           (idtys_to_string bs)
           (umetaterm_to_formatted_string t)
@@ -391,32 +390,32 @@ let command_to_string c =
           | `EXISTS -> "exists"
           | `WITNESS -> "witness"
         in
-        sprintf "%s %s" hows (uterm_to_string t)
+        Printf.sprintf "%s %s" hows (uterm_to_string t)
     | Clear hs ->
-        sprintf "clear %s" (String.concat " " hs)
+        Printf.sprintf "clear %s" (String.concat " " hs)
     | Abbrev(h, s) ->
-        sprintf "abbrev %s \"%s\"" h s
+        Printf.sprintf "abbrev %s \"%s\"" h s
     | Unabbrev hs ->
-        sprintf "unabbrev %s" (String.concat " " hs)
+        Printf.sprintf "unabbrev %s" (String.concat " " hs)
     | Rename(hfrom, hto) ->
-        sprintf "rename %s to %s" hfrom hto
+        Printf.sprintf "rename %s to %s" hfrom hto
     | Monotone(h, t) ->
-        sprintf "monotone %s with %s"
+        Printf.sprintf "monotone %s with %s"
           (clearable_to_string h)
           (uterm_to_string t)
     | Permute(ids, t) ->
-        sprintf "permute (%s)%s"
+        Printf.sprintf "permute (%s)%s"
           (String.concat " " ids)
           (match t with None -> "" | Some h -> " " ^ h)
     | Search(`nobounds) -> "search"
-    | Search(`depth d) -> sprintf "search %d" d
-    | Search(`witness w) -> sprintf "search with %s" (witness_to_string w)
+    | Search(`depth d) -> Printf.sprintf "search %d" d
+    | Search(`witness w) -> Printf.sprintf "search with %s" (witness_to_string w)
     | Split -> "split"
     | SplitStar -> "split*"
     | Left -> "left"
     | Right -> "right"
     | Unfold (clause_sel, sol_sel) ->
-        sprintf "unfold%s%s"
+        Printf.sprintf "unfold%s%s"
           (match clause_sel with
            | Select_any -> ""
            | Select_num n -> " " ^ string_of_int n
@@ -425,7 +424,7 @@ let command_to_string c =
            | Solution_first -> ""
            | Solution_all -> " (all)")
     | Intros [] -> "intros"
-    | Intros ids -> sprintf "intros %s" (String.concat " " ids)
+    | Intros ids -> Printf.sprintf "intros %s" (String.concat " " ids)
     | Skip -> "skip"
     | Abort -> "abort"
     | Undo -> "undo"

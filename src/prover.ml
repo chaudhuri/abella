@@ -17,6 +17,7 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
+open Output
 open Term
 open Typing
 open Metaterm
@@ -138,14 +139,14 @@ let fresh_hyp_name base =
 
 (* let normalize mt = *)
 (*   let before = metaterm_to_string mt in *)
-(*   Printf.fprintf stderr "normalizing\n%s\n%!" before ; *)
+(*   err_printf "normalizing\n%s\n%!" before ; *)
 (*   let mt = normalize mt in *)
 (*   let after = metaterm_to_string mt in *)
-(*   Printf.fprintf stderr "normalized form\n%s\n%!" after ; *)
+(*   err_printf "normalized form\n%s\n%!" after ; *)
 (*   mt *)
 
 let normalize_sequent () =
-  (* Printf.fprintf stderr "Normalizing Sequent %s\n%!" sequent.name ; *)
+  (* err_printf "Normalizing Sequent %s\n%!" sequent.name ; *)
   sequent.goal <- normalize sequent.goal ;
   sequent.hyps <-
     sequent.hyps |> List.map (fun h -> { h with term = normalize h.term })
@@ -170,13 +171,13 @@ let built_ins_done = ref false
 let add_defs typarams preds flavor clauses =
   List.iter begin fun (id, _) ->
     if List.mem id [k_fresh ; k_name] && !built_ins_done then
-      Printf.eprintf "Warning: %s shadows a built-in definition. \
-                    \ Schemas may no longer work.\n%!" id
+      err_printf "Warning: %s shadows a built-in definition. \
+                 \ Schemas may no longer work.\n%!" id
     else if H.mem defs_table id then
       failwithf "Predicate %s has already been defined" id ;
   end preds ;
   (* List.iter begin fun (head, body) -> *)
-  (*   Format.eprintf "%a := %a@." format_metaterm head format_metaterm body *)
+  (*   err_printf "%a := %a@." format_metaterm head format_metaterm body *)
   (* end defs ; *)
   let mutual = List.fold_left begin fun mutual (id, ty) ->
       Itab.add id ty mutual
@@ -278,7 +279,7 @@ let instantiate_clauses_aux =
         end with Not_found -> tymap
       end Itab.empty def.typarams in
     (* Itab.iter begin fun v ty -> *)
-    (*   Format.eprintf "instantiating: %s <- %s@." v (ty_to_string ty) *)
+    (*   err_printf "instantiating: %s <- %s@." v (ty_to_string ty) *)
     (* end tymap ; *)
     List.map begin fun cl ->
       if clause_head_name cl = pn then
@@ -437,7 +438,7 @@ let format_display fmt =
   pp_print_flush fmt ()
 
 let display out =
-  format_display (formatter_of_out_channel out)
+  format_display out
 
 let get_display () =
   let b = Buffer.create 100 in
@@ -493,7 +494,7 @@ let add_if_new_var (name, v) =
 
 let add_lemma name tys lemma =
   if H.mem lemmas name then
-    Format.eprintf "Warning: overriding existing lemma named %S@." name ;
+    err_printf "Warning: overriding existing lemma named %S@." name ;
   H.replace lemmas name (tys, lemma)
 
 let () =
@@ -520,7 +521,7 @@ let () =
         end
       end
     end in
-  (* Format.eprintf "prune_bod: %a@." format_metaterm prune_bod ; *)
+  (* err_printf "prune_bod: %a@." format_metaterm prune_bod ; *)
   add_lemma "prune_arg" [a] prune_bod
 
 let get_hyp name =
@@ -580,8 +581,7 @@ let next_subgoal () =
 (* Show *)
 
 let print_theorem name (tys, thm) =
-  let ff = Format.formatter_of_out_channel !Checks.out in
-  Format.fprintf ff "@[<hv2>Theorem %s%s :@ %a@].@."
+  out_printf "@[<hv2>Theorem %s%s :@ %a@].@."
     name (gen_to_string tys) format_metaterm thm
 
 let show name =

@@ -72,7 +72,7 @@ module Undo = struct
 
   let describe msg =
     ()
-    (* Printf.eprintf "AFTER(%s) : %d\n%!" msg (List.length !stack) *)
+    (* err_printf "AFTER(%s) : %d\n%!" msg (List.length !stack) *)
 
   let reset () =
     stack := [] ;

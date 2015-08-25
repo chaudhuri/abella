@@ -2,7 +2,7 @@
  * Author: Kaustuv Chaudhuri <kaustuv.chaudhuri@inria.fr>
  * Copyright (C) 2015  Inria (Institut National de Recherche
  *                     en Informatique et en Automatique)
- * See LICENSE for licensing details.
+ * See COPYNIG for licensing details.
  *)
 
 (* BEGIN global Abella configuration *)
@@ -12,14 +12,14 @@ let stratification_warnings_are_errors = false
 
 (* END global Abella configuration *)
 
+open Output
+
 open Term
 open Metaterm
 open Abella_types
 open Typing
 
 open Extensions
-
-let out = ref stdout
 
 (* Checks *)
 
@@ -122,7 +122,7 @@ let warn_stratify names head term =
       in
       if stratification_warnings_are_errors
       then failwith msg
-      else Printf.fprintf !out "Warning: %s\n%!" msg
+      else out_printf "Warning: %s\n%!" msg
 
 let check_theorem thm =
   ensure_no_restrictions thm
@@ -180,7 +180,7 @@ let check_basic_stratification ~def =
                 name
         in
         if stratification_warnings_are_errors then failwith msg
-        else Printf.fprintf !out "Warning: %s\n%!" msg
+        else out_printf "Warning: %s\n%!" msg
   in
   List.iter check_clause def.clauses
 
