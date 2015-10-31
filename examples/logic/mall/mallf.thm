@@ -1,0 +1,148 @@
+%%% Meta-theory of focused propositional MALL
+
+Kind nat type.
+Type z nat.
+Type s nat -> nat.
+
+Define is_nat : nat -> prop by
+  is_nat z
+; is_nat (s X) := is_nat X.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Syntax
+
+Kind pfm,nfm,atm type.
+
+% An infinite set of candidate atoms
+Type a,b,c,d,p,q          atm.        % for convenience
+Type $atm                 nat -> atm.
+
+Type patm                 atm -> pfm.
+Type tens,plus            pfm -> pfm -> pfm.
+Type one,zero             pfm.
+Type shp                  nfm -> pfm.
+
+Type natm                 atm -> nfm.
+Type par,wth              nfm -> nfm -> nfm.
+Type bot,top              nfm.
+Type shn                  pfm -> nfm.
+
+Define
+  is_pos : pfm -> prop
+, is_neg : nfm -> prop by
+
+; is_pos (patm A)
+; is_pos (tens P Q) := is_pos P /\ is_pos Q
+; is_pos one
+; is_pos (plus P Q) := is_pos P /\ is_pos Q
+; is_pos zero
+; is_pos (shp N) := is_neg N
+
+; is_neg (natm A)
+; is_neg (par M N) := is_neg M /\ is_neg N
+; is_neg bot
+; is_neg (wth M N) := is_neg M /\ is_neg N
+; is_neg top
+; is_neg (shn P) := is_pos P.
+
+Define dual : pfm -> nfm -> prop by
+; dual (patm A) (natm A)
+; dual (shp N) (shn P) := dual P N
+; dual (tens P Q) (par M N)  := dual P M /\ dual Q N
+; dual one bot
+; dual (plus P Q) (wth M N)  := dual P M /\ dual Q N
+; dual zero top.
+
+Theorem $dual_det :
+   (forall P Q N, dual P N -> dual Q N -> P = Q)
+/\ (forall P M N, dual P M -> dual P N -> M = N).
+induction on 1 1. split.
+intros. case H1.
+  case H2. search with =.
+  case H2. apply IH1 to H3 H4. search with =.
+  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search with =.
+  case H2. search with =.
+  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search with =.
+  case H2. search with =.
+intros. case H1.
+  case H2. search with =.
+  case H2. apply IH to H3 H4. search with =.
+  case H2. apply IH1 to *H3 *H5. apply IH1 to *H4 *H6. search with =.
+  case H2. search with =.
+  case H2. apply IH1 to *H3 *H5. apply IH1 to *H4 *H6. search with =.
+  case H2. search with =.
+
+Split $dual_det as dual_det1, dual_det2.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Formula multisets
+
+% An injector that lets reuse the olist type for lists of formulas
+Type $pfm pfm -> o.
+Type $nfm nfm -> o.
+
+Define remove : olist -> o -> olist -> prop by
+  remove (A :: L) A L
+; remove (B :: L) A (B :: K) := remove L A K.
+
+Theorem remove_incl : forall L A K B,
+  remove L A K -> member B K -> member B L.
+induction on 1. intros. case H1.
+  search.
+  case H2. search. unfold. backchain IH.
+
+Theorem remove_charac : forall L A K B,
+  remove L A K -> member B L -> B = A \/ member B K.
+induction on 2. intros. case H2.
+  case H1. search. search.
+  case H1. search.
+    apply IH to H4 H3. case H5. search. search.
+
+Define append : olist -> olist -> olist -> prop by
+  append nil L L
+; append (A :: L1) L2 (A :: K) := append L1 L2 K.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% MALL rules
+
+Define
+  act : olist -> olist -> prop
+, foc : olist -> pfm -> prop    by
+
+% decide
+; act L nil := exists P K, remove L ($pfm P) K /\ foc K P
+
+% release
+; foc L (shp N) := act L ($nfm N :: nil)
+
+% store
+; act L ($nfm (shn P) :: K) := act ($pfm P :: L) K
+; act L ($nfm (natm A) :: K) := act ($nfm (natm A) :: L) K
+
+% identity
+; foc ($nfm (natm A) :: nil) (patm A)
+
+% negative
+; act L ($nfm (wth M N) :: K) := act L ($nfm M :: K) /\ act L ($nfm N :: K)
+; act L ($nfm top :: K) := true
+
+; act L ($nfm (par M N) :: K) := act L ($nfm M :: $nfm N :: K)
+; act L ($nfm bot :: K) := act L K
+
+% positive
+; foc L (tens P Q) := exists K1 K2, append K1 K2 L /\ foc K1 P /\ foc K2 Q
+; foc nil one
+; foc L (plus P Q) := foc L P
+; foc L (plus P Q) := foc L Q
+.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Cut-elimination
+
+Theorem cut :
+    (forall L1 L2 P N K LL KK,
+       dual P N ->
+       foc L1 P -> act L2 K ->
+       remove K ($nfm N) KK -> append L1 L2 LL ->
+       act LL KK).
