@@ -98,11 +98,40 @@ induction on 2. intros. case H2.
   case H1. search.
     apply IH to H4 H3. case H5. search. search.
 
-Define append : olist -> olist -> olist -> prop by
-  append nil L L
-; append (A :: L1) L2 (A :: K) := append L1 L2 K.
+Define partition : olist -> olist -> olist -> prop by
+  partition nil nil nil
+; partition (A :: L1) L2 (A :: K) := partition L1 L2 K
+; partition L1 (A :: L2) (A :: K) := partition L1 L2 K.
 
+Type m,r nat -> nat -> o.
 
+Define mem : olist -> prop by
+  mem nil
+; mem (m X M :: Rst) := (forall N, member (m X N) Rst -> false) /\ mem Rst.
+
+Set instantiations on.
+
+Theorem part_prune : forall L1 L2 L, nabla (x:nat),
+  partition (L1 x) (L2 x) L ->
+  exists L1' L2', (L1 = x\ L1') /\ (L2 = x\ L2').
+induction on 1. intros. case H1.
+  search.
+  apply IH to H2. search.
+  apply IH to H2. search.
+
+Theorem foo : forall L L1 L2, mem L -> partition L1 L2 L -> mem L1 /\ mem L2.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2.
+    apply IH to H4 H5. 
+      assert forall N, member (m X N) L3 -> false. skip.
+      search.
+
+    apply part_prune to H4.
+     apply IH to H3 H4. search.
+    apply part_prune to H4.
+     apply IH to H3 H4. search.
+    
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% MALL rules
 
@@ -131,7 +160,7 @@ Define
 ; act L ($nfm bot :: K) := act L K
 
 % positive
-; foc L (tens P Q) := exists K1 K2, append K1 K2 L /\ foc K1 P /\ foc K2 Q
+; foc L (tens P Q) := exists K1 K2, partition K1 K2 L /\ foc K1 P /\ foc K2 Q
 ; foc nil one
 ; foc L (plus P Q) := foc L P
 ; foc L (plus P Q) := foc L Q
@@ -144,5 +173,5 @@ Theorem cut :
     (forall L1 L2 P N K LL KK,
        dual P N ->
        foc L1 P -> act L2 K ->
-       remove K ($nfm N) KK -> append L1 L2 LL ->
+       remove K ($nfm N) KK -> partition L1 L2 LL ->
        act LL KK).
