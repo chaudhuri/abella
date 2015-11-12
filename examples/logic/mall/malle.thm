@@ -73,6 +73,11 @@ Split $dual_det as dual_det1, dual_det2.
 % An injector that lets reuse the olist type for lists of formulas
 Type $fm fm -> o.
 
+Define divide : olist -> olist -> olist -> prop by
+  divide L L1 L2 :=
+    forall E M N, membern E M L1 -> membern E N L2 -> exists K, sum M N K /\ membern E K L.
+
+% A concrete version of divide to be used with backchaining
 Define merge : olist -> olist -> olist -> prop by
   merge nil nil nil
 ; merge (A :: L1) L2 (A :: K) := merge L1 L2 K
@@ -190,10 +195,6 @@ induction on 3. intros. case H3.
   case H2. apply IH to H1 H5 H4. witness s K1. split. backchain sum_s. search.
     apply IH to H1 H6 H4. search.
 
-Define divide : olist -> olist -> olist -> prop by
-  divide L L1 L2 :=
-    forall E M N, membern E M L1 -> membern E N L2 -> exists K, sum M N K /\ membern E K L.
-
 Theorem merge_divide : forall L1 L2 L,
   merge L1 L2 L -> divide L L1 L2.
 intros. unfold. intros. apply merge_count to H2 H3 H1. search.
@@ -242,62 +243,56 @@ Theorem divide_sum : forall E M L1 N L2 L K,
 intros. case H3. apply H5 to H1 H2.
   apply sum_det3 to H4 H6. search.
 
+Define remove : olist -> fm -> olist -> prop by
+  remove L F K := divide L ($fm F :: nil) K.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% MALL rules
 
-Define
-  seq : olist -> prop,
-  rule : olist -> fm -> prop by
-
-; seq L := exists K F, divide L K ($fm F :: nil) /\ rule K F
-
-; rule ($fm (natm A) :: nil) (patm A)
-
-; rule K (tens F G) :=
-    exists K1 K2, divide K K1 K2 /\ seq ($fm F :: K1) /\ seq ($fm G :: K2)
-; rule nil one
-; rule K (plus F G) := seq ($fm F :: K)
-; rule K (plus F G) := seq ($fm G :: K)
-
-; rule K (par F G) := seq ($fm F :: $fm G :: K)
-; rule K bot := seq K
-; rule K (wth F G) := seq ($fm F :: K) /\ seq ($fm G :: K)
-; rule K top
-.
+Define seq : olist -> prop by
+; seq L := exists A, divide L ($fm (natm A) :: nil) ($fm (patm A) :: nil)
+; seq L := exists L1 L2 L12 P Q, remove L (tens P Q) L12 /\ divide L12 L1 L2 /\
+             seq ($fm P :: L1) /\ seq ($fm Q :: L2)
+; seq L := L = $fm one :: nil
+; seq L := exists L1 P Q, remove L (plus P Q) L1 /\ seq ($fm P :: L1)
+; seq L := exists L1 P Q, remove L (plus P Q) L1 /\ seq ($fm Q :: L1)
+; seq L := exists L1 M N, remove L (par M N) L1 /\ seq ($fm M :: $fm N :: L1)
+; seq L := exists L1, remove L bot L1 /\ seq L1
+; seq L := exists L1 M N, remove L (wth M N) L1 /\ seq ($fm M :: L1) /\ seq ($fm N :: L1)
+; seq L := exists L1, remove L top L1.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Identity reduction
 
 Theorem id : forall F G, dual F G -> seq ($fm F :: $fm G :: nil).
 induction on 1. intros. case H1.
-  unfold 1. witness $fm (natm A) :: nil. witness patm A. split. backchain merge_divide.
-    search.
-  unfold 1. witness $fm (tens P Q) :: nil. witness par M N. split. backchain merge_divide.
-    unfold. unfold. witness $fm M :: $fm N :: nil. witness tens P Q. split. backchain merge_divide.
-    apply IH to H2. apply IH to H3. unfold. witness ($fm M :: nil). witness ($fm N :: nil). split.
-     backchain merge_divide. search. search.
-  unfold. witness $fm one :: nil. witness bot. split. backchain merge_divide. unfold.
-    unfold. witness nil. witness one. split. backchain merge_divide. search.
-  apply IH to H2. apply IH to H3. unfold.
-    witness $fm (plus P Q) :: nil. witness wth M N. split. backchain merge_divide. unfold.
-      unfold. witness $fm M :: nil. witness plus P Q. split. backchain merge_divide. search.
-      unfold. witness $fm N :: nil. witness plus P Q. split. backchain merge_divide. search.
-  unfold. witness $fm zero :: nil. witness top. split. backchain merge_divide.
-    search.
+  unfold 1. witness A. backchain merge_divide.
+  unfold 6. witness $fm (tens P Q) :: nil. witness M. witness N. split.
+    unfold. backchain merge_divide.
+    unfold 2. witness $fm M :: nil. witness $fm N :: nil. witness $fm M :: $fm N :: nil.
+     witness P. witness Q. split.
+      unfold. backchain merge_divide.
+      backchain merge_divide.
+      backchain IH. backchain IH.
+   unfold 7. witness $fm one :: nil. split.
+     unfold. backchain merge_divide.
+     search.
+   unfold 8. witness $fm (plus P Q) :: nil. witness M. witness N. split.
+     unfold. backchain merge_divide.
+     unfold 4. witness $fm M :: nil. witness P. witness Q. split.
+       unfold. backchain merge_divide.
+       backchain IH.
+     unfold 5. witness $fm N :: nil. witness P. witness Q. split.
+       unfold. backchain merge_divide.
+       backchain IH.
+   unfold 9. witness $fm zero :: nil. unfold. backchain merge_divide.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Cut-elimination
 
-Theorem cut :
-   (forall P N L1 L2 K1 K2,
-      dual P N ->
-      seq L1 -> divide L1 K1 ($fm P :: nil) ->
-      seq L2 -> divide L2 K2 ($fm N :: nil) ->
-      exists K, divide K K1 K2 /\ seq K)
-/\ (forall P N L1 L2 K1 K2 F,
-      dual P N ->
-      rule L1 F -> merge K1 ($fm P :: nil) L1 ->
-      seq L2 -> merge K2 ($fm N :: nil) L2 ->
-      exists K, merge K1 K2 K /\ rule K F).
-RIH1 : induction on 1 1. HIH1 : induction on 2 2. split.
-intros. case H3. case H2.
+Theorem cut : forall P N L1 L2 K1 K2,
+  dual P N ->
+  seq L1 -> remove L1 P K1 ->
+  seq L2 -> remove L2 N K2 ->
+  exists K, divide K K1 K2 /\ seq K.
+RH : induction on 1. HH : induction on 2. intros.
