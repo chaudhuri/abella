@@ -1,5 +1,8 @@
 %%% Meta-theory of focused propositional MALL
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Natural numbers
+
 Kind nat type.
 Type z nat.
 Type s nat -> nat.
@@ -7,6 +10,65 @@ Type s nat -> nat.
 Define is_nat : nat -> prop by
   is_nat z
 ; is_nat (s X) := is_nat X.
+
+Define sum : nat -> nat -> nat -> prop by
+; sum z N N := is_nat N
+; sum (s M) N (s K) := sum M N K.
+
+Theorem sum_z : forall M, is_nat M -> sum M z M.
+induction on 1. intros. case H1.
+  search.
+  apply IH to H2. search.
+
+Theorem sum_s : forall M N K, sum M N K -> sum M (s N) (s K).
+induction on 1. intros. case H1.
+  search.
+  apply IH to H2. search.
+
+Theorem sum_comm : forall M N K, sum M N K -> sum N M K.
+induction on 1. intros. case H1.
+  backchain sum_z.
+  backchain sum_s. backchain IH.
+
+Theorem sum_impos : forall M N, sum (s N) M N -> false.
+induction on 1. intros. case H1.
+  case H2. apply IH to H3.
+
+Theorem sum_eqz1 : forall M N, sum M N N -> M = z.
+induction on 1. intros. case H1.
+  search.
+  apply sum_comm to H2. apply sum_impos to H3.
+
+Theorem sum_eqz2 : forall M N, sum N M N -> M = z.
+induction on 1. intros. case H1.
+  search.
+  apply IH to H2. search.
+
+Theorem sum_det1 : forall M1 M2 N K,
+  sum M1 N K ->
+  sum M2 N K ->
+  M1 = M2.
+induction on 1. intros. case H1.
+  apply sum_eqz1 to H2. search.
+  case H2.
+    apply sum_comm to *H3. apply sum_impos to H5.
+    apply IH to H3 H4. search.
+
+Theorem sum_det2 : forall M N1 N2 K,
+  sum M N1 K ->
+  sum M N2 K ->
+  N1 = N2.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2. backchain IH.
+
+Theorem sum_det3 : forall M N K1 K2,
+  sum M N K1 ->
+  sum M N K2 ->
+  K1 = K2.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2. apply IH to H3 H4. search.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Syntax
@@ -73,11 +135,34 @@ Split $dual_det as dual_det1, dual_det2.
 % An injector that lets reuse the olist type for lists of formulas
 Type $fm fm -> o.
 
+% version of member that records multiplicities
+Define membern : o -> nat -> olist -> prop by
+  membern A z nil
+; membern A (s X) (A :: L) := membern A X L
+; membern A X (B :: L) := (A = B -> false) /\ membern A X L.
+
+Theorem membern_nat : forall E N L, membern E N L -> is_nat N.
+induction on 1. intros. case H1.
+  search.
+  apply IH to H2. search.
+  apply IH to H3. search.
+
+Theorem membern_det2 : forall E N1 N2 L,
+  membern E N1 L ->
+  membern E N2 L ->
+  N1 = N2.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2. apply IH to H3 H4. search.
+  apply H4 to _.
+  case H2. apply H3 to _. apply IH to H4 H6. search.
+
+% multiplicative context splits
 Define divide : olist -> olist -> olist -> prop by
   divide L L1 L2 :=
     forall E M N, membern E M L1 -> membern E N L2 -> exists K, sum M N K /\ membern E K L.
 
-% A concrete version of divide to be used with backchaining
+% A concrete version of divide to simplify proofs
 Define merge : olist -> olist -> olist -> prop by
   merge nil nil nil
 ; merge (A :: L1) L2 (A :: K) := merge L1 L2 K
@@ -91,25 +176,6 @@ induction on 1. intros. case H1.
 Theorem merge_nil2 : forall L K, merge L nil K -> L = K.
 induction on 1. intros. case H1.
   search.
-  apply IH to H2. search.
-
-Define membern : o -> nat -> olist -> prop by
-  membern A z nil
-; membern A (s X) (A :: L) := membern A X L
-; membern A X (B :: L) := (A = B -> false) /\ membern A X L.
-
-Theorem membern_nat : forall E N L, membern E N L -> is_nat N.
-induction on 1. intros. case H1.
-  search.
-  apply IH to H2. search.
-  apply IH to H3. search.
-
-Theorem part_prune : forall L1 L2 L, nabla (x:nat),
-  merge (L1 x) (L2 x) L ->
-  exists L1' L2', (L1 = x\ L1') /\ (L2 = x\ L2').
-induction on 1. intros. case H1.
-  search.
-  apply IH to H2. search.
   apply IH to H2. search.
 
 Theorem merge_incl1 : forall L1 L2 L E,
@@ -128,60 +194,41 @@ induction on 1. intros. case H1.
   case H2. search.
     apply IH to H3 H4. search.
 
-Define sum : nat -> nat -> nat -> prop by
-  sum z N N
-; sum (s M) N (s K) := sum M N K.
+% Theorem merge_membern : forall E M L1 N L2 L K,
+%   membern E M L1 ->
+%   membern E N L2 ->
+%   merge L1 L2 L ->
+%   membern E K L ->
+%   sum M N K.
+% induction on 3. intros. case H3.
+%   case H1. case H2. case H4. search.
+%   case H1.
+%     case H4. apply IH to H6 H2 H5 H7. search.
+%       apply H7 to _.
+%     case H4. apply H6 to _.
+%       apply IH to H7 H2 H5 H9. search.
+%   case H2.
+%     case H4. backchain sum_s. backchain IH.
+%       apply H7 to _.
+%     case H4. apply H6 to _.
+%       backchain IH.
 
-Theorem sum_z : forall M, is_nat M -> sum M z M.
-induction on 1. intros. case H1.
-  search.
-  apply IH to H2. search.
-
-Theorem sum_s : forall M N K, sum M N K -> sum M (s N) (s K).
-induction on 1. intros. case H1.
-  search.
-  apply IH to H2. search.
-
-Theorem sum_comm : forall M N K, is_nat N -> sum M N K -> sum N M K.
-induction on 2. intros. case H2.
-  backchain sum_z.
-  backchain sum_s. backchain IH.
-
-Theorem merge_membern : forall E M L1 N L2 L K,
-  membern E M L1 ->
-  membern E N L2 ->
-  merge L1 L2 L ->
-  membern E K L ->
-  sum M N K.
-induction on 3. intros. case H3.
-  case H1. case H2. case H4. search.
-  case H1.
-    case H4. apply IH to H6 H2 H5 H7. search.
-      apply H7 to _.
-    case H4. apply H6 to _.
-      apply IH to H7 H2 H5 H9. search.
-  case H2.
-    case H4. backchain sum_s. backchain IH.
-      apply H7 to _.
-    case H4. apply H6 to _.
-      backchain IH.
-
-Theorem merge_sum : forall E M L1 N L2 L K,
-  membern E M L1 ->
-  membern E N L2 ->
-  merge L1 L2 L ->
-  sum M N K ->
-  membern E K L.
-induction on 3. intros. case H3.
-  case H1. case H2. case H4. search.
-  case H1.
-    case H4. unfold 2. apply IH to H6 H2 H5 H7. search.
-    unfold 3. search. apply IH to H7 H2 H5 H4. search.
-  case H2.
-    apply membern_nat to H6. apply sum_comm to _ H4. case H8.
-     unfold 2. apply membern_nat to H1. apply sum_comm to _ H9.
-     apply IH to H1 H6 H5 H11. search.
-    unfold 3. search. apply IH to H1 H7 H5 H4. search.
+% Theorem merge_sum : forall E M L1 N L2 L K,
+%   membern E M L1 ->
+%   membern E N L2 ->
+%   merge L1 L2 L ->
+%   sum M N K ->
+%   membern E K L.
+% induction on 3. intros. case H3.
+%   case H1. case H2. case H4. search.
+%   case H1.
+%     case H4. unfold 2. apply IH to H6 H2 H5 H7. search.
+%     unfold 3. search. apply IH to H7 H2 H5 H4. search.
+%   case H2.
+%     apply membern_nat to H6. apply sum_comm to _ H4. case H8.
+%      unfold 2. apply membern_nat to H1. apply sum_comm to _ H9.
+%      apply IH to H1 H6 H5 H11. search.
+%     unfold 3. search. apply IH to H1 H7 H5 H4. search.
 
 Theorem merge_count : forall E M L1 N L2 L,
    membern E M L1 ->
@@ -195,19 +242,11 @@ induction on 3. intros. case H3.
   case H2. apply IH to H1 H5 H4. witness s K1. split. backchain sum_s. search.
     apply IH to H1 H6 H4. search.
 
+% Backchaininn on merge_divide often leaves a subgoal that can be automatically
+% closed. This is a kind of "proof by reflection" in Abella
 Theorem merge_divide : forall L1 L2 L,
   merge L1 L2 L -> divide L L1 L2.
 intros. unfold. intros. apply merge_count to H2 H3 H1. search.
-
-Theorem membern_det2 : forall E N1 N2 L,
-  membern E N1 L ->
-  membern E N2 L ->
-  N1 = N2.
-induction on 1. intros. case H1.
-  case H2. search.
-  case H2. apply IH to H3 H4. search.
-  apply H4 to _.
-  case H2. apply H3 to _. apply IH to H4 H6. search.
 
 Theorem divide_membern : forall E M L1 N L2 L K,
   membern E M L1 ->
@@ -217,22 +256,6 @@ Theorem divide_membern : forall E M L1 N L2 L K,
   sum M N K.
 intros. case H3. apply H5 to H1 H2.
   apply membern_det2 to H4 H7. search.
-
-Theorem sum_det2 : forall M N1 N2 K,
-  sum M N1 K ->
-  sum M N2 K ->
-  N1 = N2.
-induction on 1. intros. case H1.
-  case H2. search.
-  case H2. backchain IH.
-
-Theorem sum_det3 : forall M N K1 K2,
-  sum M N K1 ->
-  sum M N K2 ->
-  K1 = K2.
-induction on 1. intros. case H1.
-  case H2. search.
-  case H2. apply IH to H3 H4. search.
 
 Theorem divide_sum : forall E M L1 N L2 L K,
   membern E M L1 ->
@@ -296,3 +319,5 @@ Theorem cut : forall P N L1 L2 K1 K2,
   seq L2 -> remove L2 N K2 ->
   exists K, divide K K1 K2 /\ seq K.
 RH : induction on 1. HH : induction on 2. intros.
+case H2 (keep).
+  case H3. case H5.
