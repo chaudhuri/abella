@@ -38,20 +38,11 @@ type lfsig =
   | Typedecl  of lfsig * id * lfkind
   | Constdecl of lfsig * id * lftype
 
-type lferror =
-  | Redeclaration of lfsig * id
-  | No_sugh_typedecl of id
-  | No_such_constdecl of id
-  | Kind_check of lfsig * lfctx * lfterm list * lfkind
-  | Type_check_arg of lfsig * lfctx * lftype * lftype
-  | Infer_type_target of lfsig * lfctx * lftype * lfterm
-  | Type_equality of lfsig * lfctx * lftype * lftype
-  | Term_equality of lfsig * lfctx * lfterm * lfterm
+(******************************************************************************)
 
-exception LF_failure of lferror
-
-let lf_failwith err = raise (LF_failure err)
-
+(* assumes: G |- ss : D *)
+(* assumes: D |- K kind *)
+(* shows: G |- (subst_kind ss K) kind *)
 let rec subst_kind ss k =
   match k with
   | Type -> Type
@@ -65,6 +56,9 @@ let rec subst_kind ss k =
       let k = subst_kind ss k in
       Kpi (x, a, k)
 
+(* assumes: G |- ss : D *)
+(* assumes: D |- A type *)
+(* shows: G |- (subst_type ss A) type *)
 and subst_type ss a =
   match a with
   | Atom (a, ts) ->
@@ -80,6 +74,9 @@ and subst_type ss a =
       let b = subst_type ss b in
       Pi (x, a, b)
 
+(* assumes: G |- ss : D *)
+(* assumes: D |- t : A *)
+(* shows: G |- (subst_term ss t) : (subst_type ss A) *)
 and subst_term ss t =
   match t with
   | Idx n -> subst_idx ss n
@@ -94,6 +91,9 @@ and subst_term ss t =
       let t = subst_term ss t in
       Lam (x, a, t)
 
+(* assumes: G |- s : {x:A} B *)
+(* assumes: G |- t : A *)
+(* shows: G |- (apply s t) : [t/x]B *)
 and apply s t =
   match s with
   | Lam (_, _, s) ->
@@ -101,12 +101,18 @@ and apply s t =
   | _ ->
       App (s, t)
 
+(* assumes: G |- ss : D *)
+(* assumes: D |- n : A *)
+(* shows: G |- (subst_idx ss n) : A *)
 and subst_idx ss n =
   match ss, n with
   | Shift j, _ -> Idx (j + n)
   | Cons (_, t), 0 -> t
   | Cons (ss, _), _ -> subst_idx ss (n - 1)
 
+(* assumes: G |- ss : D *)
+(* assumes: D |- tt : E *)
+(* shows: G |- (compose ss tt) : E *)
 and compose ss tt =
   match ss, tt with
   | Shift 0, _ -> tt
@@ -115,17 +121,37 @@ and compose ss tt =
   | Cons (ss, _), Shift k -> compose ss (Shift (k - 1))
   | ss, Cons (tt, t) -> Cons (compose ss tt, subst_term ss t)
 
+(* assumes: G |- ss : D *)
+(* shows: G, x1:A1, ..., xn:An |- (bump n ss) : D, x1:A1, ..., xn:An *)
 and bump ?(n = 0) ss =
   match ss with
   | Shift 0 -> Shift 0
   | ss -> bump_tail (compose ss (Shift n)) n
 
+(* assumes: G, x1:A1, ..., xn:An |- ss : D *)
+(* shows: G, x1:A1, ..., xn:An |- (bump_tail ss n) : D, x1:A1, ..., xn:An *)
 and bump_tail ss n =
   match n with
   | 0 -> ss
   | n ->
       let ss = Cons (ss, Idx n) in
       bump_tail ss (n - 1)
+
+(******************************************************************************)
+
+type lf_checking_error =
+  | Redeclaration of lfsig * id
+  | No_sugh_typedecl of id
+  | No_such_constdecl of id
+  | Kind_check of lfsig * lfctx * lfterm list * lfkind
+  | Type_check_arg of lfsig * lfctx * lftype * lftype
+  | Infer_type_target of lfsig * lfctx * lftype * lfterm
+  | Type_equality of lfsig * lfctx * lftype * lftype
+  | Term_equality of lfsig * lfctx * lfterm * lfterm
+
+exception LF_checking_error of lf_checking_error
+
+let lf_checking_error err = raise (LF_checking_error err)
 
 (* assumes: check_wfsig sg *)
 let rec is_declared sg id =
@@ -142,7 +168,7 @@ and lookup_typedecl sg id =
   | Typedecl (sg, _, _)
   | Constdecl (sg, _, _) ->
       lookup_typedecl sg id
-  | Empty -> lf_failwith (No_sugh_typedecl id)
+  | Empty -> lf_checking_error (No_sugh_typedecl id)
 
 (* assumes: check_wfsig sg *)
 and lookup_constdecl sg id =
@@ -151,7 +177,7 @@ and lookup_constdecl sg id =
   | Typedecl (sg, _, _)
   | Constdecl (sg, _, _) ->
       lookup_constdecl sg id
-  | Empty -> lf_failwith (No_such_constdecl id)
+  | Empty -> lf_checking_error (No_such_constdecl id)
 
 (* assumes: nothing *)
 let rec check_wfsig sg =
@@ -159,11 +185,11 @@ let rec check_wfsig sg =
   | Empty -> ()
   | Typedecl (sg, a, k) ->
       if is_declared sg a then
-        lf_failwith (Redeclaration (sg, a)) ;
+        lf_checking_error (Redeclaration (sg, a)) ;
       check_wfkind sg [] k
   | Constdecl (sg, c, a) ->
       if is_declared sg c then
-        lf_failwith (Redeclaration (sg, c)) ;
+        lf_checking_error (Redeclaration (sg, c)) ;
       check_wftype sg [] a
 
 (* assumes: check_wfsig sg *)
@@ -213,7 +239,7 @@ and check_kargs sg cx ts k =
       let k = subst_kind (Cons (Shift 0, t)) k in
       check_kargs sg cx ts k
   | _, _ ->
-      lf_failwith (Kind_check (sg, cx, ts, k))
+      lf_checking_error (Kind_check (sg, cx, ts, k))
 
 (* assumes: check_wfsig sg && check_wfctx sg cx *)
 and check_type sg cx t a =
@@ -225,7 +251,7 @@ and check_type sg cx t a =
         | Pi (_, b1, a) ->
             check_type_eq sg cx b b1 ; a
         | _ ->
-            lf_failwith (Type_check_arg (sg, cx, b, a))
+            lf_checking_error (Type_check_arg (sg, cx, b, a))
       in
       check_type sg ((x, b) :: cx) t a
   | _ ->
@@ -252,14 +278,14 @@ and infer_type_target sg cx a t =
       check_type sg cx t a ;
       subst_type (Cons (Shift 0, t)) b
   | _ ->
-      lf_failwith (Infer_type_target (sg, cx, a, t))
+      lf_checking_error (Infer_type_target (sg, cx, a, t))
 
 (* assumes: check_wfsig sg && check_wfctx sg cx *)
 and check_type_eq sg cx a0 b0 =
   match a0, b0 with
   | Atom (a, a_args), Atom (b, b_args) ->
       if a <> b then
-        lf_failwith (Type_equality (sg, cx, a0, b0)) ;
+        lf_checking_error (Type_equality (sg, cx, a0, b0)) ;
       if List.length a_args <> List.length b_args then
         assert false ;
       List.iter2 (check_term_eq sg cx) a_args b_args
@@ -268,17 +294,17 @@ and check_type_eq sg cx a0 b0 =
       check_type_eq sg cx a1 b1 ;
       check_type_eq sg cx a2 b2
   | _ ->
-      lf_failwith (Type_equality (sg, cx, a0, b0))
+      lf_checking_error (Type_equality (sg, cx, a0, b0))
 
 (* assumes: check_wfsig sg && check_wfctx sg cx *)
 and check_term_eq sg cx s0 t0 =
   match s0, t0 with
   | Const c, Const d ->
       if c <> d then
-        lf_failwith (Term_equality (sg, cx, s0, t0))
+        lf_checking_error (Term_equality (sg, cx, s0, t0))
   | Idx m, Idx n ->
       if m <> n then
-        lf_failwith (Term_equality (sg, cx, s0, t0))
+        lf_checking_error (Term_equality (sg, cx, s0, t0))
   | App (s1, s2), App (t1, t2) ->
       check_term_eq sg cx s1 t1 ;
       check_term_eq sg cx s2 t2
@@ -290,7 +316,7 @@ and check_term_eq sg cx s0 t0 =
   | _, Lam (_, _, t1) ->
       check_term_eq sg cx (eta_expanded_body s0) t1
   | _ ->
-      lf_failwith (Term_equality (sg, cx, s0, t0))
+      lf_checking_error (Term_equality (sg, cx, s0, t0))
 
-and eta_expanded_body s =
-  apply (subst_term (Shift 1) s) (Idx 1)
+and eta_expanded_body t =
+  apply (subst_term (Shift 1) t) (Idx 1)
