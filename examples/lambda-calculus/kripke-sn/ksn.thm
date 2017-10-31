@@ -1,0 +1,85 @@
+Specification "stlc".
+
+Define fresh : A -> B -> prop by
+  nabla x, fresh x Y.
+
+Define name : A -> prop by
+  nabla x, name x.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Define tyctx : olist -> prop by
+; tyctx nil
+; nabla x,
+  tyctx (of x A :: G) := tyctx G.
+
+Define ofsub : olist -> olist -> olist -> prop by
+; ofsub G nil nil := tyctx G
+; nabla x,
+  ofsub (G x) (cp x (M x) :: SS x) (of x A :: D) :=
+    nabla x, {G x |- of (M x) A} /\ ofsub (G x) (SS x) D.
+
+Theorem ofsub_tyctx : forall G SS D,
+  ofsub G SS D -> tyctx G /\ tyctx D.
+induction on 1. intros. case H1.
+  search.
+  apply IH to H3. search.
+
+Theorem tyctx_mem : forall G E,
+  tyctx G -> member E G ->
+  exists X A, E = of X A /\ name X.
+induction on 1. intros. case H1.
+  case H2.
+  case H2.
+    search.
+    apply IH to H3 H4. search.
+
+Theorem ofsub_mem_sub : forall G SS D E,
+  ofsub G SS D -> member E SS ->
+  exists X M A, E = cp X M /\ member (of X A) D /\ name X /\ {G |- of M A}.
+induction on 1. intros. case H1.
+  case H2.
+  case H2. search.
+    apply IH to H4 H5. search.
+
+Theorem ofsub_mem_src : forall G SS D E,
+  ofsub G SS D -> member E D ->
+  exists X N A, E = of X A /\ member (cp X N) SS /\ name X /\ {G |- of N A}.
+induction on 1. intros. case H1.
+  case H2.
+  case H2. search.
+    apply IH to H4 H5. search.
+
+Theorem ofsub_monotone : forall G SS D GG,
+  ofsub G SS D -> tyctx GG ->
+  (forall E, member E G -> member E GG) ->
+  ofsub GG SS D.
+induction on 1. intros. case H1.
+  search.
+  monotone H4 with GG n1.
+   apply IH to *H5 *H2 *H3. search.
+
+Theorem ofsub_weak1 : forall G SS D A, nabla x,
+  ofsub G SS D -> ofsub (of x A :: G) SS D.
+intros. apply ofsub_tyctx to H1. backchain ofsub_monotone.
+
+Theorem subst :
+  forall G SS D M A,
+  ofsub G SS D -> {D |- of M A} ->
+  exists N, {SS |- cp M N} /\ {G |- of N A}.
+induction on 2. intros. case H2.
+  apply ofsub_weak1 to *H1 with A = A1, x = n1.
+   apply IH to _ H3 with
+     G = of n1 A1 :: G,
+     SS = cp n1 n1 :: SS,
+     D = of n1 A1 :: D.
+   search.
+  apply IH to H1 *H3. apply IH to *H1 *H4. search.
+  apply ofsub_tyctx to H1.
+   apply tyctx_mem to *H6 H4. clear H5. case H3.
+   case H7. apply ofsub_mem_src to H1 H4. search.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Define comp : olist -> olist -> olist -> prop by
+; comp 
