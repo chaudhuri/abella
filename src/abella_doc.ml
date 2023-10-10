@@ -242,7 +242,7 @@ let usage_message = Printf.sprintf "%s [options] <theorem-file> ..." begin
 
 let dep_tab = Hashtbl.create (List.length !input_files)
 
-let ignore_list = [ "node_modules" ; "css" ]
+let ignore_list = [ "node_modules" ; "css" ; "html-files" ]
 
 let rec process file =
   let file_bn = Filename.basename file in
