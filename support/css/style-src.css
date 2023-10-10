@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+div.ab-box {
+    @apply font-mono italic bg-yellow-50 leading-tight w-full h-full px-2 whitespace-pre overflow-auto text-green-800;
+}
+
+div.ab-chunk {
+    @apply inline;
+}
+
+div.ab-command {
+    @apply inline-block cursor-default hover:bg-rose-200/60;
+}
+
+div.ab-proof {
+    @apply text-rose-700 not-italic text-sm;
+}
+
+div.ab-top {
+    @apply leading-snug not-italic text-[#000000];
+}
+
+div.rl {
+    @apply flex flex-col max-w-xl whitespace-normal ml-2 bg-amber-50;
+}
+
+div.rl-name {
+    @apply mb-3 font-sans text-rose-600 text-[.8em];
+}
+
+div.rl-even {
+    @apply bg-amber-50;
+}
+
+div.rl-odd {
+    @apply bg-amber-100;
+}
+
+div.rl-line {
+    @apply border-t-2 border-t-rose-600;
+}
+
+div.rl-more {
+    @apply mt-1 font-sans text-rose-600 text-[.8em];
+}
+
+span.rl-hyp {
+    @apply text-rose-600;
+}
