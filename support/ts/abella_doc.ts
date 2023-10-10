@@ -116,6 +116,53 @@ function fontifySlice(src: string, start: number, stop: number): string {
   return fontify(txt);
 }
 
+function isPresent<A>(arg: A | undefined): A {
+  if (arg === undefined) throw new Error("Bug: isPresent()");
+  return arg;
+}
+
+export class Content {
+  readonly source: string;
+  marks: Array<[number, string]>;
+  private dirty: boolean;
+
+  constructor(source: string) {
+    this.source = source;
+    this.marks = new Array();
+    this.dirty = false;
+  }
+
+  addMark(pos: number, thing: string) {
+    if (pos < 0 || pos > this.source.length)
+      throw new Error(`bug: Content.addMark(${pos}, ${thing})`);
+    this.marks.push([pos, thing]);
+    this.dirty = true;          // [HACK] optimizable?
+  }
+
+  toString(): string {
+    if (this.dirty) {
+      this.marks.sort((a, b) => a[0] - b[0]);
+      this.dirty = false;
+    }
+    const marks = this.marks.values();
+    let result = "";
+    let curPos = 0;
+    while (curPos < this.source.length) {
+      const next = marks.next();
+      if (next.done) break;
+      const [nextMarkPos, nextMark] = next.value;
+      if (nextMarkPos < curPos)
+        throw new Error(`bug: Content.toString(curPos = ${curPos}, nextMarkPos = ${nextMarkPos})`);
+      result += this.source.slice(curPos, nextMarkPos);
+      curPos = nextMarkPos;
+      result += nextMark;
+    }
+    if (curPos < this.source.length)
+      result += this.source.slice(curPos, this.source.length);
+    return result;
+  }
+}
+
 export async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
   const init: RequestInit = {
     method: "GET",
@@ -127,9 +174,11 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
   const thmBox = document.getElementById(boxId);
   if (!thmBox) throw new Error("cannot find #thmbox");
   thmBox.replaceChildren();
-  let lastPos: number = 0, cmdMap = new Map<string, HTMLElement>();
+  let lastPos: number = 0;
+  let cmdMap = new Map<number, [HTMLElement, any]>();
+  let linkMap = new Map<number, any>();
   runData.forEach((elm) => {
-    if (elm.range) {
+    if (elm["type"] === "top_command" || elm["type"] === "proof_command") {
       const [start, , , stop, , ] = elm.range;
       const chunk = document.createElement("div");
       chunk.id = `chunk-${elm.id}`;
@@ -143,27 +192,30 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
       const cmd = document.createElement("div");
       cmd.classList.add("ab-command",
                         elm["type"] === "proof_command" ? "ab-proof" : "ab-top");
-      cmd.dataset.obj = JSON.stringify(elm);
       cmd.innerHTML = fontifySlice(thmText, start, stop);
-      cmdMap.set(elm.id, cmd);
+      cmdMap.set(elm.id, [cmd, elm]);
       chunk.append(cmd);
       lastPos = stop;
       thmBox.append(chunk);
+    } else if (elm["type"] === "link") {
+      console.log(`Need to link URL "${elm.url}" to ${elm.parent}`);
+      linkMap.set(elm.parent, elm);
     }
   });
-  const thmCmds = new Set<string>();
-  cmdMap.forEach((cmd, _) => {
-    const obj: any = cmd.dataset.obj;
-    if (obj && obj["type"] && obj["type"] === "proof_command") {
-      thmCmds.add(obj.thm_id);
-      const thmCmd = cmdMap.get(obj.thm_id) as HTMLElement;
+  const thmCmds = new Set<number>();
+  cmdMap.forEach(([cmd, elm], _) => {
+    if (elm["type"] === "proof_command" && elm.thm_id) {
+      thmCmds.add(elm.thm_id);
+      const [thmCmd, _] = isPresent(cmdMap.get(elm.thm_id));
       if (thmCmd.parentNode && cmd.parentNode)
         thmCmd.parentNode.append(cmd.parentNode);
     }
   });
+  const do_expand = "[expand proof]";
+  const do_collapse = "[collapse proof]";
   thmCmds.forEach((thm_id) => {
-    const thmCmd = cmdMap.get(thm_id) as HTMLElement;
     const btn = document.createElement("button");
+    btn.innerText = do_collapse;
     btn.dataset.state = "expanded";
     btn.addEventListener("click", () => {
       const curState = btn.dataset.state;
@@ -173,13 +225,14 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
         if (curState === "expanded") curEl.style.display = "none";
         else curEl.style.display = "";
       }
-      btn.innerText = curState === "expanded" ? "[collapse proof]" : "[expand proof]";
+      btn.innerText = curState === "expanded" ? do_expand : do_collapse;
     });
+    const [thmCmd, _] = isPresent(cmdMap.get(thm_id));
     thmCmd.after(btn);
     const br = document.createElement("span");
     br.innerHTML = "\n";
     thmCmd.after(br);
-    btn.dispatchEvent(new Event("click", {bubbles: true}));
+    // btn.dispatchEvent(new Event("click", {bubbles: true}));
   });
   return cmdMap;
 }

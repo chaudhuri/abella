@@ -125,9 +125,11 @@ end = struct
 end
 
 let link_message pos url =
+  let old_id = Annot.last_commit_id () |> Option.get in
   let ann = Annot.fresh "link" in
   Annot.extend ann "source" @@ json_of_position pos ;
   Annot.extend ann "url" @@ `String url ;
+  Annot.extend ann "parent" @@ `Int old_id ;
   Annot.commit ann
 
 type severity = Info | Error
@@ -538,7 +540,6 @@ let import pos filename withs =
     link_message pos (filename ^ ".html") ;
   end
 
-
 (* Proof processing *)
 
 let query q =
@@ -857,7 +858,7 @@ and process_top1 () =
   | TopCommon(Quit) -> raise End_of_file
   | Import(filename, pos, withs) ->
       compile (CImport (filename, withs)) ;
-      import pos filename withs;
+      import pos filename withs
   | Specification(filename, pos) ->
       if !can_read_specification then begin
         read_specification (normalize_filename filename) ;

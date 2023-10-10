@@ -4,7 +4,7 @@
   "description": "",
   "main": "./js/abella_doc.js",
   "scripts": {
-    "build": "tsc && esbuild ./js/abella_doc.js --color=false --bundle --minify --format=esm --outfile=dist/abella_doc.js",
+    "build": "tsc && esbuild ./js/abella_doc.js --color=false --bundle --format=esm --outfile=dist/abella_doc.js",
     "css": "npx tailwindcss --output css/style.css --input css/style-src.css --minify",
     "clean": "rimraf build dist"
   },
