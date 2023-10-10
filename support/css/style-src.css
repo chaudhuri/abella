@@ -33,7 +33,7 @@ div.ab-proof {
 }
 
 div.ab-command {
-    @apply inline-block cursor-default not-italic hover:bg-rose-200/60;
+    @apply inline-block cursor-default not-italic text-black hover:bg-rose-200/60;
 }
 
 div.ab-proof {

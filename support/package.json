@@ -1,12 +1,13 @@
 {
-  "name": "examples",
+  "name": "abella_doc_lib",
   "version": "2.0.8-dev",
-  "description": "",
+  "description": "Support code for abella_doc (https://abella-prover.org)",
   "main": "./js/abella_doc.js",
   "scripts": {
-    "build": "tsc && esbuild ./js/abella_doc.js --color=false --bundle --format=esm --outfile=dist/abella_doc.js",
-    "css": "npx tailwindcss --output css/style.css --input css/style-src.css --minify",
-    "clean": "rimraf build dist"
+    "js": "tsc && esbuild ./js/abella_doc.js --color=false --bundle --minify --format=esm --outfile=dist/abella_doc.js",
+    "css": "npx tailwindcss --output dist/style.css --input css/style-src.css --minify",
+    "build": "npm run js && npm run css",
+    "clean": "rimraf js dist"
   },
   "keywords": [],
   "author": "Kaustuv Chaudhuri <kaustuv@chaudhuri.info>",

@@ -142,7 +142,7 @@ class Content {
   }
 }
 
-const opRex = /(=(?:>)?|\|-|->|\\\/?|\/\\|\{|\})/g;
+const opRex = /(=(?:>)?|\|-|->|\\\/?|\/\\|\{|\}|;|\.)/g;
 const typeRex = /\b(olist|prop|o)\b/g;
 const termRex = /\b(forall|exists|nabla|pi|sigma|sig|module|end)\b/g;
 const topBuiltRex = /\b(Import|Specification|Query|Set|Show|Close)\b/g;
@@ -237,7 +237,7 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
     elm.float = "";
     if (elm.typ === "top_command" || elm.typ === "proof_command") {
       if (elm.typ === "top_command") {
-        elm.float += `<div class="ab-int"><span class="ab-pr">Abella &lt;</span> <strong>${elm.command}</strong></div>`;
+        // elm.float += `<div class="ab-int"><span class="ab-pr">Abella &lt;</span> <strong>${elm.command}</strong></div>`;
       } else {
         const startSeq = elm.start_state as SequentObj;
         const endSeq = elm.end_state as SequentObj | undefined;
