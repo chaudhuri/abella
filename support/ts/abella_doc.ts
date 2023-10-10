@@ -139,6 +139,19 @@ export class Content {
     this.dirty = true;          // [HACK] optimizable?
   }
 
+  fontify(start: number, stop: number, rex: RegExp, cls: string) {
+    if (start < 0 || start > stop || stop > this.source.length)
+      throw new Error(`bug: Content.fontify(${start}, ${stop}, ..., ${cls})`);
+    const extract = this.source.slice(start, stop);
+    for (let match of extract.matchAll(rex)) {
+      const matchStart = start + isPresent(match.index);
+      const matchStop = matchStart + match[0].length;
+      if (matchStop > stop) continue;
+      this.addMark(matchStart, `<span class="${cls}">`);
+      this.addMark(matchStop, `</span>`);
+    }
+  }
+
   toString(): string {
     if (this.dirty) {
       this.marks.sort((a, b) => a[0] - b[0]);
@@ -153,27 +166,106 @@ export class Content {
       const [nextMarkPos, nextMark] = next.value;
       if (nextMarkPos < curPos)
         throw new Error(`bug: Content.toString(curPos = ${curPos}, nextMarkPos = ${nextMarkPos})`);
-      result += this.source.slice(curPos, nextMarkPos);
+      result += makeSafe(this.source.slice(curPos, nextMarkPos));
       curPos = nextMarkPos;
       result += nextMark;
     }
     if (curPos < this.source.length)
-      result += this.source.slice(curPos, this.source.length);
+      result += makeSafe(this.source.slice(curPos, this.source.length));
     return result;
   }
 }
 
+const opRex = /(=(?:>)?|\|-|->|\\\/?|\/\\|\{|\})/g;
+const typeRex = /\b(list|prop|o)\b/g;
+const termRex = /\b(forall|exists|nabla|pi|sigma|sig|module|end)\b/g;
+const topBuiltRex = /\b(Import|Specification|Query|Set|Show|Close)\b/g;
+const topCmdRex = /\b((?:Co)?Define|Theorem|Split|by|Kind|Type)\b/g;
+const proofCmdRex = /\b(abbrev|all|apply|assert|backchain|case|clear|(?:co)?induction|cut|inst|intros|keep|left|monotone|on|permute|rename|right|search|split(?:\*)?|to|unabbrev|unfold|with|witness)\b/g;
+const proofSpecRex = /\b(skip|undo|abort)\b/g;
+
+
 export async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
+  const thmBox = document.getElementById(boxId);
+  if (!thmBox) throw new Error("cannot find #thmbox");
+  thmBox.replaceChildren();
+  // get data
   const init: RequestInit = {
     method: "GET",
     cache: "no-store",
     headers: { pragma: "no-cache" },
   };
-  let thmText = await fetch(thmfile, init).then(resp => resp.text());
-  let runData = await fetch(jsonfile, init).then(resp => resp.json()) as any[];
-  const thmBox = document.getElementById(boxId);
-  if (!thmBox) throw new Error("cannot find #thmbox");
-  thmBox.replaceChildren();
+  const thmText = new Content(await fetch(thmfile, init).then(resp => resp.text()));
+  const runData = await fetch(jsonfile, init).then(resp => resp.json()) as any[];
+  // map data to chunks
+  const chunkMap = new Map<number, any>();
+  runData.forEach((elm) => { if (elm.id) chunkMap.set(elm.id, elm); });
+  // markup source into chunk divs
+  chunkMap.forEach((elm, _) => {
+    if (elm["type"] === "top_command" || elm["type"] === "proof_command") {
+      const [start, , , stop, , ] = elm.range;
+      thmText.addMark(start, `<div id="chunk-${elm.id}" class="ab-chunk">`);
+      thmText.addMark(stop, '</div>');
+      thmText.fontify(start, stop, opRex, "s-op");
+      thmText.fontify(start, stop, typeRex, "s-ty");
+      thmText.fontify(start, stop, termRex, "s-tm");
+      if (elm["type"] === "top_command") {
+        thmText.fontify(start, stop, topBuiltRex, "s-tb");
+        thmText.fontify(start, stop, topCmdRex, "s-tc");
+      }
+      if (elm["type"] === "proof_command") {
+        thmText.fontify(start, stop, proofCmdRex, "s-pc");
+        thmText.fontify(start, stop, proofSpecRex, "s-ps");
+      }
+    } else if (elm["type"] === "link") {
+      const [start, , , stop, , ] = elm.source;
+      thmText.addMark(start + 1, `<a href="${elm.url}" class="ln">`);
+      thmText.addMark(stop - 1, '</a>');
+    }
+  });
+  thmBox.innerHTML = thmText.toString();
+  // add metadata
+  chunkMap.forEach((elm, _) => {
+    if (elm["type"] === "system_message") {
+      const target = chunkMap.get(elm.after);
+      if (target && target.range) {
+        const targetChunk = document.getElementById(`chunk-${elm.after}`);
+        if (!targetChunk) throw new Error(`Bug: could not find chunk #${elm.after}`);
+        console.log("added message", elm.message, targetChunk);
+        const float = document.createElement("div");
+        float.style.position = "absolute";
+        float.style.zIndex = "10100";
+        float.style.display = "none";
+        float.innerHTML = `<span class="msg">${makeSafe(elm.message)}</span>`;
+        targetChunk.addEventListener("mousemove", (ev) => {
+          const flWidth = float.offsetWidth, flHeight = float.offsetHeight;
+          const wWidth = window.innerWidth, wHeight = window.innerHeight;
+          const pX = ev.pageX, pY = ev.pageY;
+          const d = 10;
+          float.style.display = "block";
+          if (pX + flWidth + d <= wWidth)
+            float.style.left = `${pX + d}px`;
+          else
+            float.style.left = `${wWidth - flWidth}px`;
+          if (pY + flHeight + d <= wHeight)
+            float.style.top = `${pY + d}px`;
+          else if (pY - flHeight - d >= 0)
+            float.style.top = `${pY - flHeight - d}px`;
+          else
+            float.style.display = "none"; // float doesn't fit above or below
+        });
+        targetChunk.addEventListener("mouseleave", () => {
+          float.style.display = "none";
+        });
+        thmBox.append(float);
+      }
+    }
+  });
+}
+
+/* ****
+
+
   let lastPos: number = 0;
   let cmdMap = new Map<number, [HTMLElement, any]>();
   let linkMap = new Map<number, any>();
@@ -236,3 +328,5 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
   });
   return cmdMap;
 }
+
+**** */
