@@ -29,7 +29,7 @@ open Extensions
 open Printf
 open Accumulate
 
-let load_path = State.rref (Sys.getcwd ())
+let load_path = State.rref "."  (* (Sys.getcwd ()) *)
 
 let normalize_filename ?(wrt = !load_path) fn =
   if Filename.is_relative fn
@@ -128,7 +128,7 @@ let link_message pos url =
   let old_id = Annot.last_commit_id () |> Option.get in
   let ann = Annot.fresh "link" in
   Annot.extend ann "source" @@ json_of_position pos ;
-  Annot.extend ann "url" @@ `String url ;
+  Annot.extend ann "url" @@ `String (Filename.concat !load_path url) ;
   Annot.extend ann "parent" @@ `Int old_id ;
   Annot.commit ann
 
@@ -442,7 +442,6 @@ let import pos filename withs =
     maybe_make_importable filename ;
     if not (List.mem filename !imported) then begin
       imported := filename :: !imported ;
-      let file_dir = Filename.dirname (filename :> string) in
       let thc = (filename :> string) ^ ".thc" in
       let file =
         let ch = open_in_bin thc in
@@ -482,7 +481,7 @@ let import pos filename withs =
                 Prover.add_defs ~print:system_message tyargs idtys flav clauses ;
                 process_decls decls
             | CImport(filename, withs) ->
-                aux (normalize_filename (Filename.concat file_dir filename)) withs ;
+                aux (normalize_filename filename) withs ;
                 process_decls decls
             | CKind(ids, knd) ->
                 check_noredef ids ;
@@ -617,7 +616,7 @@ let set k v =
                         ~key:"witnesses"
                         ~expected:"'on' or 'off'"
 
-  | "load_path", QStr s -> load_path := normalize_filename ~wrt:(Sys.getcwd ()) s
+  | "load_path", QStr s -> load_path := normalize_filename s
 
   | _, _ -> failwithf "Unknown key '%s'" k
 
@@ -964,7 +963,7 @@ let set_input () =
   | [filename] ->
       interactive := false ;
       lexbuf := lexbuf_from_file filename ;
-      load_path := normalize_filename ~wrt:(Sys.getcwd ()) (Filename.dirname filename)
+      load_path := normalize_filename (Filename.dirname filename)
   | fs ->
       system_message ~severity:Error
         "Error: Multiple files specified as input: %s.\n%!"

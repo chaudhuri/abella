@@ -3,14 +3,13 @@
 //                     en Informatique et en Automatique)
 // See LICENSE for licensing details.
 
+import { Fancybox } from "@fancyapps/ui";
+
 function makeSafe(txt: string): string {
   return new Option(txt).innerHTML;
 }
 
-type CommandKind = "top_command" | "proof_command" | "any_command";
-
 type RexHandler = {
-  test: (k: CommandKind) => boolean;
   rex: RegExp;
   style: string;
 };
@@ -18,60 +17,32 @@ type RexHandler = {
 const rexHandlers: Array<RexHandler> = [
   {
     // op_re
-    test: (_) => true,
     rex: /(=(?:&gt;)?|\|-|-&gt;|\\\/?|\/\\|\{|\})/g,
     style: "color:#9d1f1f;",
   },
   {
     // type_re
-    test: (_) => true,
-    rex: /\b(list|prop|o)\b/g,
+    rex: /\b(olist|prop|o)\b/g,
     style: "color:#1640b0;",
   },
   {
     // term_re
-    test: (_) => true,
     rex: /\b(forall|exists|nabla|pi|sigma|sig|module|end)\b/g,
     style: "color:#9d1f1f;",
   },
-  {
-    // top_builtin_re
-    test: (k) => k === "top_command",
-    rex: /\b(Import|Specification|Query|Set|Show|Close)\b/g,
-    style: "color:#338fff;",
-  },
-  {
-    // top_command_re
-    test: (k) => k === "top_command",
-    rex: /\b((?:Co)?Define|Theorem|Split|by|Kind|Type)\b/g,
-    style: "color:#9d1f1f;font-weight:bold;",
-  },
-  {
-    // proof_command_re
-    test: (k) => k === "proof_command",
-    rex: /\b(abbrev|all|apply|assert|backchain|case|clear|(?:co)?induction|cut|inst|intros|keep|left|monotone|on|permute|rename|right|search|split(?:\*)?|to|unabbrev|unfold|with|witness)\b/g,
-    style: "color:#9d1f1f;font-style:italic;",
-  },
-  {
-    // proof_special_re
-    test: (k) => k === "proof_command",
-    rex: /\b(skip|undo|abort)\b/g,
-    style: "background-color:#9d1f1f;color:#c0965b;font-weight:bold;",
-  },
 ];
 
-export function fontify(txt: string, kind?: CommandKind): string {
+export function fontify(txt: string): string {
   txt = makeSafe(txt);
   rexHandlers.forEach((hnd) => {
-    if (!kind || hnd.test(kind))
-      txt = txt.replaceAll(hnd.rex, `<span style=${hnd.style}>$1</span>`);
+    txt = txt.replaceAll(hnd.rex, `<span style=${hnd.style}>$1</span>`);
   });
   return txt;
 }
 
 type SequentObj = {
-  vars: string[2][];
-  hyps: string[2][];
+  vars: [string, string][];
+  hyps: [string, string][];
   goal: string;
   more: number;
   name?: string;
@@ -81,14 +52,14 @@ function bg(count: number): string {
   return (count & 1) === 0 ? "rl-even" : "rl-odd";
 }
 
-function sequentToString(obj: SequentObj, doInsts: boolean): string {
+function sequentToString(obj: SequentObj, doInsts?: boolean): string {
   let repr = '<div class="rl">';
   if (obj.name)
     repr += `<div><span class="rl-name">Subgoal ${obj.name}</span></div>`;
   let count = 0;
   if (obj.vars && obj.vars.length > 0) {
     const vars: string[] = [];
-    const insts: string[2][] = [];
+    const insts: [string, string][] = [];
     obj.vars.forEach((v) => {
       if (v[1]) insts.push(v);
       else vars.push(v[0]);
@@ -111,17 +82,12 @@ function sequentToString(obj: SequentObj, doInsts: boolean): string {
   return repr;
 }
 
-function fontifySlice(src: string, start: number, stop: number): string {
-  let txt = src.slice(start, stop);
-  return fontify(txt);
-}
-
 function isPresent<A>(arg: A | undefined): A {
   if (arg === undefined) throw new Error("Bug: isPresent()");
   return arg;
 }
 
-export class Content {
+class Content {
   readonly source: string;
   marks: Array<[number, string]>;
   private dirty: boolean;
@@ -177,13 +143,15 @@ export class Content {
 }
 
 const opRex = /(=(?:>)?|\|-|->|\\\/?|\/\\|\{|\})/g;
-const typeRex = /\b(list|prop|o)\b/g;
+const typeRex = /\b(olist|prop|o)\b/g;
 const termRex = /\b(forall|exists|nabla|pi|sigma|sig|module|end)\b/g;
 const topBuiltRex = /\b(Import|Specification|Query|Set|Show|Close)\b/g;
 const topCmdRex = /\b((?:Co)?Define|Theorem|Split|by|Kind|Type)\b/g;
 const proofCmdRex = /\b(abbrev|all|apply|assert|backchain|case|clear|(?:co)?induction|cut|inst|intros|keep|left|monotone|on|permute|rename|right|search|split(?:\*)?|to|unabbrev|unfold|with|witness)\b/g;
 const proofSpecRex = /\b(skip|undo|abort)\b/g;
 
+const do_expand = "[expand proof]";
+const do_collapse = "[collapse proof]";
 
 export async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
   const thmBox = document.getElementById(boxId);
@@ -199,134 +167,140 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
   const runData = await fetch(jsonfile, init).then(resp => resp.json()) as any[];
   // map data to chunks
   const chunkMap = new Map<number, any>();
-  runData.forEach((elm) => { if (elm.id) chunkMap.set(elm.id, elm); });
+  runData.forEach((elm) => {
+    if (elm.id === undefined) return;
+    elm.typ = elm["type"];
+    chunkMap.set(elm.id, elm);
+  });
   // markup source into chunk divs
-  chunkMap.forEach((elm, _) => {
-    if (elm["type"] === "top_command" || elm["type"] === "proof_command") {
+  runData.forEach((elm) => {
+    if (elm.typ === "top_command" || elm.typ === "proof_command") {
       const [start, , , stop, , ] = elm.range;
-      thmText.addMark(start, `<div id="chunk-${elm.id}" class="ab-chunk">`);
+      thmText.addMark(start, `<div id="chunk-${elm.id}" class="ab-command">`);
       thmText.addMark(stop, '</div>');
       thmText.fontify(start, stop, opRex, "s-op");
       thmText.fontify(start, stop, typeRex, "s-ty");
       thmText.fontify(start, stop, termRex, "s-tm");
-      if (elm["type"] === "top_command") {
+      if (elm.typ === "top_command") {
         thmText.fontify(start, stop, topBuiltRex, "s-tb");
         thmText.fontify(start, stop, topCmdRex, "s-tc");
       }
-      if (elm["type"] === "proof_command") {
+      if (elm.typ === "proof_command") {
         thmText.fontify(start, stop, proofCmdRex, "s-pc");
         thmText.fontify(start, stop, proofSpecRex, "s-ps");
       }
-    } else if (elm["type"] === "link") {
+      elm.command = makeSafe(thmText.source.slice(start, stop));
+    } else if (elm.typ === "link") {
       const [start, , , stop, , ] = elm.source;
       thmText.addMark(start + 1, `<a href="${elm.url}" class="ln">`);
       thmText.addMark(stop - 1, '</a>');
     }
   });
-  thmBox.innerHTML = thmText.toString();
-  // add metadata
-  chunkMap.forEach((elm, _) => {
-    if (elm["type"] === "system_message") {
-      const target = chunkMap.get(elm.after);
-      if (target && target.range) {
-        const targetChunk = document.getElementById(`chunk-${elm.after}`);
-        if (!targetChunk) throw new Error(`Bug: could not find chunk #${elm.after}`);
-        console.log("added message", elm.message, targetChunk);
-        const float = document.createElement("div");
-        float.style.position = "absolute";
-        float.style.zIndex = "10100";
-        float.style.display = "none";
-        float.innerHTML = `<span class="msg">${makeSafe(elm.message)}</span>`;
-        targetChunk.addEventListener("mousemove", (ev) => {
-          const flWidth = float.offsetWidth, flHeight = float.offsetHeight;
-          const wWidth = window.innerWidth, wHeight = window.innerHeight;
-          const pX = ev.pageX, pY = ev.pageY;
-          const d = 10;
-          float.style.display = "block";
-          if (pX + flWidth + d <= wWidth)
-            float.style.left = `${pX + d}px`;
-          else
-            float.style.left = `${wWidth - flWidth}px`;
-          if (pY + flHeight + d <= wHeight)
-            float.style.top = `${pY + d}px`;
-          else if (pY - flHeight - d >= 0)
-            float.style.top = `${pY - flHeight - d}px`;
-          else
-            float.style.display = "none"; // float doesn't fit above or below
-        });
-        targetChunk.addEventListener("mouseleave", () => {
-          float.style.display = "none";
-        });
-        thmBox.append(float);
-      }
-    }
-  });
-}
-
-/* ****
-
-
-  let lastPos: number = 0;
-  let cmdMap = new Map<number, [HTMLElement, any]>();
-  let linkMap = new Map<number, any>();
+  // insert proof begin/end tokens
   runData.forEach((elm) => {
-    if (elm["type"] === "top_command" || elm["type"] === "proof_command") {
-      const [start, , , stop, , ] = elm.range;
-      const chunk = document.createElement("div");
-      chunk.id = `chunk-${elm.id}`;
-      chunk.classList.add("ab-chunk");
-      if (lastPos < start) {
-        const sp = document.createElement("span");
-        sp.innerHTML = fontifySlice(thmText, lastPos, start);
-        chunk.append(sp);
-        lastPos = start;
+    if (elm.typ === "proof_command") {
+      const stop = elm.range[3];
+      const thmElm = chunkMap.get(elm.thm_id);
+      if (!thmElm) throw new Error(`Bug: can't find ${elm.id} -> ${elm.thm_id}`);
+      thmElm.proofStop = Math.max(stop, thmElm.proofStop ?? stop);
+    }
+  });
+  runData.forEach((elm) => {
+    if (elm.typ === "top_command") {
+      if (elm.proofStop) {
+        thmText.addMark(elm.range[3], '<div class="ab-proof">');
+        thmText.addMark(elm.proofStop, '</div>');
       }
-      const cmd = document.createElement("div");
-      cmd.classList.add("ab-command",
-                        elm["type"] === "proof_command" ? "ab-proof" : "ab-top");
-      cmd.innerHTML = fontifySlice(thmText, start, stop);
-      cmdMap.set(elm.id, [cmd, elm]);
-      chunk.append(cmd);
-      lastPos = stop;
-      thmBox.append(chunk);
-    } else if (elm["type"] === "link") {
-      console.log(`Need to link URL "${elm.url}" to ${elm.parent}`);
-      linkMap.set(elm.parent, elm);
     }
   });
-  const thmCmds = new Set<number>();
-  cmdMap.forEach(([cmd, elm], _) => {
-    if (elm["type"] === "proof_command" && elm.thm_id) {
-      thmCmds.add(elm.thm_id);
-      const [thmCmd, _] = isPresent(cmdMap.get(elm.thm_id));
-      if (thmCmd.parentNode && cmd.parentNode)
-        thmCmd.parentNode.append(cmd.parentNode);
-    }
-  });
-  const do_expand = "[expand proof]";
-  const do_collapse = "[collapse proof]";
-  thmCmds.forEach((thm_id) => {
+  // render text
+  thmBox.innerHTML = thmText.toString();
+  // create the buttons
+  document.querySelectorAll('div[class="ab-proof"]').forEach((el) => {
+    const proofEl = el as HTMLElement;
+    proofEl.style.display = "none";
     const btn = document.createElement("button");
-    btn.innerText = do_collapse;
-    btn.dataset.state = "expanded";
+    btn.classList.add("proof-toggle");
+    btn.innerText = do_expand;
+    btn.dataset.state = "C";
     btn.addEventListener("click", () => {
-      const curState = btn.dataset.state;
-      btn.dataset.state = curState === "expanded" ? "collapsed" : "expanded";
-      for (let cur = btn.nextElementSibling; cur; cur = cur.nextElementSibling) {
-        const curEl = cur as HTMLElement;
-        if (curState === "expanded") curEl.style.display = "none";
-        else curEl.style.display = "";
-      }
-      btn.innerText = curState === "expanded" ? do_expand : do_collapse;
+      const prevState = btn.dataset.state;
+      btn.dataset.state = prevState === "E" ? "C" : "E";
+      btn.innerText = prevState === "E" ? do_expand : do_collapse;
+      proofEl.style.display = prevState === "E" ? "none" : "";
     });
-    const [thmCmd, _] = isPresent(cmdMap.get(thm_id));
-    thmCmd.after(btn);
-    const br = document.createElement("span");
-    br.innerHTML = "\n";
-    thmCmd.after(br);
-    // btn.dispatchEvent(new Event("click", {bubbles: true}));
+    proofEl.before(document.createTextNode("\n"));
+    proofEl.before(btn);
   });
-  return cmdMap;
+  // create the floats
+  runData.forEach((elm) => {
+    elm.float = "";
+    if (elm.typ === "top_command" || elm.typ === "proof_command") {
+      if (elm.typ === "top_command") {
+        elm.float += `<div class="ab-int"><span class="ab-pr">Abella &lt;</span> <strong>${elm.command}</strong></div>`;
+      } else {
+        const startSeq = elm.start_state as SequentObj;
+        const endSeq = elm.end_state as SequentObj | undefined;
+        elm.float += sequentToString(startSeq);
+        elm.theorem = makeSafe(elm.theorem);
+        elm.float += `<div class="ab-int"><span class="ab-pr">${elm.theorem} &lt;</span> <strong>${elm.command}</strong></div>`;
+        if (endSeq) elm.float += sequentToString(endSeq);
+      }
+    }
+  });
+  // add system messages to floats
+  runData.forEach((elm) => {
+    if (elm.typ === "system_message") {
+      const cmdElm = chunkMap.get(elm.after);
+      // [HACK] below, if happens, is possible Abella bug; skip
+      if (cmdElm === undefined || cmdElm.float === undefined) return;
+      elm.message = makeSafe(elm.message);
+      cmdElm.float += `<div class="ab-sys">${elm.message}</div>`;
+    }
+  });
+  // link the floats
+  runData.forEach((elm) => {
+    if (elm.float) {
+      const targetChunk = document.getElementById(`chunk-${elm.id}`);
+      if (!targetChunk) throw new Error(`Bug: could not find chunk #${elm.id}`);
+      const float = document.createElement("div");
+      float.classList.add("float")
+      float.style.position = "absolute";
+      float.style.zIndex = "10100";
+      float.style.display = "none";
+      float.innerHTML = `<div class="float-container">${elm.float}</div>`;
+      targetChunk.addEventListener("mousemove", (ev) => {
+        const flWidth = float.offsetWidth, flHeight = float.offsetHeight;
+        const wWidth = window.innerWidth, wHeight = window.innerHeight;
+        const pX = ev.pageX, pY = ev.pageY;
+        const d = 10;
+        let giveUp = false;
+        float.style.display = "none";
+        if (pX + flWidth + d <= wWidth)
+          float.style.left = `${pX + d}px`;
+        else
+          float.style.left = `${wWidth - flWidth}px`;
+        if (pY + flHeight + d <= wHeight)
+          float.style.top = `${pY + d}px`;
+        else if (pY - flHeight - d >= 0)
+          float.style.top = `${pY - flHeight - d}px`;
+        else giveUp = true; // float doesn't fit above or below
+        if (!giveUp)
+          float.style.display = "block";
+      });
+      targetChunk.addEventListener("mouseleave", () => {
+        float.style.display = "none";
+      });
+      targetChunk.addEventListener("click", (ev) => {
+        // [HACK] do nothing if it contains an a element
+        if (targetChunk.querySelector("a")) {
+          ev.stopPropagation();
+          return false;
+        }
+        float.style.display = "none";
+        Fancybox.show([ float.innerHTML ]);
+      });
+      thmBox.append(float);
+    }
+  });
 }
-
-**** */

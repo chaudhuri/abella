@@ -1,17 +1,39 @@
+@import "@fancyapps/ui/dist/fancybox/fancybox.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-div.ab-box {
+#logobox {
+    @apply w-11/12 mx-auto mb-2;
+}
+
+#thmname {
+    @apply text-lg font-mono text-[maroon];
+}
+
+#outer-container {
+    @apply w-11/12 mx-auto mt-2 border-rose-300 border-2;
+}
+
+#container {
+
+}
+
+#thmbox {
     @apply font-mono italic bg-yellow-50 leading-tight w-full h-full px-2 whitespace-pre overflow-auto text-green-800;
 }
 
-div.ab-chunk {
+button.proof-toggle {
+    @apply font-sans text-[.75em] text-green-700 hover:text-green-700/70 hover:underline;
+}
+
+div.ab-proof {
     @apply inline;
 }
 
 div.ab-command {
-    @apply inline-block cursor-default hover:bg-rose-200/60;
+    @apply inline-block cursor-default not-italic hover:bg-rose-200/60;
 }
 
 div.ab-proof {
@@ -22,11 +44,31 @@ div.ab-top {
     @apply leading-snug not-italic text-[#000000];
 }
 
+div.ab-sys {
+    @apply text-rose-500 font-bold;
+}
+
+div.ab-int {
+    @apply mt-1 mb-1;
+}
+
+span.ab-pr {
+    @apply text-rose-600 font-bold italic;
+}
+
+div.float {
+    @apply border-2 border-rose-800 bg-white p-2 shadow-lg shadow-rose-600/40;
+}
+
+div.float-container {
+    @apply whitespace-pre font-mono not-italic text-sm overflow-auto;
+}
+
 div.rl {
     @apply flex flex-col max-w-xl whitespace-normal ml-2 bg-amber-50;
 }
 
-div.rl-name {
+span.rl-name {
     @apply mb-3 font-sans text-rose-600 text-[.8em];
 }
 
@@ -49,3 +91,18 @@ div.rl-more {
 span.rl-hyp {
     @apply text-rose-600;
 }
+
+body { padding-bottom: 50px; padding-top: 10px; }
+
+span.s-op { color: #9d1f1f; }
+span.s-ty { color: #1640b0; }
+span.s-tm { color: #9d1f1f; }
+span.s-tb { color: #338fff; }
+span.s-tc { color: #9d1f1f; font-weight:bold; }
+span.s-pc { color: #9d1f1f; font-style:italic; }
+span.s-ps { background-color: #9d1f1f;
+            color: #c0965b;
+            font-weight:bold; }
+a.ln { text-decoration-line: underline;
+       color: #335fcf; }
+

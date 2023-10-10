@@ -17,5 +17,8 @@
     "rimraf": "^5.0.5",
     "tailwindcss": "^3.3.3",
     "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "@fancyapps/ui": "^5.0.24"
   }
 }
