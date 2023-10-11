@@ -198,7 +198,7 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
       elm.command = makeSafe(thmText.source.slice(start, stop));
     } else if (elm.typ === "link") {
       const [start, , , stop, , ] = elm.source;
-      thmText.addMark(start + 1, `<a href="${elm.url}" class="ln">`);
+      thmText.addMark(start + 1, `<a href="/${elm.url}" class="ln">`);
       thmText.addMark(stop - 1, '</a>');
     }
   });
@@ -332,7 +332,7 @@ export async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
     } else if (annot.kind === "accum_sig") {
       const [start, stop] = annot.range;
       const extSig = sigText.source.slice(start, stop);
-      sigText.addMark(start, `<a href="${extSig}.html" class="ln">`);
+      sigText.addMark(start, `<a href="./${extSig}.html" class="ln">`);
       sigText.addMark(stop, '</a>');
     } else if (annot.kind === "decl") {
       const [start, stop] = annot.range;
@@ -352,7 +352,7 @@ export async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
     } else if (annot.kind === "accum") {
       const [start, stop] = annot.range;
       const extSig = modText.source.slice(start, stop);
-      modText.addMark(start, `<a href="${extSig}.html" class="ln">`);
+      modText.addMark(start, `<a href="./${extSig}.html" class="ln">`);
       modText.addMark(stop, '</a>');
     } else if (annot.kind === "clause") {
       const [start, stop] = annot.range;

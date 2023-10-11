@@ -18,33 +18,64 @@ let thm_template base =
   let thmfile = base ^ ".thm" in
   let jsonfile = base ^ ".json" in
   {|<!DOCTYPE html>
-<html lang="en">
-
-<head>
+<html lang="en"><head>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>|} ^ base ^ {|.thm [Abella trace]</title>
   <link rel="stylesheet" href="./abella_doc.css">
-</head>
-
-<body>
+</head><body>
   <div id="logobox">
     <a href="https://abella-prover.org/index.html"><img src="https://abella-prover.org/images/logo-small.png"></a>
     <h1 id="thmname">|} ^ base ^ {|.thm</h1>
   </div>
   <div id="outer-container">
     <div id="container">
-      <div id="thmbox">&nbsp;</div>
+      <div id="thmbox">... loading ...</div>
     </div>
   </div>
   <script type="module">
     import { loadModule } from "./abella_doc.js";
     await loadModule("thmbox", "|} ^ thmfile ^ {|", "|} ^ jsonfile ^ {|");
   </script>
-</body>
+</body></html>|} ;;
 
-</html>|} ;;
+let lp_template base =
+  let base = Filename.basename base in
+  let sig_src = base ^ ".sig" in
+  let sig_json = base ^ ".sig.json" in
+  let mod_src = base ^ ".mod" in
+  let mod_json = base ^ ".mod.json" in
+  {|<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>|} ^ base ^ {| [&lambda;Prolog]</title>
+  <link rel="stylesheet" href="./abella_doc.css">
+</head><body>
+  <div id="logobox">
+    <a href="https://abella-prover.org/index.html"><img src="https://abella-prover.org/images/logo-small.png"></a>
+    <h1 id="thmname">&lambda;Prolog module <strong>|} ^ base ^ {|</strong></h1>
+  </div>
+  <div class="outer-container">
+    <h2><strong><tt>|} ^ base ^ {|.sig</tt></strong></h2>
+    <div class="container">
+      <div id="sigbox">... loading ...</div>
+    </div>
+  </div>
+  <div class="outer-container">
+    <h2><strong><tt>|} ^ base ^ {|.mod</tt></strong></h2>
+    <div class="container">
+      <div id="modbox">... loading ...</div>
+    </div>
+  </div>
+  <script type="module">
+    import { loadLP } from "./abella_doc.js";
+    await loadLP("sigbox", "|} ^ sig_src ^ {|", "|} ^ sig_json ^ {|",
+                 "modbox", "|} ^ mod_src ^ {|", "|} ^ mod_json ^ {|");
+  </script>
+</body></html>|} ;;
 
 (******************************************************************************)
 
@@ -117,6 +148,8 @@ let rec process file =
       Printf.printf "IGNORE: %s\n%!" file
 
 and process_sig file =
+  if not @@ Filename.is_implicit file then
+    failwithf "cannot handle explicit or relative paths: %s" file ;
   let base = Filename.chop_suffix file ".sig" in
   let Sig lpsig = Accumulate.read_lpsig base in
   let annots = ref [] in
@@ -135,7 +168,11 @@ and process_sig file =
   let out = open_out_bin (file ^ ".json") in
   output_string out (Json.to_string json) ;
   close_out out ;
-  Printf.printf "LPSIG: %s -> %s.json\n%!" file file
+  Printf.printf "LPSIG: %s -> %s.json\n%!" file file ;
+  let out = open_out_bin (base ^ ".html") in
+  output_string out (lp_template base) ;
+  close_out out ;
+  Printf.printf "CREATE: %s.html\n%!" base
 
 and process_mod file =
   let base = Filename.chop_suffix file ".mod" in
