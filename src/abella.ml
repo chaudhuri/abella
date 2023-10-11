@@ -733,14 +733,14 @@ and process_proof1 proc =
   end ;
   suppress_proof_state_display := false ;
   if !interactive && not !annotate then fprintf !out "%s < %!" proc.thm ;
-  let input, input_pos = Parser.command_start Lexer.token !lexbuf in
-  let cmd_string = command_to_string input in
+  let input = Parser.command_start Lexer.token !lexbuf in
+  let cmd_string = command_to_string input.el in
   if not (!interactive || !annotate) then fprintf !out "%s.\n%!" cmd_string ;
   if !annotate then Annot.extend annot "command" @@ `String cmd_string ;
-  if !annotate && fst input_pos != Lexing.dummy_pos then
-    Annot.extend annot "range" @@ json_of_position input_pos ;
+  if !annotate && fst input.pos != Lexing.dummy_pos then
+    Annot.extend annot "range" @@ json_of_position input.pos ;
   let perform () =
-    begin match input with
+    begin match input.el with
     | Induction(args, hn)           -> Prover.induction ?name:hn args
     | CoInduction hn                -> Prover.coinduction ?name:hn ()
     | Apply(depth, h, args, ws, hn) -> Prover.apply ?depth ?name:hn h args ws ~term_witness
@@ -806,14 +806,14 @@ and process_proof1 proc =
 and process_top1 () =
   if !interactive && not !annotate then fprintf !out "Abella < %!" ;
   let annot = Annot.fresh "top_command" in
-  let input, input_pos = Parser.top_command_start Lexer.token !lexbuf in
-  if fst input_pos != Lexing.dummy_pos then
-    Annot.extend annot "range" @@ json_of_position input_pos ;
-  let cmd_string = top_command_to_string input in
+  let input = Parser.top_command_start Lexer.token !lexbuf in
+  if fst input.pos != Lexing.dummy_pos then
+    Annot.extend annot "range" @@ json_of_position input.pos ;
+  let cmd_string = top_command_to_string input.el in
   if not (!interactive || !annotate) then fprintf !out "%s.\n%!" cmd_string ;
   Annot.extend annot "command" @@ `String cmd_string ;
   Annot.commit annot ;
-  begin match input with
+  begin match input.el with
   | Theorem(name, tys, thm) -> begin
       let st = get_bind_state () in
       let seq = Prover.copy_sequent () in
@@ -845,7 +845,7 @@ and process_top1 () =
         compile (CTheorem(n, tys, t, Finished))
       end gen_thms ;
   | Define _ ->
-      compile (Prover.register_definition ~print:system_message input)
+      compile (Prover.register_definition ~print:system_message input.el)
   | TopCommon(Back) ->
       if !interactive then State.Undo.back 2
       else failwith "Cannot use interactive commands in non-interactive mode"

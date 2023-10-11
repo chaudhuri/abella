@@ -35,10 +35,13 @@ let get_thm_depend filename =
   let imports = ref [] in
     begin try
       while true do
-        match Parser.any_command_start Lexer.token lexbuf with
-          | ATopCommand(Specification(s, _)), _ -> specs := normalize_filename s :: !specs
-          | ATopCommand(Import(i, _, _)), _ -> imports := normalize_filename i :: !imports
-          | ACommon(Set("load_path", QStr lp)), _ -> load_path := lp
+        match (Parser.any_command_start Lexer.token lexbuf).el with
+          | ATopCommand(Specification(s, _)) ->
+              specs := normalize_filename s :: !specs
+          | ATopCommand(Import(i, _, _)) ->
+              imports := normalize_filename i :: !imports
+          | ACommon(Set("load_path", QStr lp)) ->
+              load_path := lp
           | _ -> ()
       done
     with
@@ -62,12 +65,14 @@ let rec get_sig_depend filename =
   with
     | Not_found ->
         H.add sig_depend_cache filename None ;
-        let Sig(_, accums, _) = read_lpsig filename in
+        let Sig { accum_sig ; _ } = read_lpsig filename in
         let deps =
-          (filename ^ ".sig") :: (List.flatten_map get_sig_depend accums)
+          (filename ^ ".sig") :: (List.flatten_map get_sig_depend_ accum_sig)
         in
           H.replace sig_depend_cache filename (Some deps) ;
           deps
+
+and get_sig_depend_ wpos = get_sig_depend wpos.el
 
 let rec get_mod_depend filename =
   try
@@ -79,13 +84,15 @@ let rec get_mod_depend filename =
   with
     | Not_found ->
         H.add mod_depend_cache filename None ;
-        let Mod(_, accumulates, _) = read_lpmod filename in
+        let Mod { accum ; _ } = read_lpmod filename in
         let deps =
           (filename ^ ".mod") ::
             (get_sig_depend filename @
-               List.flatten_map get_mod_depend accumulates) in
+               List.flatten_map get_mod_depend_ accum) in
           H.replace mod_depend_cache filename (Some deps) ;
           deps
+
+and get_mod_depend_ wpos = get_mod_depend wpos.el
 
 let print_deps filename =
   let filename = Filename.chop_extension filename in

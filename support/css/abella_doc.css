@@ -12,15 +12,15 @@
     @apply text-lg font-mono text-[maroon];
 }
 
-#outer-container {
-    @apply w-11/12 mx-auto mt-2 border-rose-300 border-2;
+#outer-container, .outer-container {
+    @apply w-11/12 mx-auto mt-2;
 }
 
-#container {
-
+#container, .container {
+    @apply border-rose-300 border-2;
 }
 
-#thmbox {
+#thmbox, #sigbox, #modbox {
     @apply font-mono italic bg-yellow-50 leading-tight w-full h-full px-2 whitespace-pre overflow-auto text-green-800;
 }
 
@@ -94,7 +94,7 @@ span.rl-hyp {
 
 body { padding-bottom: 50px; padding-top: 10px; }
 
-span.s-op { color: #9d1f1f; }
+span.s-op { color: #9d1f1f; font-style: normal; }
 span.s-ty { color: #1640b0; }
 span.s-tm { color: #9d1f1f; }
 span.s-tb { color: #338fff; }

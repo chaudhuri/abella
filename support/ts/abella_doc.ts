@@ -17,7 +17,7 @@ type RexHandler = {
 const rexHandlers: Array<RexHandler> = [
   {
     // op_re
-    rex: /(=(?:&gt;)?|\|-|-&gt;|\\\/?|\/\\|\{|\})/g,
+    rex: /(:[:=-]?|=(?:&gt;)?|\|-|-&gt;|\\\/?|\/\\|\{|\})/g,
     style: "color:#9d1f1f;",
   },
   {
@@ -142,21 +142,27 @@ class Content {
   }
 }
 
-const opRex = /(=(?:>)?|\|-|->|\\\/?|\/\\|\{|\}|;|\.)/g;
+const opRex = /(:[:=-]?|=(?:>)?|\|-|->|\\\/?|\/\\|\{|\}|;|\.)/g;
 const typeRex = /\b(olist|prop|o)\b/g;
 const termRex = /\b(forall|exists|nabla|pi|sigma|sig|module|end)\b/g;
 const topBuiltRex = /\b(Import|Specification|Query|Set|Show|Close)\b/g;
 const topCmdRex = /\b((?:Co)?Define|Theorem|Split|by|Kind|Type)\b/g;
 const proofCmdRex = /\b(abbrev|all|apply|assert|backchain|case|clear|(?:co)?induction|cut|inst|intros|keep|left|monotone|on|permute|rename|right|search|split(?:\*)?|to|unabbrev|unfold|with|witness)\b/g;
 const proofSpecRex = /\b(skip|undo|abort)\b/g;
+const sigRex = /\b(type|kind)\b/g;
 
 const do_expand = "[expand proof]";
 const do_collapse = "[collapse proof]";
 
+function getBox(boxId: string) {
+  const box = document.getElementById(boxId);
+  if (!box) throw new Error(`Bug: cannot find #${boxId}`);
+  box.replaceChildren();
+  return box;
+}
+
 export async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
-  const thmBox = document.getElementById(boxId);
-  if (!thmBox) throw new Error("cannot find #thmbox");
-  thmBox.replaceChildren();
+  const thmBox = getBox(boxId);
   // get data
   const init: RequestInit = {
     method: "GET",
@@ -303,4 +309,60 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
       thmBox.append(float);
     }
   });
+}
+
+export async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
+                             modBoxId: string, modFile: string, modJson: string) {
+  const sigBox = getBox(sigBoxId);
+  const modBox = getBox(modBoxId);
+  // get data
+  const init: RequestInit = {
+    method: "GET",
+    cache: "no-store",
+    headers: { pragma: "no-cache" },
+  };
+  const sigText = new Content(await fetch(sigFile, init).then(resp => resp.text()));
+  const sigData = await fetch(sigJson, init).then(resp => resp.json()) as any[];
+  const modText = new Content(await fetch(modFile, init).then(resp => resp.text()));
+  const modData = await fetch(modJson, init).then(resp => resp.json()) as any[];
+  sigData.forEach((annot) => {
+    if (annot.kind === "name") {
+      sigText.addMark(annot.range[0], '<span class="s-op">');
+      sigText.addMark(annot.range[1], '</span>');
+    } else if (annot.kind === "accum_sig") {
+      const [start, stop] = annot.range;
+      const extSig = sigText.source.slice(start, stop);
+      sigText.addMark(start, `<a href="${extSig}.html" class="ln">`);
+      sigText.addMark(stop, '</a>');
+    } else if (annot.kind === "decl") {
+      const [start, stop] = annot.range;
+      sigText.addMark(start, '<div class="ab-command">');
+      sigText.fontify(start, stop, opRex, "s-op");
+      sigText.fontify(start, stop, typeRex, "s-ty");
+      sigText.fontify(start, stop, termRex, "s-tm");
+      sigText.fontify(start, stop, sigRex, "s-op");
+      sigText.addMark(stop, '</div>');
+    }
+  });
+  sigBox.innerHTML = sigText.toString();
+  modData.forEach((annot) => {
+    if (annot.kind === "name") {
+      modText.addMark(annot.range[0], '<span class="s-op">');
+      modText.addMark(annot.range[1], '</span>');
+    } else if (annot.kind === "accum") {
+      const [start, stop] = annot.range;
+      const extSig = modText.source.slice(start, stop);
+      modText.addMark(start, `<a href="${extSig}.html" class="ln">`);
+      modText.addMark(stop, '</a>');
+    } else if (annot.kind === "clause") {
+      const [start, stop] = annot.range;
+      modText.addMark(start, '<div class="ab-command">');
+      modText.fontify(start, stop, opRex, "s-op");
+      modText.fontify(start, stop, typeRex, "s-ty");
+      modText.fontify(start, stop, termRex, "s-tm");
+      modText.fontify(start, stop, sigRex, "s-tc");
+      modText.addMark(stop, '</div>');
+    }
+  });
+  modBox.innerHTML = modText.toString();
 }

@@ -4,8 +4,9 @@
   "description": "Support code for abella_doc (https://abella-prover.org)",
   "main": "./js/abella_doc.js",
   "scripts": {
-    "js": "tsc && esbuild ./js/abella_doc.js --color=false --bundle --minify --format=esm --outfile=dist/abella_doc.js",
-    "css": "npx tailwindcss --output dist/style.css --input css/style-src.css --minify",
+    "check": "tsc -noEmit",
+    "js": "esbuild ./ts/abella_doc.ts --color=false --bundle --minify --format=esm --outfile=dist/abella_doc.js",
+    "css": "tailwindcss --output dist/abella_doc.css --input css/abella_doc.css --minify",
     "build": "npm run js && npm run css",
     "clean": "rimraf js dist"
   },
