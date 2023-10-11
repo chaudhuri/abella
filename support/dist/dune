@@ -1,12 +1,13 @@
 (rule
   (targets abella_doc.js)
   (deps ../package.json ../package-lock.json
-        ../tsconfig.json ../ts/abella_doc.ts)
-  (action (progn
-    (run npm run js))))
+        ../tsconfig.json ../ts/abella_doc.ts
+        ../node_modules)
+  (action (run npm run js)))
 
 (rule
   (targets abella_doc.css)
   (deps ../package.json ../package-lock.json
-        ../tailwind.config.js ../css/abella_doc.css)
+        ../tailwind.config.js ../css/abella_doc.css
+        ../node_modules)
   (action (run npm run css)))

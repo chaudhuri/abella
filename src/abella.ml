@@ -56,8 +56,6 @@ let witnesses = State.rref false
 
 let unfinished_theorems : string list ref = ref []
 
-exception AbortProof
-
 exception UserInterrupt
 
 let output_flush out s =
@@ -249,7 +247,7 @@ let comp_spec_sign = State.rref ([], [])
 let comp_spec_clauses = State.rref []
 let comp_content = State.rref []
 
-let debug_spec_sign1 ?(msg="") () =
+let _debug_spec_sign ?(msg="") () =
   let (kt, ct) = !comp_spec_sign in
   Printf.printf "DEBUG: %sspec_ktable = [%s], spec_ctable = [%s]\n"
     (if msg = "" then "" else "[" ^ msg ^ "] ")
@@ -643,7 +641,7 @@ and proof_processor = {
 
 let current_state = State.rref Process_top
 
-let print_clauses () =
+let _print_clauses () =
   List.iter print_clause !Prover.clauses
 
 let rec process1 () =

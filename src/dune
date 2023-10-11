@@ -28,3 +28,7 @@
   (modules parser)
   (infer true)
   (flags --explain))
+
+(alias
+  (name default)
+  (deps abella.exe abella_doc.exe))
