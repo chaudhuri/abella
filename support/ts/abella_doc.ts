@@ -278,9 +278,15 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
     btn.dataset.state = "C";
     btn.addEventListener("click", () => {
       const prevState = btn.dataset.state;
-      btn.dataset.state = prevState === "E" ? "C" : "E";
-      btn.innerText = prevState === "E" ? do_expand : do_collapse;
-      proofEl.style.display = prevState === "E" ? "none" : "";
+      if (prevState === "E") {
+        btn.dataset.state = "C";
+        btn.innerText = do_expand;
+        proofEl.style.display = "none";
+      } else {
+        btn.dataset.state = "E";
+        btn.innerText = do_collapse;
+        proofEl.style.display = "";
+      }
     });
     proofEl.before(document.createTextNode("\n"));
     proofEl.before(btn);
