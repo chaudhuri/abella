@@ -28,16 +28,12 @@ button.proof-toggle {
     @apply font-sans text-[.75em] text-green-700 hover:text-green-700/70 hover:underline;
 }
 
-div.ab-proof {
-    @apply inline;
-}
-
 div.ab-command {
     @apply inline-block cursor-default not-italic text-black hover:bg-rose-200/60;
 }
 
 div.ab-proof {
-    @apply text-rose-700 not-italic text-sm;
+    @apply inline not-italic text-sm;
 }
 
 div.ab-top {

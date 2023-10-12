@@ -25,12 +25,12 @@ const rexHandlers: Array<RexHandler> = [
   },
   {
     // term_re
-    rex: /\b(forall|exists|nabla|pi|sigma|sig|module|end)\b/g,
+    rex: /\b(forall|exists|nabla|pi|sigma)\b/g,
     style: "color:#9d1f1f;",
   },
 ];
 
-export function fontify(txt: string): string {
+function fontify(txt: string): string {
   txt = makeSafe(txt);
   rexHandlers.forEach((hnd) => {
     txt = txt.replaceAll(hnd.rex, `<span style=${hnd.style}>$1</span>`);
@@ -208,7 +208,7 @@ class FocusBox {
   }
 }
 
-export async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
+async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
   const focusBox = new FocusBox();
   const thmBox = getBox(boxId);
   // get data
@@ -386,7 +386,7 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
   thmBox.insertAdjacentElement("afterbegin", btnExpandAll);
 }
 
-export async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
+async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
                              modBoxId: string, modFile: string, modJson: string) {
   const sigBox = getBox(sigBoxId);
   const modBox = getBox(modBoxId);
@@ -441,3 +441,6 @@ export async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
   });
   modBox.innerHTML = modText.toString();
 }
+
+(window as any)["loadModule"] = loadModule;
+(window as any)["loadLP"] = loadLP;

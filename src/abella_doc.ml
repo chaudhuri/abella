@@ -24,7 +24,7 @@ let thm_template base =
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>|} ^ base ^ {|.thm [Abella trace]</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-  <link rel="stylesheet" href="./abella_doc.css">
+  <style>|} ^ css_content ^ {|</style>
 </head><body>
   <div id="logobox">
     <a href="https://abella-prover.org/index.html"><img src="https://abella-prover.org/images/logo-small.png"></a>
@@ -36,8 +36,8 @@ let thm_template base =
     </div>
   </div>
   <script type="module">
-    import { loadModule } from "./abella_doc.js";
-    await loadModule("thmbox", "|} ^ thmfile ^ {|", "|} ^ jsonfile ^ {|");
+|} ^ js_content ^ {|
+await loadModule("thmbox", "|} ^ thmfile ^ {|", "|} ^ jsonfile ^ {|");
   </script>
 </body></html>|} ;;
 
@@ -53,7 +53,7 @@ let lp_template base =
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>|} ^ base ^ {| [&lambda;Prolog]</title>
-  <link rel="stylesheet" href="./abella_doc.css">
+  <style>|} ^ css_content ^ {|</style>
 </head><body>
   <div id="logobox">
     <a href="https://abella-prover.org/index.html"><img src="https://abella-prover.org/images/logo-small.png"></a>
@@ -72,9 +72,9 @@ let lp_template base =
     </div>
   </div>
   <script type="module">
-    import { loadLP } from "./abella_doc.js";
-    await loadLP("sigbox", "|} ^ sig_src ^ {|", "|} ^ sig_json ^ {|",
-                 "modbox", "|} ^ mod_src ^ {|", "|} ^ mod_json ^ {|");
+|} ^ js_content ^ {|
+await loadLP("sigbox", "|} ^ sig_src ^ {|", "|} ^ sig_json ^ {|",
+             "modbox", "|} ^ mod_src ^ {|", "|} ^ mod_json ^ {|");
   </script>
 </body></html>|} ;;
 
@@ -141,8 +141,8 @@ let rec process file =
           process_mod file
         else if Filename.check_suffix file ".thm" then
           process_thm file
-        else
-          Printf.printf "IGNORE: %s\n%!" file
+        (* else *)
+        (*   Printf.printf "IGNORE: %s\n%!" file *)
       end
   | _ ->
       (* ignore all other files *)
@@ -213,8 +213,6 @@ and process_directory dir =
   Array.fast_sort String.compare fs ;
   Array.iter (fun file -> process (Filename.concat dir file)) fs
 
-module SSet = Set.Make(String)
-
 let main () =
   Arg.parse options add_input_file usage_message ;
   input_files := List.rev !input_files ;
@@ -228,7 +226,6 @@ let main () =
       topo := file :: !topo ;
     end in
   Hashtbl.iter (fun f _ -> toproc f) dep_tab ;
-  let support_dirs = ref SSet.empty in
   List.iter begin fun file ->
     match Filename.chop_suffix file ".thm" with
     | root ->
@@ -241,21 +238,8 @@ let main () =
         let ch = open_out_bin htmlfile in
         output_string ch (thm_template root) ;
         close_out ch ;
-        Printf.printf "CREATE: %s\n%!" htmlfile ;
-        support_dirs := SSet.add (Filename.dirname file) !support_dirs
+        Printf.printf "CREATE: %s\n%!" htmlfile
     | exception Invalid_argument _ -> ()
-  end (List.rev !topo) ;
-  SSet.iter begin fun dir ->
-    let js_file = Filename.concat dir "abella_doc.js" in
-    let out = open_out_bin js_file in
-    output_string out js_content ;
-    close_out out ;
-    Printf.printf "CREATE: %s\n%!" js_file ;
-    let css_file = Filename.concat dir "abella_doc.css" in
-    let out = open_out_bin css_file in
-    output_string out css_content ;
-    close_out out ;
-    Printf.printf "CREATE: %s\n%!" css_file
-  end !support_dirs
+  end (List.rev !topo)
 
 let () = if not !Sys.interactive then main()

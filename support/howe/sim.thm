@@ -8,9 +8,14 @@ Import "subst".
 Theorem subjred : forall M T V,
   {of M T} -> {eval M V} -> {of V T}.
 induction on 2. intros. case H2.
+  % a comment
   search.
+  % another comment 
   case H1 (keep). inst *H4 with n1 = fix R. cut *H5 with *H1.
     apply IH to *H6 *H3. search.
+  % foo
+
+  % bar
   case H1. apply IH to *H6 *H3. case H8. inst *H9 with n1 = N. cut *H10 with *H7.
     apply IH to *H11 *H4. search.
   case H1. apply IH to *H7 *H4. search.
