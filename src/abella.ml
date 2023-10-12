@@ -860,7 +860,7 @@ and process_top1 () =
       if !can_read_specification then begin
         read_specification (normalize_filename filename) ;
         ensure_finalized_specification () ;
-        if !annotate then link_message pos (filename ^ ".html") ;
+        if !annotate then link_message pos (filename ^ ".lp.html") ;
       end else
         failwith "Specification can only be read \
                  \ at the begining of a development."

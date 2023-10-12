@@ -170,10 +170,11 @@ and process_sig file =
   output_string out (Json.to_string json) ;
   close_out out ;
   Printf.printf "LPSIG: %s -> %s.json\n%!" file file ;
-  let out = open_out_bin (base ^ ".html") in
+  let html_file = base ^ ".lp.html" in
+  let out = open_out_bin html_file in
   output_string out (lp_template base) ;
   close_out out ;
-  Printf.printf "CREATE: %s.html\n%!" base
+  Printf.printf "CREATE: %s\n%!" html_file
 
 and process_mod file =
   let base = Filename.chop_suffix file ".mod" in

@@ -407,7 +407,7 @@ async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
     } else if (annot.kind === "accum_sig") {
       const [start, stop] = annot.range;
       const extSig = sigText.source.slice(start, stop);
-      sigText.addMark(start, `<a href="./${extSig}.html" class="ln">`);
+      sigText.addMark(start, `<a href="./${extSig}.lp.html" class="ln">`);
       sigText.addMark(stop, '</a>');
     } else if (annot.kind === "decl") {
       const [start, stop] = annot.range;
@@ -426,8 +426,8 @@ async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
       modText.addMark(annot.range[1], '</span>');
     } else if (annot.kind === "accum") {
       const [start, stop] = annot.range;
-      const extSig = modText.source.slice(start, stop);
-      modText.addMark(start, `<a href="./${extSig}.html" class="ln">`);
+      const extMod = modText.source.slice(start, stop);
+      modText.addMark(start, `<a href="./${extMod}.lp.html" class="ln">`);
       modText.addMark(stop, '</a>');
     } else if (annot.kind === "clause") {
       const [start, stop] = annot.range;
