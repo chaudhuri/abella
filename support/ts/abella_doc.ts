@@ -3,8 +3,6 @@
 //                     en Informatique et en Automatique)
 // See LICENSE for licensing details.
 
-import { Fancybox } from "@fancyapps/ui";
-
 function makeSafe(txt: string): string {
   return new Option(txt).innerHTML;
 }
@@ -161,7 +159,57 @@ function getBox(boxId: string) {
   return box;
 }
 
+class FocusBox {
+  readonly box: HTMLDivElement;
+  readonly inner: HTMLDivElement;
+  readonly content: HTMLDivElement;
+
+  show(html: string) {
+    this.content.innerHTML = html;
+    this.box.style.display = "";
+    this.inner.style.width = `${this.content.offsetWidth + 40}px`;
+    this.inner.style.height = `${this.content.offsetHeight + 20}px`;
+  }
+
+  close() {
+      this.box.style.display = "none";
+      this.content.replaceChildren();
+  }
+
+  constructor() {
+    this.box = document.createElement("div");
+    this.box.id = "focusbox";
+    this.box.classList.add("focusbox");
+    this.box.style.display = "none";
+    this.inner = document.createElement("div");
+    this.inner.classList.add("focusbox-inner");
+    this.box.append(this.inner);
+    const btnClose = document.createElement("button");
+    btnClose.type = "button";
+    btnClose.innerHTML = "&#xE5CD;";
+    btnClose.classList.add("material-icons");
+    btnClose.classList.add("focusbox-close");
+    this.inner.append(btnClose);
+    this.content = document.createElement("div");
+    this.content.classList.add("focusbox-content");
+    this.inner.append(this.content);
+    btnClose.addEventListener("click", () => {
+      this.close();
+    });
+    this.box.addEventListener("mousedown", (ev) => {
+      if ((ev.target as HTMLElement).matches("#focusbox"))
+        this.close();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape")
+        this.close();
+    });
+    document.body.insertAdjacentElement("beforeend", this.box);
+  }
+}
+
 export async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
+  const focusBox = new FocusBox();
   const thmBox = getBox(boxId);
   // get data
   const init: RequestInit = {
@@ -175,28 +223,27 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
   const chunkMap = new Map<number, any>();
   runData.forEach((elm) => {
     if (elm.id === undefined) return;
-    elm.typ = elm["type"];
     chunkMap.set(elm.id, elm);
   });
   // markup source into chunk divs
   runData.forEach((elm) => {
-    if (elm.typ === "top_command" || elm.typ === "proof_command") {
+    if (elm.type === "top_command" || elm.type === "proof_command") {
       const [start, , , stop, , ] = elm.range;
       thmText.addMark(start, `<div id="chunk-${elm.id}" class="ab-command">`);
       thmText.addMark(stop, '</div>');
       thmText.fontify(start, stop, opRex, "s-op");
       thmText.fontify(start, stop, typeRex, "s-ty");
       thmText.fontify(start, stop, termRex, "s-tm");
-      if (elm.typ === "top_command") {
+      if (elm.type === "top_command") {
         thmText.fontify(start, stop, topBuiltRex, "s-tb");
         thmText.fontify(start, stop, topCmdRex, "s-tc");
       }
-      if (elm.typ === "proof_command") {
+      if (elm.type === "proof_command") {
         thmText.fontify(start, stop, proofCmdRex, "s-pc");
         thmText.fontify(start, stop, proofSpecRex, "s-ps");
       }
       elm.command = makeSafe(thmText.source.slice(start, stop));
-    } else if (elm.typ === "link") {
+    } else if (elm.type === "link") {
       const [start, , , stop, , ] = elm.source;
       thmText.addMark(start + 1, `<a href="/${elm.url}" class="ln">`);
       thmText.addMark(stop - 1, '</a>');
@@ -204,7 +251,7 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
   });
   // insert proof begin/end tokens
   runData.forEach((elm) => {
-    if (elm.typ === "proof_command") {
+    if (elm.type === "proof_command") {
       const stop = elm.range[3];
       const thmElm = chunkMap.get(elm.thm_id);
       if (!thmElm) throw new Error(`Bug: can't find ${elm.id} -> ${elm.thm_id}`);
@@ -212,7 +259,7 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
     }
   });
   runData.forEach((elm) => {
-    if (elm.typ === "top_command") {
+    if (elm.type === "top_command") {
       if (elm.proofStop) {
         thmText.addMark(elm.range[3], '<div class="ab-proof">');
         thmText.addMark(elm.proofStop, '</div>');
@@ -241,8 +288,8 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
   // create the floats
   runData.forEach((elm) => {
     elm.float = "";
-    if (elm.typ === "top_command" || elm.typ === "proof_command") {
-      if (elm.typ === "top_command") {
+    if (elm.type === "top_command" || elm.type === "proof_command") {
+      if (elm.type === "top_command") {
         // elm.float += `<div class="ab-int"><span class="ab-pr">Abella &lt;</span> <strong>${elm.command}</strong></div>`;
       } else {
         const startSeq = elm.start_state as SequentObj;
@@ -256,7 +303,7 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
   });
   // add system messages to floats
   runData.forEach((elm) => {
-    if (elm.typ === "system_message") {
+    if (elm.type === "system_message") {
       const cmdElm = chunkMap.get(elm.after);
       // [HACK] below, if happens, is possible Abella bug; skip
       if (cmdElm === undefined || cmdElm.float === undefined) return;
@@ -304,11 +351,33 @@ export async function loadModule(boxId: string, thmfile: string, jsonfile: strin
           return false;
         }
         float.style.display = "none";
-        Fancybox.show([ float.innerHTML ]);
+        focusBox.show(float.innerHTML);
       });
       thmBox.append(float);
     }
   });
+  const btnExpandAll = document.createElement("button");
+  btnExpandAll.classList.add("proof-toggle");
+  btnExpandAll.textContent = "[expand all proofs]";
+  btnExpandAll.addEventListener("click", () => {
+    thmBox.querySelectorAll('.proof-toggle[data-state="C"]')
+      .forEach((el) => {
+        el.dispatchEvent(new MouseEvent("click"));
+      });
+  });
+  const btnCollapseAll = document.createElement("button");
+  btnCollapseAll.classList.add("proof-toggle");
+  btnCollapseAll.textContent = "[collapse all proofs]";
+  btnCollapseAll.addEventListener("click", () => {
+    thmBox.querySelectorAll('.proof-toggle[data-state="E"]')
+      .forEach((el) => {
+        el.dispatchEvent(new MouseEvent("click"));
+      });
+  });
+  thmBox.insertAdjacentText("afterbegin", "\n");
+  thmBox.insertAdjacentElement("afterbegin", btnCollapseAll);
+  thmBox.insertAdjacentText("afterbegin", " ");
+  thmBox.insertAdjacentElement("afterbegin", btnExpandAll);
 }
 
 export async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,

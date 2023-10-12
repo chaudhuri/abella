@@ -1,4 +1,4 @@
-@import "@fancyapps/ui/dist/fancybox/fancybox.css";
+/* @import "@fancyapps/ui/dist/fancybox/fancybox.css"; */
 
 @tailwind base;
 @tailwind components;
@@ -61,7 +61,7 @@ div.float {
 }
 
 div.float-container {
-    @apply whitespace-pre font-mono not-italic text-sm overflow-auto;
+    @apply whitespace-pre font-mono not-italic text-[#000000] text-sm overflow-auto;
 }
 
 div.rl {
@@ -92,6 +92,8 @@ span.rl-hyp {
     @apply text-rose-600;
 }
 
+/* REST OF FILE IS NOT TAILWIND SPECIFIC */
+
 body { padding-bottom: 50px; padding-top: 10px; }
 
 span.s-op { color: #9d1f1f; font-style: normal; }
@@ -106,3 +108,40 @@ span.s-ps { background-color: #9d1f1f;
 a.ln { text-decoration-line: underline;
        color: #335fcf; }
 
+#focusbox, .focusbox {
+  position: fixed;
+  top: 0px; left: 0px;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 15px;
+}
+
+.focusbox-inner {
+  position: relative;
+  max-width: 80vw;
+  background: white;
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.3);
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.focusbox-close {
+  background: none;
+  outline: none;
+  position: absolute;
+  top: 0; right: 0;
+  font-size: 30px;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.focusbox-close:hover {
+  color: black;
+}

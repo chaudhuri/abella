@@ -23,6 +23,7 @@ let thm_template base =
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>|} ^ base ^ {|.thm [Abella trace]</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
   <link rel="stylesheet" href="./abella_doc.css">
 </head><body>
   <div id="logobox">
