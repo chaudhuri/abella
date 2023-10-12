@@ -1,2 +1,2 @@
-* Remove dependency on @fancyapps/ui
+* DONE Remove dependency on @fancyapps/ui
 * Fix issues with Import/Specification from weird paths
