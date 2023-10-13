@@ -13,10 +13,24 @@ let js_content = Dist.read "abella_doc.js" |> Option.get
 
 (******************************************************************************)
 
+let safe_file_contents fn =
+  let ch = open_in_bin fn in
+  let str = really_input_string ch (in_channel_length ch) in
+  close_in ch ;
+  let buf = Buffer.create (String.length str) in
+  String.iter begin function
+  | '<' -> Buffer.add_string buf "&lt;"
+  | '>' -> Buffer.add_string buf "&gt;"
+  | '&' -> Buffer.add_string buf "&amp;"
+  | c -> Buffer.add_char buf c
+  end str ;
+  Buffer.contents buf
+
 let thm_template base =
-  let base = Filename.basename base in
-  let thmfile = base ^ ".thm" in
-  let jsonfile = base ^ ".json" in
+  let root = Filename.basename base in
+  let thmfile = root ^ ".thm" in
+  let jsonfile = root ^ ".json" in
+  let thmfile_contents = safe_file_contents (base ^ ".thm") in
   {|<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="UTF-8">
@@ -28,11 +42,11 @@ let thm_template base =
 </head><body>
   <div id="logobox">
     <a href="https://abella-prover.org/index.html"><img src="https://abella-prover.org/images/logo-small.png"></a>
-    <h1 id="thmname">|} ^ base ^ {|.thm</h1>
+    <h1 id="thmname">|} ^ root ^ {|.thm</h1>
   </div>
   <div id="outer-container">
     <div id="container">
-      <div id="thmbox">... loading ...</div>
+      <div id="thmbox"><div class="default-contents">|} ^ thmfile_contents ^ {|</div></div>
     </div>
   </div>
   <script type="module">
@@ -41,11 +55,13 @@ await loadModule("thmbox", "|} ^ thmfile ^ {|", "|} ^ jsonfile ^ {|");
   </script>
 </body></html>|} ;;
 
-let lp_template base =
-  let base = Filename.basename base in
+let lp_template root =
+  let base = Filename.basename root in
   let sig_src = base ^ ".sig" in
+  let sig_contents = safe_file_contents (root ^ ".sig") in
   let sig_json = base ^ ".sig.json" in
   let mod_src = base ^ ".mod" in
+  let mod_contents = safe_file_contents (root ^ ".mod") in
   let mod_json = base ^ ".mod.json" in
   {|<!DOCTYPE html>
 <html lang="en"><head>
@@ -62,13 +78,13 @@ let lp_template base =
   <div class="outer-container">
     <h2><strong><tt>|} ^ base ^ {|.sig</tt></strong></h2>
     <div class="container">
-      <div id="sigbox">... loading ...</div>
+      <div id="sigbox"><div class="default-contents">|} ^ sig_contents ^ {|</div></div>
     </div>
   </div>
   <div class="outer-container">
     <h2><strong><tt>|} ^ base ^ {|.mod</tt></strong></h2>
     <div class="container">
-      <div id="modbox">... loading ...</div>
+      <div id="modbox"><div class="default-contents">|} ^ mod_contents ^ {|</div></div>
     </div>
   </div>
   <script type="module">

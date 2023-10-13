@@ -24,6 +24,10 @@
     @apply font-mono italic bg-yellow-50 leading-tight w-full h-full px-2 whitespace-pre overflow-auto text-green-800;
 }
 
+div.default-contents {
+    @apply not-italic text-[#000000];
+}
+
 button.proof-toggle {
     @apply font-sans text-[.75em] text-green-700 hover:text-green-700/70 hover:underline;
 }

@@ -155,7 +155,7 @@ const do_collapse = "[collapse proof]";
 function getBox(boxId: string) {
   const box = document.getElementById(boxId);
   if (!box) throw new Error(`Bug: cannot find #${boxId}`);
-  box.replaceChildren();
+  // box.replaceChildren();
   return box;
 }
 
@@ -384,6 +384,11 @@ async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
   thmBox.insertAdjacentElement("afterbegin", btnCollapseAll);
   thmBox.insertAdjacentText("afterbegin", " ");
   thmBox.insertAdjacentElement("afterbegin", btnExpandAll);
+  // const thmBox_ = document.getElementById(boxId + "_");
+  // if (thmBox_) {
+  //   thmBox_.style.display = "none";
+  //   thmBox.style.display = "";
+  // }
 }
 
 async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
