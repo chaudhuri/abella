@@ -1,3 +1,4 @@
 * DONE Remove dependency on @fancyapps/ui
 * DONE clobbering when .thm and .sig/.mod have the same name
+* Compute relative paths
 * Fix issues with Import/Specification from weird paths

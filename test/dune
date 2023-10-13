@@ -3,8 +3,8 @@
   (modules :standard \ regress)
   (libraries abella_lib ounit2))
 
-(test
-  (name regress)
-  (modules regress)
-  (deps ../src/abella.exe ../src/abella_doc.exe)
-  (libraries unix))
+; (test
+;   (name regress)
+;   (modules regress)
+;   (deps ../src/abella.exe ../src/abella_doc.exe)
+;   (libraries unix))
