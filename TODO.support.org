@@ -1,3 +1,4 @@
 * DONE Remove dependency on @fancyapps/ui
 * DONE clobbering when .thm and .sig/.mod have the same name
 * DONE Fix issues with Import/Specification from weird paths
+* floats are not staying inside the viewport near the top edge of screen
