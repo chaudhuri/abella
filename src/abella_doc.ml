@@ -149,8 +149,8 @@ let rec process file =
       Printf.printf "IGNORE: %s\n%!" file
 
 and process_sig file =
-  if not @@ Filename.is_implicit file then
-    failwithf "cannot handle explicit or relative paths: %s" file ;
+  if not @@ Filename.is_relative file then
+    failwithf "cannot handle absolute paths: %s" file ;
   let base = Filename.chop_suffix file ".sig" in
   let Sig lpsig = Accumulate.read_lpsig base in
   let annots = ref [] in

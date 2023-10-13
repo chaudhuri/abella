@@ -5,5 +5,5 @@
 
 (rule
   (alias runtest)
-  (deps ../src/abella.exe ../src/abella_doc.exe (source_tree ../examples))
-  (action (chdir .. (run src/abella_doc.exe -r examples))))
+  (deps ../src/abella.exe ../src/abella_doc.exe)
+  (action (run ../src/abella_doc.exe -r %{project_root}/../../examples)))
