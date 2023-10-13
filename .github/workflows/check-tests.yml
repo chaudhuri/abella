@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - master
-      - support
   pull_request:
     branches:
       - master
