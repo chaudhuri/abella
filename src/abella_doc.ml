@@ -228,19 +228,18 @@ let main () =
     end in
   Hashtbl.iter (fun f _ -> toproc f) dep_tab ;
   List.iter begin fun file ->
-    match Filename.chop_suffix file ".thm" with
-    | root ->
-        let cmd = Printf.sprintf "%s -nr -a %s.thm -o %s.json -c %s.thc"
-            !abella root root root in
-        Printf.printf "RUN: %s\n%!" cmd ;
-        if Sys.command cmd != 0 then
-          failwithf "ERROR running: %s" cmd ;
-        let htmlfile = root ^ ".html" in
-        let ch = open_out_bin htmlfile in
-        output_string ch (thm_template root) ;
-        close_out ch ;
-        Printf.printf "CREATE: %s\n%!" htmlfile
-    | exception Invalid_argument _ -> ()
+    if not @@ Filename.check_suffix file ".thm" then () else
+    let root = Filename.chop_suffix file ".thm" in
+    let cmd = Printf.sprintf "%s -nr -a %s.thm -o %s.json -c %s.thc"
+        !abella root root root in
+    Printf.printf "RUN: %s\n%!" cmd ;
+    if Sys.command cmd != 0 then
+      failwithf "ERROR running: %s" cmd ;
+    let htmlfile = root ^ ".html" in
+    let ch = open_out_bin htmlfile in
+    output_string ch (thm_template root) ;
+    close_out ch ;
+    Printf.printf "CREATE: %s\n%!" htmlfile
   end (List.rev !topo)
 
 let () = if not !Sys.interactive then main()
