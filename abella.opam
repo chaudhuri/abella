@@ -16,7 +16,7 @@ build: [
 depends: [
   "ocaml" { >= "4.12.0" }
   "menhir" { >= "20211012" & build }
-  "dune" { >= "3.0" & build }
+  "dune" { >= "3.11" & build }
   "crunch" { >= "3.3.0" & build }
   "ounit2" { with-test }
 ]
