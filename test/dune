@@ -1,10 +1,9 @@
 (test
   (name test)
-  (modules :standard \ regress)
+  (modules :standard)
   (libraries abella_lib ounit2))
 
-; (test
-;   (name regress)
-;   (modules regress)
-;   (deps ../src/abella.exe ../src/abella_doc.exe)
-;   (libraries unix))
+(rule
+  (alias runtest)
+  (deps ../src/abella.exe ../src/abella_doc.exe)
+  (action (chdir .. (run src/abella_doc.exe -r examples))))
