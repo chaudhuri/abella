@@ -131,7 +131,7 @@ let link_message pos url =
   in
   let ann = Annot.fresh "link" in
   Annot.extend ann "source" @@ json_of_position pos ;
-  Annot.extend ann "url" @@ `String (Filename.concat !load_path url) ;
+  Annot.extend ann "url" @@ `String url ;
   Annot.extend ann "parent" old_id ;
   Annot.commit ann
 
@@ -220,9 +220,8 @@ let warn_on_teyjus_only_keywords (ktable, ctable) =
 let update_subordination_sign sr sign =
   List.fold_left Subordination.update sr (sign_to_tys sign)
 
-let read_specification ~wrt specname =
+let read_specification name =
   clear_specification_cache () ;
-  let name = normalize_filename ~wrt specname in
   if !interactive then
     system_message "Reading specification %S." name ;
   let read_sign = get_sign name in
@@ -832,7 +831,8 @@ and process_top1 () =
       import ~wrt:!input_wrt pos filename withs
   | Specification(filename, pos) ->
       if !can_read_specification then begin
-        read_specification ~wrt:!input_wrt filename ;
+        let filename = normalize_filename ~wrt:!input_wrt filename in
+        read_specification filename ;
         ensure_finalized_specification () ;
         if !annotate then link_message pos (filename ^ ".lp.html") ;
       end else

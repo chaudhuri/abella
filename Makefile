@@ -33,3 +33,13 @@ clean:
 .PHONY: test
 test:
 	dune runtest --release
+
+.PHONY: publish-doc
+publish-doc: examples/make.stamp
+	rsync -aviz -f'- *.thc' -f'- *.out' -f'- *.stamp' -f'- .gitignore' \
+	  examples abellaweb@abella-prover.org:abella-prover.org/
+
+examples/make.stamp: $(wildcard examples/**/*.{sig,mod,thm} _build/default/src/abella{,_doc}.exe)
+	git clean -fxd examples
+	dune exec src/abella_doc.exe -- -r examples
+	touch examples/make.stamp
