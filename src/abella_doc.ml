@@ -214,14 +214,8 @@ and process_mod file =
 
 and process_thm file =
   let base = Filename.chop_suffix file ".thm" in
-  let (specs, deps) = Depend.get_thm_depend base in
-  let sigs = List.flatten_map Depend.get_sig_depend specs
-             |> List.unique in
-  let mods = List.flatten_map Depend.get_mod_depend specs
-             |> List.unique in
-  let deps = List.rev_map (fun f -> f ^ ".thm") deps in
-  let deps = List.rev_append mods deps in
-  let deps = List.rev_append sigs deps in
+  let (specs, deps) = Depend.thm_dependencies base in
+  let deps = specs @ List.rev_map (fun f -> f ^ ".thm") deps in
   Hashtbl.replace dep_tab file deps ;
   List.iter process deps
 

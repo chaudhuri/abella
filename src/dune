@@ -13,9 +13,14 @@
   (modules abella_doc)
   (libraries abella_lib unix))
 
+(executable
+  (name abella_dep)
+  (modules abella_dep)
+  (libraries abella_lib unix))
+
 (library
   (name abella_lib)
-  (modules :standard \ abella abella_doc)
+  (modules :standard \ abella abella_doc abella_dep)
   (wrapped false))
 
 (ocamllex
@@ -31,4 +36,4 @@
 
 (alias
   (name default)
-  (deps abella.exe abella_doc.exe))
+  (deps abella.exe abella_doc.exe abella_dep.exe))

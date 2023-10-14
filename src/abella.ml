@@ -29,15 +29,6 @@ open Extensions
 open Printf
 open Accumulate
 
-let load_path = State.rref ""
-
-let normalize_filename ~wrt fn =
-  if Filename.is_relative fn then
-    Filename.concat (Filename.dirname wrt) fn
-  else if Filename.is_implicit fn then
-    Filename.concat !load_path fn
-  else fn
-
 let can_read_specification = State.rref true
 
 let no_recurse = ref false
@@ -395,7 +386,7 @@ let add_lemma name tys thm =
   | _ -> ()
 
 let rec import ~wrt pos impfile withs =
-  let filename = normalize_filename ~wrt impfile in
+  let filename = Filepath.normalize ~wrt impfile in
   if List.mem filename !imported then
     system_message "Ignoring repeated import: %S." filename
   else begin
@@ -460,7 +451,7 @@ and import_load filename withs =
               Prover.add_defs ~print:system_message tyargs idtys flav clauses ;
               process_decls decls
           | CImport(impname, withs) ->
-              import_load (normalize_filename ~wrt:filename impname) withs ;
+              import_load (Filepath.normalize ~wrt:filename impname) withs ;
               process_decls decls
           | CKind(ids, knd) ->
               check_noredef ids ;
@@ -587,8 +578,8 @@ let set k v =
                         ~key:"witnesses"
                         ~expected:"'on' or 'off'"
 
-  | "load_path", QStr s -> load_path := normalize_filename ~wrt:!input_wrt s
-
+  | "load_path", QStr s ->
+      Filepath.set_load_path ~wrt:!input_wrt s
   | _, _ -> failwithf "Unknown key '%s'" k
 
 let handle_search_witness w =
@@ -831,7 +822,7 @@ and process_top1 () =
       import ~wrt:!input_wrt pos filename withs
   | Specification(filename, pos) ->
       if !can_read_specification then begin
-        let filename = normalize_filename ~wrt:!input_wrt filename in
+        let filename = Filepath.normalize ~wrt:!input_wrt filename in
         read_specification filename ;
         ensure_finalized_specification () ;
         if !annotate then link_message pos (filename ^ ".lp.html") ;
@@ -935,8 +926,7 @@ let set_input filename =
   end ;
   interactive := false ;
   lexbuf := lexbuf_from_file filename ;
-  input_wrt := filename ;
-  load_path := Filename.dirname filename
+  input_wrt := filename
 
 let () =
   Sys.set_signal Sys.sigint
