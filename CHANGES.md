@@ -1,4 +1,4 @@
-Changes in 2.0.8-dev from 2.0.7
+Changes in 2.0.8-rc1 from 2.0.7
 -------------------------------
 
 Possibly breaking changes
