@@ -151,9 +151,11 @@ let rec process file =
         Hashtbl.replace dep_tab file [] ;
         if Filename.check_suffix file ".sig" then
           process_sig file
-        else if Filename.check_suffix file ".mod" then
-          process_mod file
-        else if Filename.check_suffix file ".thm" then
+        else if Filename.check_suffix file ".mod" then begin
+          let base = Filename.chop_suffix file ".mod" in
+          if not @@ Sys.file_exists (base ^ ".sig") then
+            failwithf "Cannot find %s.sig" base
+        end else if Filename.check_suffix file ".thm" then
           process_thm file
         (* else *)
         (*   Printf.printf "IGNORE: %s\n%!" file *)
@@ -184,11 +186,7 @@ and process_sig file =
   output_string out (Json.to_string json) ;
   close_out out ;
   Printf.printf "LPSIG: %s -> %s.json\n%!" file file ;
-  let html_file = base ^ ".lp.html" in
-  let out = open_out_bin html_file in
-  output_string out (lp_template base) ;
-  close_out out ;
-  Printf.printf "CREATE: %s\n%!" html_file
+  process_mod (base ^ ".mod")
 
 and process_mod file =
   let base = Filename.chop_suffix file ".mod" in
@@ -208,7 +206,12 @@ and process_mod file =
   let out = open_out_bin (file ^ ".json") in
   output_string out (Json.to_string json) ;
   close_out out ;
-  Printf.printf "LPMOD: %s -> %s.json\n%!" file file
+  Printf.printf "LPMOD: %s -> %s.json\n%!" file file ;
+  let html_file = base ^ ".lp.html" in
+  let out = open_out_bin html_file in
+  output_string out (lp_template base) ;
+  close_out out ;
+  Printf.printf "CREATE: %s\n%!" html_file
 
 and process_thm file =
   let base = Filename.chop_suffix file ".thm" in
