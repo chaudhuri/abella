@@ -15,13 +15,13 @@ Possibly breaking changes
 
 Additions
 
-* **Documentation Mode (`abella_doc`)**: There is now a special program
+* **Documentation Generation (`abella_doc`)**: There is now a special program
   called `abella_doc` that can be used to convert a collection of Abella
   sources into HTML pages that resemble the Abella examples on the
   web-site: https://abella-prover.org/examples/
   
   Run `abella_doc -help` for usage instructions.
-* **Dependency Generatoion (`abella_dep`)**: There is now a special
+* **Dependency Generation (`abella_dep`)**: There is now a special
   program called `abella_dep` that can be used to generate a
   `Makefile`-based dependency graph. Executing `make` on that
   `Makefile` will recompile all the Abella sources specified to
