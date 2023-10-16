@@ -37,7 +37,12 @@ test:
 
 .PHONY: publish-doc
 publish-doc: examples/make.stamp
-	rsync -aviz -f'- *.thc' -f'- *.out' -f'- *.stamp' -f'- .gitignore' \
+	rsync -aviz \
+	  --exclude '*.thc' \
+	  --exclude '*.out' \
+	  --exclude '*.json' \
+	  --exclude '*.stamp' \
+	  --exclude '.gitignore' \
 	  examples abellaweb@abella-prover.org:abella-prover.org/
 
 examples/make.stamp: $(wildcard examples/**/*.{sig,mod,thm} _build/default/src/abella{,_doc}.exe)
