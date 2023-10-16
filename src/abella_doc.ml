@@ -7,16 +7,15 @@
 
 (* Generate documentation for a collection of Abella .thm files *)
 
+open Extensions
+
 module Dist = Abella_doc_dist
 let css_content = Dist.read "abella_doc.css" |> Option.get
 let js_content = Dist.read "abella_doc.js" |> Option.get
 
 (******************************************************************************)
 
-let safe_file_contents fn =
-  let ch = open_in_bin fn in
-  let str = really_input_string ch (in_channel_length ch) in
-  close_in ch ;
+let html_escape str =
   let buf = Buffer.create (String.length str) in
   String.iter begin function
   | '<' -> Buffer.add_string buf "&lt;"
@@ -26,43 +25,46 @@ let safe_file_contents fn =
   end str ;
   Buffer.contents buf
 
+let file_contents fn =
+  let ch = open_in_bin fn in
+  let str = really_input_string ch (in_channel_length ch) in
+  close_in ch ;
+  str
+
 let thm_template base =
   let root = Filename.basename base in
-  let thmfile = root ^ ".thm" in
-  let jsonfile = root ^ ".json" in
-  let thmfile_contents = safe_file_contents (base ^ ".thm") in
+  let thmfile_contents = file_contents (base ^ ".thm") in
+  let jsonfile_contents = Json.from_file (base ^ ".json") in
   {|<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>|} ^ base ^ {|.thm [Abella trace]</title>
+  <title>|} ^ root ^ {|.thm [Abella trace]</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
   <style>|} ^ css_content ^ {|</style>
 </head><body>
   <div id="logobox">
-    <a href="https://abella-prover.org/index.html"><img src="https://abella-prover.org/images/logo-small.png"></a>
+    <a href="https://abella-prover.org/index.html"><img src="https://abella-prover.org/images/logo-small.png" alt="Abella logo (small)"></a>
     <h1 id="thmname">|} ^ root ^ {|.thm</h1>
   </div>
   <div id="outer-container">
     <div id="container">
-      <div id="thmbox"><div class="default-contents">|} ^ thmfile_contents ^ {|</div></div>
+      <div id="thmbox"><div class="default-contents">|} ^ html_escape thmfile_contents ^ {|</div></div>
     </div>
   </div>
   <script type="module">
 |} ^ js_content ^ {|
-await loadModule("thmbox", "|} ^ thmfile ^ {|", "|} ^ jsonfile ^ {|");
+    await loadModule("thmbox",|} ^ Json.to_string jsonfile_contents ^ {|);
   </script>
 </body></html>|} ;;
 
 let lp_template root =
   let base = Filename.basename root in
-  let sig_src = base ^ ".sig" in
-  let sig_contents = safe_file_contents (root ^ ".sig") in
-  let sig_json = base ^ ".sig.json" in
-  let mod_src = base ^ ".mod" in
-  let mod_contents = safe_file_contents (root ^ ".mod") in
-  let mod_json = base ^ ".mod.json" in
+  let sig_contents = file_contents (root ^ ".sig") |> html_escape in
+  let sig_json = Json.from_file (root ^ ".sig.json") in
+  let mod_contents = file_contents (root ^ ".mod") |> html_escape in
+  let mod_json = Json.from_file (root ^ ".mod.json") in
   {|<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="UTF-8">
@@ -89,8 +91,8 @@ let lp_template root =
   </div>
   <script type="module">
 |} ^ js_content ^ {|
-await loadLP("sigbox", "|} ^ sig_src ^ {|", "|} ^ sig_json ^ {|",
-             "modbox", "|} ^ mod_src ^ {|", "|} ^ mod_json ^ {|");
+    await loadLP("sigbox", |} ^ Json.to_string sig_json ^ {|,
+                 "modbox", |} ^ Json.to_string mod_json ^ {|);
   </script>
 </body></html>|} ;;
 

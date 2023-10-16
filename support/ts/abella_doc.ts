@@ -80,8 +80,8 @@ function sequentToString(obj: SequentObj, doInsts?: boolean): string {
   return repr;
 }
 
-function isPresent<A>(arg: A | undefined): A {
-  if (arg === undefined) throw new Error("Bug: isPresent()");
+function isPresent<A>(arg: A | null | undefined): A {
+  if (arg === undefined || arg === null) throw new Error("Bug: isPresent()");
   return arg;
 }
 
@@ -152,11 +152,11 @@ const sigRex = /\b(type|kind)\b/g;
 const do_expand = "[expand proof]";
 const do_collapse = "[collapse proof]";
 
-function getBox(boxId: string) {
+function getBox(boxId: string): [HTMLDivElement, string] {
   const box = document.getElementById(boxId);
   if (!box) throw new Error(`Bug: cannot find #${boxId}`);
-  // box.replaceChildren();
-  return box;
+  const contents = isPresent(box.querySelector(".default-contents")?.textContent);
+  return [box as HTMLDivElement, contents];
 }
 
 class FocusBox {
@@ -208,17 +208,12 @@ class FocusBox {
   }
 }
 
-async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
+async function loadModule(boxId: string, json: any[]) {
   const focusBox = new FocusBox();
-  const thmBox = getBox(boxId);
+  const [thmBox, thmContents] = getBox(boxId);
   // get data
-  const init: RequestInit = {
-    method: "GET",
-    cache: "no-store",
-    headers: { pragma: "no-cache" },
-  };
-  const thmText = new Content(await fetch(thmfile, init).then(resp => resp.text()));
-  const runData = await fetch(jsonfile, init).then(resp => resp.json()) as any[];
+  const thmText = new Content(thmContents);
+  const runData = json;
   // map data to chunks
   const chunkMap = new Map<number, any>();
   runData.forEach((elm) => {
@@ -391,20 +386,15 @@ async function loadModule(boxId: string, thmfile: string, jsonfile: string) {
   // }
 }
 
-async function loadLP(sigBoxId: string, sigFile: string, sigJson: string,
-                             modBoxId: string, modFile: string, modJson: string) {
-  const sigBox = getBox(sigBoxId);
-  const modBox = getBox(modBoxId);
+async function loadLP(sigBoxId: string, sigJson: any[],
+                      modBoxId: string, modJson: any[]) {
+  const [sigBox, sigContents] = getBox(sigBoxId);
+  const [modBox, modContents] = getBox(modBoxId);
   // get data
-  const init: RequestInit = {
-    method: "GET",
-    cache: "no-store",
-    headers: { pragma: "no-cache" },
-  };
-  const sigText = new Content(await fetch(sigFile, init).then(resp => resp.text()));
-  const sigData = await fetch(sigJson, init).then(resp => resp.json()) as any[];
-  const modText = new Content(await fetch(modFile, init).then(resp => resp.text()));
-  const modData = await fetch(modJson, init).then(resp => resp.json()) as any[];
+  const sigText = new Content(sigContents);
+  const sigData = sigJson;
+  const modText = new Content(modContents);
+  const modData = modJson;
   sigData.forEach((annot) => {
     if (annot.kind === "name") {
       sigText.addMark(annot.range[0], '<span class="s-op">');
