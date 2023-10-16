@@ -45,7 +45,10 @@ publish-doc: examples/make.stamp
 	  --exclude '.gitignore' \
 	  examples abellaweb@abella-prover.org:abella-prover.org/
 
-examples/make.stamp: $(wildcard examples/**/*.{sig,mod,thm} _build/default/src/abella{,_doc}.exe)
+examples/make.stamp: $(wildcard examples/**/*.{sig,mod,thm})
+examples/make.stamp: $(wildcard _build/default/src/abella{,_doc}.exe)
+examples/make.stamp: $(patsubst %.thm,%.thc,$(wildcard examples/**/*.thm))
+examples/make.stamp:
 	git clean -fxd examples
 	dune exec src/abella_doc.exe -- -r examples
 	touch examples/make.stamp
