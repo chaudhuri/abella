@@ -1,6 +1,6 @@
 # See LICENSE for licensing details.
 
-BINS := src/abella.exe src/abella_doc.exe
+BINS := src/abella.exe src/abella_doc.exe src/abella_dep.exe
 
 .PHONY: all all-release
 all:
@@ -17,6 +17,7 @@ $(AIN):
 	echo 'bin: [' >> $(AIN)
 	echo '"_build/default/src/abella.exe" {"abella"}' >> $(AIN)
 	echo '"_build/default/src/abella_doc.exe" {"abella_doc"}' >> $(AIN)
+	echo '"_build/default/src/abella_dep.exe" {"abella_dep"}' >> $(AIN)
 	echo ']' >> $(AIN)
 	echo 'share: [' >> $(AIN)
 	for f in emacs/* `find examples -type f | grep -E '(sig|mod|thm)$$'` ; do \
