@@ -1,6 +1,6 @@
 opam-version: "2.0"
 name: "abella"
-version: "2.0.8-dev"
+version: "2.0.8-rc1"
 synopsis: "Interactive theorem prover based on lambda-tree syntax"
 maintainer: "kaustuv@chaudhuri.info"
 authors: [

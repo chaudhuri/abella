@@ -117,13 +117,9 @@ let abella =
 
 let recursive = ref false
 
-let docroot = ref "."
-
 let options = Arg.[
     "-a", Set_string abella,
     Printf.sprintf "PROG Run PROG as abella (default: %s)" !abella ;
-    "-d", Set_string docroot,
-    Printf.sprintf "ROOT Set ROOT as the document root (JS & CSS in ROOT/dist) (default: %s)" !docroot;
     "-r", Arg.Set recursive, " Recursively process directories" ;
   ] |> Arg.align
 

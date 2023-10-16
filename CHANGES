@@ -9,10 +9,24 @@ Possibly breaking changes
 * Abella's annotation mode (-a) now produces annotations in JSON format
   instead of in HTML fragments. The JSON schema should be seen as
   experimental for now and subject to change in the future.
+* Abella's dependency generator option (-M) has now been moved to
+  a separate program (see "Additions" below).
 
 
 Additions
 
+* **Documentation Mode (`abella_doc`)**: There is now a special program
+  called `abella_doc` that can be used to convert a collection of Abella
+  sources into HTML pages that resemble the Abella examples on the
+  web-site: https://abella-prover.org/examples/
+  
+  Run `abella_doc -help` for usage instructions.
+* **Dependency Generatoion (`abella_dep`)**: There is now a special
+  program called `abella_dep` that can be used to generate a
+  `Makefile`-based dependency graph. Executing `make` on that
+  `Makefile` will recompile all the Abella sources specified to
+  `abella_dep`. This `Makefile` can be used in parallel (i.e., `make -j`)
+  mode.
 * Mention that a proof contained "skip" during interactive mode, and a
   summary of skipped theorems in batch mode.  
   (#137, reported by Farah Al Wardani)
