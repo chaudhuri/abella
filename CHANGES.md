@@ -3,15 +3,19 @@ Changes in 2.0.8-rc1 from 2.0.7
 
 Possibly breaking changes
 
-* Abella now uses Dune instead of ocamlbuild.  
+* Abella now uses [Dune][dune] instead of [ocamlbuild][ocamlbuild].  
   (#138, additional contributions: Chase Johnson)
-* Abella's parser changed from ocamlbuild to Menhir
-* Abella's annotation mode (-a) now produces annotations in JSON format
+* Abella's parser changed from [ocamlyacc][ocamlyacc] to [Menhir][menhir]
+* Abella's annotation mode (`-a`) now produces annotations in JSON format
   instead of in HTML fragments. The JSON schema should be seen as
   experimental for now and subject to change in the future.
-* Abella's dependency generator option (-M) has now been moved to
+* Abella's dependency generator option (`-M`) has now been moved to
   a separate program (see "Additions" below).
 
+[dune]: https://dune.build
+[ocamlbuild]: https://github.com/ocaml/ocamlbuild/
+[ocamlyacc]: https://v2.ocaml.org/manual/lexyacc.html#s%3Aocamlyacc-overview
+[menhir]: http://gallium.inria.fr/~fpottier/menhir/
 
 Additions
 
