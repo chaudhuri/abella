@@ -173,11 +173,11 @@ and process_sig file =
   let emit annot = annots := annot :: !annots in
   emit @@ `Assoc [ "kind", `String "name" ;
                    "range", json_of_position lpsig.name.pos ] ;
-  List.iter begin fun (acc : _ Typing.wpos) ->
+  List.iter begin fun (acc : _ wpos) ->
     emit @@ `Assoc [ "kind", `String "accum_sig" ;
                      "range", json_of_position acc.pos ]
   end lpsig.accum_sig ;
-  List.iter begin fun (decl : _ Typing.wpos) ->
+  List.iter begin fun (decl : _ wpos) ->
     emit @@ `Assoc [ "kind", `String "decl" ;
                      "range", json_of_position decl.pos ]
   end lpsig.decls ;
@@ -194,11 +194,11 @@ and process_mod file =
   let annots =
     `Assoc [ "kind", `String "name" ;
              "range", json_of_position lpmod.name.pos ] ::
-    List.map begin fun (acc : _ Typing.wpos) ->
+    List.map begin fun (acc : _ wpos) ->
       `Assoc [ "kind", `String "accum" ;
                "range", json_of_position acc.pos ]
     end lpmod.accum @
-    List.map begin fun (cl : _ Typing.wpos) ->
+    List.map begin fun (cl : _ wpos) ->
       `Assoc [ "kind", `String "clause" ;
                "range", json_of_position cl.pos ]
     end lpmod.clauses in

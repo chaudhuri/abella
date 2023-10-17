@@ -409,3 +409,22 @@ module IntMap : Map.S with type key := int =
 
 (* The following is roughly compatible with Yojson.Basic (v. 1.7.0) *)
 module Json = Yojson.Safe
+
+type pos = Lexing.position * Lexing.position
+type 'a wpos = { el : 'a ; pos : pos }
+let get_el (wp : _ wpos) = wp.el
+
+let json_of_position (lft, rgt : pos) =
+  let open Lexing in
+  if ( lft = Lexing.dummy_pos
+       || lft.pos_fname = ""
+       || lft.pos_fname <> rgt.pos_fname )
+  then `Null else
+    `List [
+      `Int lft.pos_cnum ;
+      `Int lft.pos_bol ;
+      `Int lft.pos_lnum ;
+      `Int rgt.pos_cnum ;
+      `Int rgt.pos_bol ;
+      `Int rgt.pos_lnum ;
+    ]

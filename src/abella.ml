@@ -63,21 +63,6 @@ let eprintf fmt =
 
 (* Annotations *)
 
-let json_of_position (lft, rgt) =
-  let open Lexing in
-  if ( lft = Lexing.dummy_pos
-       || lft.pos_fname = ""
-       || lft.pos_fname <> rgt.pos_fname )
-  then `Null else
-    `List [
-      `Int lft.pos_cnum ;
-      `Int lft.pos_bol ;
-      `Int lft.pos_lnum ;
-      `Int rgt.pos_cnum ;
-      `Int rgt.pos_bol ;
-      `Int rgt.pos_lnum ;
-    ]
-
 module Annot : sig
   type t
   val fresh : string -> t
