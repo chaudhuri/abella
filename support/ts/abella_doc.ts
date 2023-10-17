@@ -286,7 +286,7 @@ async function loadModule(boxId: string, json: any[]) {
     proofEl.before(document.createTextNode("\n"));
     proofEl.before(btn);
     // initial state
-    setDisplay("E");
+    setDisplay("C");
   });
   // create the floats
   runData.forEach((elm) => {

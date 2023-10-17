@@ -833,6 +833,7 @@ let () =
   Arg.parse options set_input usage_message ;
 
   if not !Sys.interactive then begin
+    if !annotate then Output.annotation_mode () ;
     if !interactive then Output.system_message "%s" welcome_msg ;
     State.Undo.set_enabled (!interactive || !switch_to_interactive) ;
     while true do process1 () done ;

@@ -54,6 +54,13 @@ type t =
 
 let dest : t ref = ref @@ Channel stdout
 
+let annotation_mode () =
+  match !dest with
+  | Channel base
+  | Buffer { base ; _ } ->
+      dest := Json { out = [] ; base }
+  | Json _ | Null -> ()
+
 type severity = Info | Error
 
 let system_message ?(severity = Info) fmt =
