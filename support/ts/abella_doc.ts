@@ -266,25 +266,27 @@ async function loadModule(boxId: string, json: any[]) {
   // create the buttons
   document.querySelectorAll('div[class="ab-proof"]').forEach((el) => {
     const proofEl = el as HTMLElement;
-    proofEl.style.display = "none";
     const btn = document.createElement("button");
     btn.classList.add("proof-toggle");
     btn.innerText = do_expand;
-    btn.dataset.state = "C";
-    btn.addEventListener("click", () => {
-      const prevState = btn.dataset.state;
-      if (prevState === "E") {
-        btn.dataset.state = "C";
-        btn.innerText = do_expand;
+    const setDisplay = (state: "C" | "E") => {
+      btn.dataset.state = state ;
+      if (state === "C") {
+        btn.textContent = do_expand;
         proofEl.style.display = "none";
       } else {
-        btn.dataset.state = "E";
-        btn.innerText = do_collapse;
+        btn.textContent = do_collapse;
         proofEl.style.display = "";
       }
+    }
+    btn.addEventListener("click", () => {
+      const prevState = btn.dataset.state;
+      setDisplay(prevState === "C" ? "E" : "C");
     });
     proofEl.before(document.createTextNode("\n"));
     proofEl.before(btn);
+    // initial state
+    setDisplay("E");
   });
   // create the floats
   runData.forEach((elm) => {
@@ -316,33 +318,55 @@ async function loadModule(boxId: string, json: any[]) {
   runData.forEach((elm) => {
     if (elm.float) {
       const targetChunk = document.getElementById(`chunk-${elm.id}`);
-      if (!targetChunk) throw new Error(`Bug: could not find chunk #${elm.id}`);
+      if (!targetChunk) {
+        console.log(`Bug: could not find chunk #${elm.id}`);
+        return;
+      }
       const float = document.createElement("div");
       float.classList.add("float")
-      float.style.position = "absolute";
+      float.style.position = "fixed"; // "absolute";
       float.style.zIndex = "10100";
       float.style.display = "none";
+      float.style.visibility = "hidden";
+      float.style.transformOrigin = "top left";
       float.innerHTML = `<div class="float-container">${elm.float}</div>`;
       targetChunk.addEventListener("mousemove", (ev) => {
+        float.style.display = "block";
+        float.style.transform = "";
         const flWidth = float.offsetWidth, flHeight = float.offsetHeight;
         const wWidth = window.innerWidth, wHeight = window.innerHeight;
-        const pX = ev.pageX, pY = ev.pageY;
+        const pX = ev.clientX, pY = ev.clientY;
         const d = 10;
-        let giveUp = false;
-        float.style.display = "none";
         if (pX + flWidth + d <= wWidth)
+          // right of cursor
           float.style.left = `${pX + d}px`;
         else
-          float.style.left = `${wWidth - flWidth}px`;
+          // flush right with viewport
+          float.style.left = `${Math.max(wWidth - flWidth, 0)}px`;
         if (pY + flHeight + d <= wHeight)
+          // below cursor
           float.style.top = `${pY + d}px`;
         else if (pY - flHeight - d >= 0)
+          // above cursor
           float.style.top = `${pY - flHeight - d}px`;
-        else giveUp = true; // float doesn't fit above or below
-        if (!giveUp)
-          float.style.display = "block";
+        else {
+          // cannot fit, so stretch and put below cursor
+          const maxWidth = Math.max(wWidth - pX - d, 1);
+          const maxHeight = Math.max(wHeight - pY - d, 1);
+          let scale = 1;
+          if (flWidth > maxWidth)
+            scale = Math.min(scale, maxWidth / flWidth);
+          if (flHeight > maxHeight)
+            scale = Math.min(scale, maxHeight / flHeight);
+          float.style.transform = `scale(${scale})`;
+          float.style.left = `${pX + d}px`;
+          float.style.top = `${pY + d}px`;
+        }
+        float.style.visibility = "visible";
+        float.style.display = "block";
       });
       targetChunk.addEventListener("mouseleave", () => {
+        float.style.visibility = "hidden";
         float.style.display = "none";
       });
       targetChunk.addEventListener("click", (ev) => {
@@ -379,11 +403,6 @@ async function loadModule(boxId: string, json: any[]) {
   thmBox.insertAdjacentElement("afterbegin", btnCollapseAll);
   thmBox.insertAdjacentText("afterbegin", " ");
   thmBox.insertAdjacentElement("afterbegin", btnExpandAll);
-  // const thmBox_ = document.getElementById(boxId + "_");
-  // if (thmBox_) {
-  //   thmBox_.style.display = "none";
-  //   thmBox.style.display = "";
-  // }
 }
 
 async function loadLP(sigBoxId: string, sigJson: any[],
