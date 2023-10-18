@@ -272,6 +272,8 @@ async function loadModule(boxId: string, thmContents: string, thmJson: any[]) {
   // create the buttons
   document.querySelectorAll('div[class="ab-proof"]').forEach((el) => {
     const proofEl = el as HTMLElement;
+    for (let el = proofEl.firstChild; el != null && el.nodeType === Node.TEXT_NODE; el = proofEl.firstChild)
+      proofEl.before(el);
     const btn = document.createElement("button");
     btn.classList.add("proof-toggle");
     btn.innerText = do_expand;
@@ -289,8 +291,8 @@ async function loadModule(boxId: string, thmContents: string, thmJson: any[]) {
       const prevState = btn.dataset.state;
       setDisplay(prevState === "C" ? "E" : "C");
     });
-    proofEl.before(document.createTextNode("\n"));
     proofEl.before(btn);
+    proofEl.before(document.createElement("br"));
     // initial state
     setDisplay("C");
   });
@@ -333,46 +335,46 @@ async function loadModule(boxId: string, thmContents: string, thmJson: any[]) {
       float.style.position = "fixed"; // "absolute";
       float.style.zIndex = "10100";
       float.style.display = "none";
-      float.style.visibility = "hidden";
       float.style.transformOrigin = "top left";
+      float.style.opacity = "0";
+      float.style.transition = "opacity .3s ease-in .5s";
       float.innerHTML = `<div class="float-container">${elm.float}</div>`;
-      targetChunk.addEventListener("mousemove", (ev) => {
+      targetChunk.addEventListener("mousemove", () => {
         float.style.display = "block";
-        float.style.transform = "";
-        const flWidth = float.offsetWidth, flHeight = float.offsetHeight;
+        const flWidth = Math.max(float.offsetWidth, 1);
+        const flHeight = Math.max(float.offsetHeight, 1);
         const wWidth = window.innerWidth, wHeight = window.innerHeight;
-        const pX = ev.clientX, pY = ev.clientY;
-        const d = 10;
-        if (pX + flWidth + d <= wWidth)
-          // right of cursor
-          float.style.left = `${pX + d}px`;
-        else
-          // flush right with viewport
-          float.style.left = `${Math.max(wWidth - flWidth, 0)}px`;
-        if (pY + flHeight + d <= wHeight)
-          // below cursor
-          float.style.top = `${pY + d}px`;
-        else if (pY - flHeight - d >= 0)
-          // above cursor
-          float.style.top = `${pY - flHeight - d}px`;
-        else {
-          // cannot fit, so stretch and put below cursor
-          const maxWidth = Math.max(wWidth - pX - d, 1);
-          const maxHeight = Math.max(wHeight - pY - d, 1);
-          let scale = 1;
-          if (flWidth > maxWidth)
-            scale = Math.min(scale, maxWidth / flWidth);
-          if (flHeight > maxHeight)
-            scale = Math.min(scale, maxHeight / flHeight);
-          float.style.transform = `scale(${scale})`;
-          float.style.left = `${pX + d}px`;
-          float.style.top = `${pY + d}px`;
+        const proofCommandRect = targetChunk.getBoundingClientRect();
+        let yscale = 1;
+        if (proofCommandRect.bottom + flHeight <= wHeight)
+          // below command
+          float.style.top = `${proofCommandRect.bottom}px`;
+        else if (proofCommandRect.top - flHeight >= 0)
+          // above command
+          float.style.top = `${proofCommandRect.top - flHeight}px`;
+        else if (proofCommandRect.top > wHeight - proofCommandRect.bottom) {
+          // above command scaled
+          const maxHeight = proofCommandRect.top;
+          yscale = maxHeight / flHeight;
+          float.style.top = '0px';
+          float.style.transform = `scale(${yscale})`;
+        } else {
+          // below command scaled
+          const maxHeight = Math.max(wHeight - proofCommandRect.bottom, 1);
+          yscale = maxHeight / flHeight;
+          float.style.top = `${proofCommandRect.bottom}px`;
+          float.style.transform = `scale(${yscale})`;
         }
-        float.style.visibility = "visible";
-        float.style.display = "block";
+        if (proofCommandRect.left + flWidth * yscale <= wWidth)
+          // left-adjusted with command
+          float.style.left = `${proofCommandRect.left}px`;
+        else
+          // flush right
+          float.style.left = `${Math.max(wWidth - flWidth * yscale, 0)}px`;
+        float.style.opacity = "1";
       });
       targetChunk.addEventListener("mouseleave", () => {
-        float.style.visibility = "hidden";
+        float.style.opacity = "0";
         float.style.display = "none";
       });
       targetChunk.addEventListener("click", (ev) => {
