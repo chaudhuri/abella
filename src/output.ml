@@ -146,7 +146,8 @@ let flush () =
       output_string base @@ Buffer.contents err ;
       close_out base
   | Json { out ; base } ->
-      Json.to_channel base @@ `List (List.rev out) ;
+      Json.pretty_to_channel base @@ `List (List.rev out) ;
+      (* Json.to_channel base @@ `List (List.rev out) ; *)
       close_out base
   | Null -> ()
 

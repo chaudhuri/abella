@@ -427,3 +427,13 @@ let json_of_position (lft, rgt : pos) : Json.t =
       `Int rgt.pos_bol ;
       `Int rgt.pos_lnum ;
     ]
+
+let lexbuf_from_file filename =
+  match Lexing.from_channel (open_in_bin filename) with
+  | lexbuf ->
+      lexbuf.Lexing.lex_curr_p <- {
+        lexbuf.Lexing.lex_curr_p with
+        Lexing.pos_fname = filename } ;
+      lexbuf
+  | exception Sys_error msg ->
+      failwithf "Failure reading %S: %s" filename msg

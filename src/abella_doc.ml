@@ -33,8 +33,8 @@ let file_contents fn =
 
 let thm_template base =
   let root = Filename.basename base in
-  let thmfile_contents = file_contents (base ^ ".thm") in
-  let jsonfile_contents = Json.from_file (base ^ ".json") in
+  let thm_contents = file_contents (base ^ ".thm") in
+  let thm_json = Json.from_file (base ^ ".json") in
   {|<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="UTF-8">
@@ -50,20 +50,22 @@ let thm_template base =
   </div>
   <div id="outer-container">
     <div id="container">
-      <div id="thmbox"><div class="default-contents">|} ^ html_escape thmfile_contents ^ {|</div></div>
+      <div id="thmbox"><div class="default-contents">|} ^ html_escape thm_contents ^ {|</div></div>
     </div>
   </div>
   <script type="module">
 |} ^ js_content ^ {|
-    await loadModule("thmbox",|} ^ Json.to_string jsonfile_contents ^ {|);
+    const thmContent = |} ^ Json.to_string (`String thm_contents) ^ {|;
+    const thmJson = |} ^ Json.to_string thm_json ^ {|;
+    await loadModule("thmbox", thmContent, thmJson);
   </script>
 </body></html>|} ;;
 
 let lp_template root =
   let base = Filename.basename root in
-  let sig_contents = file_contents (root ^ ".sig") |> html_escape in
+  let sig_contents = file_contents (root ^ ".sig") in
   let sig_json = Json.from_file (root ^ ".sig.json") in
-  let mod_contents = file_contents (root ^ ".mod") |> html_escape in
+  let mod_contents = file_contents (root ^ ".mod") in
   let mod_json = Json.from_file (root ^ ".mod.json") in
   {|<!DOCTYPE html>
 <html lang="en"><head>
@@ -80,19 +82,23 @@ let lp_template root =
   <div class="outer-container">
     <h2><strong><tt>|} ^ base ^ {|.sig</tt></strong></h2>
     <div class="container">
-      <div id="sigbox"><div class="default-contents">|} ^ sig_contents ^ {|</div></div>
+      <div id="sigbox"><div class="default-contents">|} ^ html_escape sig_contents ^ {|</div></div>
     </div>
   </div>
   <div class="outer-container">
     <h2><strong><tt>|} ^ base ^ {|.mod</tt></strong></h2>
     <div class="container">
-      <div id="modbox"><div class="default-contents">|} ^ mod_contents ^ {|</div></div>
+      <div id="modbox"><div class="default-contents">|} ^ html_escape mod_contents ^ {|</div></div>
     </div>
   </div>
   <script type="module">
 |} ^ js_content ^ {|
-    await loadLP("sigbox", |} ^ Json.to_string sig_json ^ {|,
-                 "modbox", |} ^ Json.to_string mod_json ^ {|);
+    const sigContents = |} ^ Json.to_string (`String sig_contents) ^ {|;
+    const sigJson = |} ^ Json.to_string sig_json ^ {|;
+    const modContents = |} ^ Json.to_string (`String mod_contents) ^ {|;
+    const modJson = |} ^ Json.to_string mod_json ^ {|;
+    await loadLP("sigbox", sigContents, sigJson,
+                 "modbox", modContents, modJson);
   </script>
 </body></html>|} ;;
 

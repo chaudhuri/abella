@@ -97,15 +97,21 @@ class Content {
   }
 
   addMark(pos: number, thing: string) {
-    if (pos < 0 || pos > this.source.length)
-      throw new Error(`bug: Content.addMark(${pos}, ${thing})`);
+    if (pos < 0 || pos > this.source.length) {
+      throw new Error(`bug: Content.addMark(${pos}, ${thing}, limit=${this.source.length})`);
+      // console.log(`bug: Content.addMark(${pos}, ${thing}, limit=${this.source.length})`);
+      // return;
+    }
     this.marks.push([pos, thing]);
     this.dirty = true;          // [HACK] optimizable?
   }
 
   fontify(start: number, stop: number, rex: RegExp, cls: string) {
-    if (start < 0 || start > stop || stop > this.source.length)
+    if (start < 0 || start > stop || stop > this.source.length) {
       throw new Error(`bug: Content.fontify(${start}, ${stop}, ..., ${cls})`);
+      // console.log(`bug: Content.fontify(${start}, ${stop}, ..., ${cls})`);
+      // return;
+    }
     const extract = this.source.slice(start, stop);
     for (let match of extract.matchAll(rex)) {
       const matchStart = start + isPresent(match.index);
@@ -152,11 +158,11 @@ const sigRex = /\b(type|kind)\b/g;
 const do_expand = "[expand proof]";
 const do_collapse = "[collapse proof]";
 
-function getBox(boxId: string): [HTMLDivElement, string] {
+function getBox(boxId: string): HTMLDivElement {
   const box = document.getElementById(boxId);
   if (!box) throw new Error(`Bug: cannot find #${boxId}`);
-  const contents = isPresent(box.querySelector(".default-contents")?.textContent);
-  return [box as HTMLDivElement, contents];
+  if (box.tagName !== "DIV") throw new Error(`Bug: #${boxId} is a <${box.tagName}>, not a <div>`);
+  return box as HTMLDivElement;
 }
 
 class FocusBox {
@@ -208,12 +214,12 @@ class FocusBox {
   }
 }
 
-async function loadModule(boxId: string, json: any[]) {
+async function loadModule(boxId: string, thmContents: string, thmJson: any[]) {
   const focusBox = new FocusBox();
-  const [thmBox, thmContents] = getBox(boxId);
+  const thmBox = getBox(boxId);
   // get data
   const thmText = new Content(thmContents);
-  const runData = json;
+  const runData = thmJson;
   // map data to chunks
   const chunkMap = new Map<number, any>();
   runData.forEach((elm) => {
@@ -405,10 +411,10 @@ async function loadModule(boxId: string, json: any[]) {
   thmBox.insertAdjacentElement("afterbegin", btnExpandAll);
 }
 
-async function loadLP(sigBoxId: string, sigJson: any[],
-                      modBoxId: string, modJson: any[]) {
-  const [sigBox, sigContents] = getBox(sigBoxId);
-  const [modBox, modContents] = getBox(modBoxId);
+async function loadLP(sigBoxId: string, sigContents: string, sigJson: any[],
+                      modBoxId: string, modContents: string, modJson: any[]) {
+  const sigBox = getBox(sigBoxId);
+  const modBox = getBox(modBoxId);
   // get data
   const sigText = new Content(sigContents);
   const sigData = sigJson;
