@@ -20,6 +20,7 @@ depends: [
   "crunch" { >= "3.3.0" & build }
   "yojson" { >= "2.1.1" & build }
   "ounit2" { with-test }
+  "conf-npm" { build }
 ]
 bug-reports: "https://github.com/abella-prover/abella/issues"
 dev-repo: "git+https://github.com/abella-prover/abella.git"
