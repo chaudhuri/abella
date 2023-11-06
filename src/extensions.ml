@@ -99,6 +99,11 @@ module String = struct
     let count = ref 0 in
       String.iter (fun c -> if c = char then incr count) str ;
       !count
+
+  let setoff prefix str =
+    split_on_char '\n' str
+    |> List.map (fun line -> prefix ^ line)
+    |> concat "\n"
 end
 
 module List = struct
@@ -466,3 +471,33 @@ module Xdg = struct
   let state_dir   = Xdg.state_dir xdg  / abella
   let runtime_dir = Xdg.runtime_dir xdg
 end
+
+let read_all ic =
+  let len = 64 in
+  let byte_buf = Bytes.create len in
+  let buf = Buffer.create 19 in
+  let rec spin () =
+    match Stdlib.input ic byte_buf 0 len with
+    | 0 -> ((* EOF reached *))
+    | n ->
+        Buffer.add_subbytes buf byte_buf 0 n ;
+        spin ()
+  in
+  spin () ; Buffer.contents buf
+
+let read_file file =
+  let ch = Stdlib.open_in_bin file in
+  let contents = read_all ch in
+  Stdlib.close_in ch ;
+  contents
+
+let run_command cmd =
+  let cmd = cmd ^ " 2>&1" in
+  let ic = Unix.open_process_in cmd in
+  match Unix.waitpid [] (Unix.process_in_pid ic) with
+  | (_, Unix.WEXITED 0) ->
+      read_all ic
+  | _ | exception _ ->
+      Printf.eprintf "Error in subprocess\nCommand: \"%s\"\n%s\n%!"
+        cmd (String.setoff "> " (read_all ic)) ;
+      failwith "Error in subprocess"
