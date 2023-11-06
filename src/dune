@@ -26,7 +26,7 @@
 (executable
  (name abella_ipfs)
  (modules abella_ipfs)
- (libraries abella_lib unix cmdliner))
+ (libraries abella_lib unix re cmdliner))
 
 (library
  (name abella_lib)

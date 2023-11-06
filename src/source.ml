@@ -44,7 +44,7 @@ open struct
                 "Jul" ; "Aug" ; "Sep" ; "Oct" ; "Nov" ; "Dec" |]
 
   let abella_agent =
-    Printf.sprintf "Abella %s (using libcurl %s)"
+    Printf.sprintf "Abella/%s (using %s)"
       Version.version
       (Curl.version ())
 

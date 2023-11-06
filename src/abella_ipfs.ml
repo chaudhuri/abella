@@ -7,9 +7,39 @@
 
 open Extensions
 
+[@@@warning "-69-34-37-32"]
+
+module Edit = struct
+  type t = { left : int ; right : int ; repl : string }
+  let equal e1 e2 =
+    e1.left = e2.left && e1.right = e2.right && e1.repl = e2.repl
+  let compare e1 e2 = Int.compare e1.left e2.left
+end
+
+let rewrite ~edits txt =
+  let edits = List.sort Edit.compare edits in
+  let len = String.length txt in
+  let buf = Buffer.create len in
+  let rec spin cur edits =
+    if cur >= len then Buffer.contents buf else
+    match edits with
+    | ed :: edits ->
+        Buffer.add_string buf (String.sub txt cur Edit.(ed.left - cur)) ;
+        Buffer.add_string buf ed.repl ;
+        spin ed.right edits
+    | [] ->
+        Buffer.add_string buf (String.sub txt cur (len - cur)) ;
+        spin len []
+  in
+  spin 0 edits
+
+(******************************************************************************)
+
 let seen : (string, string option) Hashtbl.t = Hashtbl.create 19
 let todo : string list ref = ref []
 let add path = todo := path :: !todo
+
+let bad_path_rex = "^(https?://|ipfs:).*$" |> Re.Pcre.regexp
 
 let rec process recursive path =
   let stat = Unix.(stat path) in
@@ -17,7 +47,7 @@ let rec process recursive path =
   | S_DIR when recursive ->
       process_directory recursive path
   | S_REG ->
-      process_file recursive path
+      ignore @@ process_file recursive path
   | _ ->
       Output.trace ~v:2 begin fun (module Trace) ->
         Trace.printf ~kind:"process" "IGNORE: %s" path
@@ -33,12 +63,24 @@ and process_directory recursive path =
   Array.iter (fun sub -> process recursive (Filename.concat path sub)) fs
 
 and process_file recursive path =
+  match Hashtbl.find seen path with
+  | Some cid -> Some cid
+  | exception Not_found -> begin
+      Hashtbl.replace seen path None ;
+      match process_file_ recursive path with
+      | None -> None
+      | Some cid ->
+          Hashtbl.replace seen path (Some cid) ;
+          Some cid
+    end
+  | None ->
+      failwithf "Cycle"
+
+and process_file_ recursive path =
   let kind = "process_file" in
   Output.trace ~v:5 begin fun (module Trace) ->
     Trace.printf ~kind "recursive:%b path:%s" recursive path
   end ;
-  if Hashtbl.mem seen path then () else
-  let () = Hashtbl.replace seen path None in
   if Filename.check_suffix path ".thm" then begin
     Output.trace ~v:2 begin fun (module Trace) ->
       Trace.printf ~kind "TODO: %s" path
@@ -46,27 +88,97 @@ and process_file recursive path =
     let ch = Stdlib.open_in_bin path in
     let contents = read_all ch in
     let lb = Lexing.from_string ~with_positions:true contents in
-    let rec spin () =
+    let edits : Edit.t list ref = ref [] in
+    let rec spin wrt =
       let cmd = Parser.any_command_start Lexer.token lb in
-      let () = match cmd.el with
-        | ATopCommand (Import (thm_file, (left, right), _)) ->
-            Output.trace ~v:2 begin fun (module Trace) ->
-              Trace.printf ~kind "IMPORT[%d-%d]: %s"
-                left.pos_cnum right.pos_cnum
-                thm_file
-            end ;
-        | _ -> ()
-      in
-      spin ()
+      let wrt = match cmd.el with
+        | ATopCommand (TopCommon (Set ("load_path", QStr lp)))
+        | ACommand (Common (Set ("load_path", QStr lp)))
+        | ACommon (Set ("load_path", QStr lp)) ->
+            Filepath.normalize ~wrt lp
+        | ATopCommand (Import (thm_file, (left, right), _)) -> begin
+            let left = left.pos_cnum in
+            let right = right.pos_cnum in
+            let orig = String.sub contents left (right - left) in
+            let repl = Filepath.normalize ~wrt thm_file ^ ".thm" in
+            match process_file recursive repl with
+            | Some repl ->
+                let repl = Printf.sprintf "\"ipfs:%s\" /* %s */" repl orig in
+                let edit = Edit.{ left ; right ; repl } in
+                edits := edit :: !edits ;
+                Output.trace ~v:2 begin fun (module Trace) ->
+                  Trace.format ~kind "@[<v2>IMPORT[%d-%d]: %s@,orig: %s@,repl: %s@]"
+                    left right thm_file orig repl
+                end
+            | None -> failwithf "Loading THM: %s" repl
+          end ; wrt
+        | ATopCommand (Specification (lp_base, (left, right))) -> begin
+            let left = left.pos_cnum in
+            let right = right.pos_cnum in
+            let orig = String.sub contents left (right - left) in
+            let repl = Filepath.normalize ~wrt lp_base in
+            match process_lp repl with
+            | Some repl ->
+                let repl = Printf.sprintf "\"ipfs:%s\" /* %s */" repl orig in
+                let edit = Edit.{ left ; right ; repl } in
+                edits := edit :: !edits ;
+                Output.trace ~v:2 begin fun (module Trace) ->
+                  Trace.format ~kind "@[<v2>SPECIFICATION[%d-%d]: %s@,orig: %s@,repl: %s@]"
+                    left right lp_base orig repl
+                end
+            | None -> failwithf "Loading LP: %s" repl
+          end ; wrt
+        | _ -> wrt
+      in spin wrt
     in
-    try spin () with
-    | Parser.Error
-    | Abella_types.Reported_parse_error
-    | End_of_file -> ()
-  end else
-  Output.trace ~v:2 begin fun (module Trace) ->
-    Trace.printf ~kind "IGNORE: %s" path
+    let () = try spin path with
+      | Parser.Error
+      | Abella_types.Reported_parse_error
+      | End_of_file -> ()
+    in
+    let new_contents = rewrite ~edits:!edits contents in
+    let (nf, oc) = Filename.open_temp_file "abella" "ipfs"
+        ~mode:Stdlib.[Open_creat ; Open_binary] in
+    Stdlib.output_string oc new_contents ;
+    Stdlib.close_out oc ;
+    let cmd = Printf.sprintf "ipfs add -Q %s" nf in
+    let cid = String.trim @@ run_command cmd in
+    Sys.remove nf ;
+    Some cid
+  end else begin
+    Output.trace ~v:2 begin fun (module Trace) ->
+      Trace.printf ~kind "IGNORE: %s" path
+    end ; None
   end
+
+and process_lp lp =
+  let kind = "process_lp" in
+  let lp_base = Filename.basename lp in
+  let sigs = Depend.(lp_dependencies (module LPSig) lp) in
+  let mods = Depend.(lp_dependencies (module LPMod) lp) in
+  let (jf, jc) = Filename.open_temp_file "abella_lp" ".json"
+      ~perms:0o644 ~mode:Stdlib.[Open_creat] in
+  Json.to_channel jc @@ begin
+    `Assoc [
+      "main", `String lp_base ;
+      "files", `List (
+        List.map begin fun file ->
+          let file_base = Filename.basename file in
+          let contents = read_file file in
+          `Assoc [ "name", `String file_base ;
+                   "contents", `String contents ]
+        end (sigs @ mods)
+      ) ;
+    ]
+  end ;
+  Stdlib.close_out jc ;
+  let cmd = Printf.sprintf "ipfs add -Q %s" jf in
+  let cid = String.trim @@ run_command cmd in
+  Output.trace ~v:2 begin fun (module Trace) ->
+    Trace.format ~kind "@[<v0>LP: %s@,TO: %s@,cid: %s@]" lp_base jf cid ;
+  end ;
+  Sys.remove jf ;
+  Some cid
 
 let abella_ipfs_store annotation verbosity recursive paths =
   Output.trace_verbosity := verbosity ;
@@ -74,13 +186,20 @@ let abella_ipfs_store annotation verbosity recursive paths =
   List.iter add paths ;
   let rec spin () =
     match !todo with
-    | [] -> 0
+    | [] -> ()
     | p :: ps ->
         todo := ps ;
         process recursive p ;
         spin ()
   in
-  spin ()
+  spin () ;
+  Hashtbl.iter begin fun fil cid ->
+    match cid with
+    | Some cid ->
+        Output.msg_format "@[<v0>FILE: %s@,CID: %s@]" fil cid
+    | None ->
+        Output.msg_printf "BADFILE: %s" fil
+  end seen ; 0
 
 (******************************************************************************)
 (* Command line parsing *)

@@ -9,8 +9,11 @@ open! Extensions
 
 let load_path = State.rref ""
 
+let nonned_rex = "^(https?://|ipfs:).*$" |> Re.Pcre.regexp
+
 let normalize ~wrt fn =
-  if Filename.is_relative fn then
+  if Re.Pcre.pmatch ~rex:nonned_rex fn then fn
+  else if Filename.is_relative fn then
     Filename.concat (Filename.dirname wrt) fn
   else if Filename.is_implicit fn then
     Filename.concat !load_path fn
