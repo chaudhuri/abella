@@ -7,9 +7,9 @@
 
 open Extensions
 
-[@@@warning "-69-34-37-32"]
-
 module Edit = struct
+  [@@@warning "-69-34-37-32"]
+
   type t = { left : int ; right : int ; repl : string }
   let equal e1 e2 =
     e1.left = e2.left && e1.right = e2.right && e1.repl = e2.repl
@@ -33,13 +33,32 @@ let rewrite ~edits txt =
   in
   spin 0 edits
 
+let ipfs_add_file file =
+  let cmd = Printf.sprintf "ipfs add --cid-version=1 -Q %s" file in
+  String.trim @@ run_command cmd
+
+let ipfs_add_string str =
+  let (nf, oc) = Filename.open_temp_file "abella" ".ipfs"
+      ~mode:Stdlib.[Open_creat ; Open_binary]
+      ~perms:0o644
+      ~temp_dir:Xdg.cache_dir in
+  Stdlib.output_string oc str ;
+  Stdlib.close_out oc ;
+  let cid = ipfs_add_file nf in
+  Sys.remove nf ;
+  cid
+
+let ipfs_add_json json = ipfs_add_string @@ Json.(*pretty_*)to_string json
+
 (******************************************************************************)
 
-let seen : (string, string option) Hashtbl.t = Hashtbl.create 19
+let seen_thm : (string, string option) Hashtbl.t = Hashtbl.create 19
+let seen_lp : (string, string option) Hashtbl.t = Hashtbl.create 19
+
 let todo : string list ref = ref []
 let add path = todo := path :: !todo
 
-let bad_path_rex = "^(https?://|ipfs:).*$" |> Re.Pcre.regexp
+let _bad_path_rex = "^(https?://|ipfs:).*$" |> Re.Pcre.regexp
 
 let rec process recursive path =
   let stat = Unix.(stat path) in
@@ -47,7 +66,7 @@ let rec process recursive path =
   | S_DIR when recursive ->
       process_directory recursive path
   | S_REG ->
-      ignore @@ process_file recursive path
+      ignore @@ process_thm recursive path
   | _ ->
       Output.trace ~v:2 begin fun (module Trace) ->
         Trace.printf ~kind:"process" "IGNORE: %s" path
@@ -62,22 +81,19 @@ and process_directory recursive path =
   Array.fast_sort String.compare fs ;
   Array.iter (fun sub -> process recursive (Filename.concat path sub)) fs
 
-and process_file recursive path =
-  match Hashtbl.find seen path with
+and process_thm recursive path =
+  match Hashtbl.find seen_thm path with
   | Some cid -> Some cid
-  | exception Not_found -> begin
-      Hashtbl.replace seen path None ;
-      match process_file_ recursive path with
-      | None -> None
-      | Some cid ->
-          Hashtbl.replace seen path (Some cid) ;
-          Some cid
-    end
+  | exception Not_found ->
+      Hashtbl.replace seen_thm path None ;
+      let cid = process_thm_ recursive path in
+      Hashtbl.replace seen_thm path cid ;
+      cid
   | None ->
-      failwithf "Cycle"
+      failwithf "THM: cycle"
 
-and process_file_ recursive path =
-  let kind = "process_file" in
+and process_thm_ recursive path =
+  let kind = "process_thm" in
   Output.trace ~v:5 begin fun (module Trace) ->
     Trace.printf ~kind "recursive:%b path:%s" recursive path
   end ;
@@ -101,7 +117,7 @@ and process_file_ recursive path =
             let right = right.pos_cnum in
             let orig = String.sub contents left (right - left) in
             let repl = Filepath.normalize ~wrt thm_file ^ ".thm" in
-            match process_file recursive repl with
+            match process_thm recursive repl with
             | Some repl ->
                 let repl = Printf.sprintf "\"ipfs:%s\" /* %s */" repl orig in
                 let edit = Edit.{ left ; right ; repl } in
@@ -136,14 +152,10 @@ and process_file_ recursive path =
       | Abella_types.Reported_parse_error
       | End_of_file -> ()
     in
-    let new_contents = rewrite ~edits:!edits contents in
-    let (nf, oc) = Filename.open_temp_file "abella" "ipfs"
-        ~mode:Stdlib.[Open_creat ; Open_binary] in
-    Stdlib.output_string oc new_contents ;
-    Stdlib.close_out oc ;
-    let cmd = Printf.sprintf "ipfs add -Q %s" nf in
-    let cid = String.trim @@ run_command cmd in
-    Sys.remove nf ;
+    let cid = ipfs_add_string @@ rewrite ~edits:!edits contents in
+    Output.trace ~v:2 begin fun (module Trace) ->
+      Trace.format ~kind "@[<v0>THM: %s@,cid: %s@]" path cid ;
+    end ;
     Some cid
   end else begin
     Output.trace ~v:2 begin fun (module Trace) ->
@@ -152,32 +164,34 @@ and process_file_ recursive path =
   end
 
 and process_lp lp =
+  match Hashtbl.find seen_lp lp with
+  | Some cid -> Some cid
+  | exception Not_found ->
+      Hashtbl.replace seen_lp lp None ;
+      let cid = process_lp_ lp in
+      Hashtbl.replace seen_lp lp cid ;
+      cid
+  | None -> failwithf "LP: cycle"
+
+and process_lp_ lp =
   let kind = "process_lp" in
   let lp_base = Filename.basename lp in
   let sigs = Depend.(lp_dependencies (module LPSig) lp) in
   let mods = Depend.(lp_dependencies (module LPMod) lp) in
-  let (jf, jc) = Filename.open_temp_file "abella_lp" ".json"
-      ~perms:0o644 ~mode:Stdlib.[Open_creat] in
-  Json.to_channel jc @@ begin
-    `Assoc [
-      "main", `String lp_base ;
-      "files", `List (
-        List.map begin fun file ->
-          let file_base = Filename.basename file in
-          let contents = read_file file in
-          `Assoc [ "name", `String file_base ;
-                   "contents", `String contents ]
-        end (sigs @ mods)
-      ) ;
-    ]
-  end ;
-  Stdlib.close_out jc ;
-  let cmd = Printf.sprintf "ipfs add -Q %s" jf in
-  let cid = String.trim @@ run_command cmd in
+  let json = `Assoc [ "main", `String lp_base ;
+                      "files", `List (
+                        List.map begin fun file ->
+                          let file_base = Filename.basename file in
+                          let contents = read_file file in
+                          `Assoc [ "name", `String file_base ;
+                                   "contents", `String contents ]
+                        end (sigs @ mods)
+                      ) ;
+                    ] in
+  let cid = ipfs_add_json json in
   Output.trace ~v:2 begin fun (module Trace) ->
-    Trace.format ~kind "@[<v0>LP: %s@,TO: %s@,cid: %s@]" lp_base jf cid ;
+    Trace.format ~kind "@[<v0>LP: %s@,cid: %s@]" lp_base cid ;
   end ;
-  Sys.remove jf ;
   Some cid
 
 let abella_ipfs_store annotation verbosity recursive paths =
@@ -196,10 +210,17 @@ let abella_ipfs_store annotation verbosity recursive paths =
   Hashtbl.iter begin fun fil cid ->
     match cid with
     | Some cid ->
-        Output.msg_format "@[<v0>FILE: %s@,CID: %s@]" fil cid
+        Output.msg_format "@[<v0>THM: %s@,CID: %s@]" fil cid
     | None ->
-        Output.msg_printf "BADFILE: %s" fil
-  end seen ; 0
+        Output.msg_printf "BAD THM: %s" fil
+  end seen_thm ;
+  Hashtbl.iter begin fun fil cid ->
+    match cid with
+    | Some cid ->
+        Output.msg_format "@[<v0>LP: %s@,CID: %s@]" fil cid
+    | None ->
+        Output.msg_printf "BAD LP: %s" fil
+  end seen_lp ; 0
 
 (******************************************************************************)
 (* Command line parsing *)
