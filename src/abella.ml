@@ -303,7 +303,7 @@ and import_load modname withs =
       if Sys.command (Sys.executable_name ^ cmd) <> 0 then
         failwithf "Could not create %S" Thm.thc_path
     in
-    if Thm.is_stale then recursive_invoke () ;
+    if Thm.is_thc_stale then recursive_invoke () ;
     let thc_ch =
       let ch = open_in_bin Thm.thc_path in
       let dig = (Marshal.from_channel ch : Digest.t) in

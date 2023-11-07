@@ -45,7 +45,7 @@ let position lexbuf =
 
 let read_lp ext parser name =
   let module Src = (val Source.read (name ^ ext)) in
-  let lexbuf = Src.lex true in
+  let lexbuf = Source.lex ~with_positions:true (module Src) in
   try parser Lexer.token lexbuf with
   | Parsing.Parse_error | Reported_parse_error ->
       Output.msg_printf ~severity:Error
