@@ -22,39 +22,38 @@ let to_string = function
       Printf.sprintf "ipfs://%s/%s" cid path
 
 open struct
-  let http_rex = "^http(s?)://([^/]+)(/.*)$" |> Re.Pcre.regexp
+  let http_rex = "^http(s?)://([^/]+)(/.*)?$" |> Re.Pcre.regexp
   let ipfs_rex = "^ipfs:([^/]+)(/.*)?$" |> Re.Pcre.regexp
 end
 
 let of_string =
   let http src =
     match Re.Pcre.extract ~rex:http_rex src with
-    | [| secure ; host ; path |] ->
+    | [| _ ; secure ; host ; path |] ->
         let secure = secure = "s" in
         let path = if String.length path > 0 && path.[0] = '/' then
             String.sub path 1 (String.length path - 1)
           else path in
         Option.some @@ Http { secure ; host ; path }
     | _
-    | exception Not_found ->
-        None in
+    | exception Not_found -> None in
   let ipfs src =
     match Re.Pcre.extract ~rex:ipfs_rex src with
-    | [| cid ; path |] ->
+    | [| _ ; cid ; path |] ->
         let path = if String.length path > 0 && path.[0] = '/' then
             String.sub path 1 (String.length path - 1)
           else path in
         Option.some @@ Ipfs { cid ; path }
     | _
-    | exception Not_found ->
-        None in
-  let local path = Option.some @@ Local { path } in
-  Option.first [ http ; ipfs ; local ]
+    | exception Not_found -> None in
+  fun path ->
+    match Option.first [ http ; ipfs ] path with
+    | Some src -> src
+    | None -> Local { path }
 
 let load_path = ref @@ Local { path = "." }
 
 (*
-
 let relativize ?(wrt = !load_path) thing =
   let[@inline] ( / ) x y = match x with
     | "." -> y
@@ -97,5 +96,4 @@ let relativize ?(wrt = !load_path) thing =
         else
           Local { path = thing }
   end
-
 *)
