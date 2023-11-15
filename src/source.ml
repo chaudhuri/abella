@@ -82,7 +82,7 @@ let fetch_with_cache (source : t) : cache =
   ignore source ;
   failwith "unimplemented: fetch_with_cache"
 
-let lex ?subfile ?with_positions source =
+let lex_source ?subfile ?with_positions source =
   let cache = fetch_with_cache source in
   let path =
     if not @@ Sys.is_directory cache.path then cache.path else

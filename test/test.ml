@@ -3,6 +3,7 @@ open Test_helper
 
 let tests = "Abella" >:::
   [
+    Test_source.tests ;
     Test_unify.tests ;
     Test_term.tests ;
     Test_context.tests ;

@@ -69,6 +69,13 @@ module Option = struct
     match o1, o2 with
     | Some x, Some y -> Some (x, y)
     | None, _ | _, None -> None
+  let rec first fs x =
+    match fs with
+    | [] -> None
+    | f :: fs ->
+        match f x with
+        | None -> first fs x
+        | Some _ as y -> y
 end
 
 module Result = struct

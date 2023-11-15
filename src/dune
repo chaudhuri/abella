@@ -45,3 +45,8 @@
 (alias
  (name default)
  (deps abella.exe abella_doc.exe abella_dep.exe abella_ipfs.exe))
+
+(rule
+ (alias runtest)
+ (deps ../test/test.exe)
+ (action (run ../test/test.exe)))
