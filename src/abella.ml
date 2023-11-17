@@ -763,21 +763,43 @@ let set_or_exit k v =
       Output.msg_printf ~severity:Error "Error: %s" msg ;
       raise @@ AbellaExit 1
 
-let abella_main flags switch output compiled annotate norec _em verb infile =
+type abella_args = {
+  flags : (string * set_value) list ;
+  switch : bool ;
+  output : string option ;
+  compiled : string option ;
+  annotate : bool ;
+  norec : bool ;
+  verbosity : int ;
+  infile : string option ;
+}
+
+let default_args = {
+  flags = [] ;
+  switch = false ;
+  output = None ;
+  compiled = None ;
+  annotate = false ;
+  norec = false ;
+  verbosity = 0 ;
+  infile = None ;
+}
+
+let abella_main args =
   try begin
-    Output.trace_verbosity := verb ;
-    List.iter (fun (k, v) -> set_or_exit k v) flags ;
-    if switch then Setup.mode := `switch ;
-    Option.iter set_output output ;
-    if annotate then Output.annotation_mode () ;
-    Setup.annotate := annotate ;
-    Setup.recurse := not norec ;
-    begin match infile with
+    Output.trace_verbosity := args.verbosity ;
+    List.iter (fun (k, v) -> set_or_exit k v) args.flags ;
+    if args.switch then Setup.mode := `switch ;
+    Option.iter set_output args.output ;
+    if args.annotate then Output.annotation_mode () ;
+    Setup.annotate := args.annotate ;
+    Setup.recurse := not args.norec ;
+    begin match args.infile with
     | Some file -> begin
-        let module Thm = (val Source.read_thm ?thc:compiled file) in
+        let module Thm = (val Source.read_thm ?thc:args.compiled file) in
         Setup.compiled := Some (module Thm) ;
-        Setup.mode := if switch then `switch else `batch ;
-        Setup.lexbuf := Thm.lex true ;
+        Setup.mode := if args.switch then `switch else `batch ;
+        Setup.lexbuf := Source.lex ~with_positions:true (module Thm) ;
         Setup.input := Filename.concat (Option.value Thm.dir ~default:"") "<dummy>.thm"
       end
     | None -> () end ;
@@ -817,9 +839,22 @@ let () =
             "Could not parse argument: %S" str
           |> Result.error
     in
-    let print _ _ = () in
+    let print_set ff (f, v) =
+      Format.pp_print_string ff f ;
+      Format.pp_print_char ff '=' ;
+      match v with
+      | Int n -> Format.pp_print_int ff n
+      | Str s -> Format.pp_print_string ff s
+      | QStr s -> Format.fprintf ff "%S" s
+    in
+    let print ff fvs =
+      Format.pp_print_list print_set ff fvs
+        ~pp_sep:(fun ff () -> Format.fprintf ff ",@,")
+    in
     Arg.conv (parse, print)
   in
+
+  let args = Term.const default_args in
 
   let flags =
     let doc = "Intialize Abella flags based on $(docv), which is a \
@@ -829,16 +864,22 @@ let () =
          info ["f" ; "flags"] ~doc ~docv:"FLAGS")
   in
 
+  let args = Term.(const (fun args flags -> { args with flags }) $ args $ flags) in
+
   let switch =
     let doc = "Switch to interactive mode after processing input." in
     Arg.(value @@ flag @@ info ["i"] ~doc)
   in
+
+  let args = Term.(const (fun args switch -> { args with switch }) $ args $ switch) in
 
   let output =
     let doc = "Save all output to $(docv)." in
     Arg.(value @@ opt (some string) None @@
          info ["o" ; "output"] ~doc ~docv:"FILE")
   in
+
+  let args = Term.(const (fun args output -> { args with output }) $ args $ output) in
 
   let compiled =
     let doc = "Save compiled Abella development to $(docv) instead of the \
@@ -849,27 +890,37 @@ let () =
          info ["c" ; "compile"] ~doc ~docv:"FILE")
   in
 
+  let args = Term.(const (fun args compiled -> { args with compiled }) $ args $ compiled) in
+
   let annotate =
     let doc = "Annotation mode: change Abella output to JSON format." in
     Arg.(value @@ flag @@ info ["a" ; "annotate"] ~doc)
   in
+
+  let args = Term.(const (fun args annotate -> { args with annotate }) $ args $ annotate) in
 
   let norec =
     let doc = "Do not recursively invoke Abella for imports." in
     Arg.(value @@ flag @@ info ["N" ; "non-recursive"] ~doc)
   in
 
+  let args = Term.(const (fun args norec -> { args with norec }) $ args $ norec) in
+
   let em =
-    let doc = "Does nothing; use abella_dep instead." in
+    let doc = "Does nothing; use $(b,abella_dep)(1) instead." in
     let deprecated = "The -M flag is deprecated and does nothing; use abella_dep instead" in
     Arg.(value @@ flag @@ info ["M"] ~doc ~deprecated)
   in
+
+  let args = Term.(const (fun args _ -> args) $ args $ em) in
 
   let verb =
     let doc = "Set verbosity to $(docv)." in
     Arg.(value @@ opt int 0 @@
          info ["verbosity"] ~doc ~docv:"NUM")
   in
+
+  let args = Term.(const (fun args verbosity -> { args with verbosity }) $ args $ verb) in
 
   let file =
     let doc = "An Abella development to process in batch mode. \
@@ -878,6 +929,8 @@ let () =
     Arg.(value @@ pos 0 (some string) None @@
          info [] ~docv:"FILE" ~doc)
   in
+
+  let args = Term.(const (fun args infile -> { args with infile }) $ args $ file) in
 
   let cmd =
     let doc = "Run Abella in batch or interactive mode." in
@@ -888,7 +941,7 @@ let () =
       `P "File bug reports at <$(b,https://github.com/abella-prover/abella/issues)>" ;
     ] in
     let info = Cmd.info "abella" ~doc ~man ~exits:[] ~version:Version.version in
-    Cmd.v info @@ Term.(const abella_main $ flags $ switch $ output $ compiled $ annotate $ norec $ em $ verb $ file)
+    Cmd.v info @@ Term.(const abella_main $ args)
   in
 
   Stdlib.exit (Cmd.eval' cmd)
