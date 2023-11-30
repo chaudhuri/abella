@@ -68,14 +68,14 @@ let rec process recursive path =
   | S_REG ->
       ignore @@ process_thm recursive path
   | _ ->
-      Output.trace ~v:2 begin fun (module Trace) ->
-        Trace.printf ~kind:"process" "IGNORE: %s" path
+      Output.trace ~v:2 begin fun () ->
+        Output.Trace.printf ~kind:"process" "IGNORE: %s" path
       end
 
 and process_directory recursive path =
   let kind = "process_directory" in
-  Output.trace ~v:5 begin fun (module Trace) ->
-    Trace.printf ~kind "recursive:%b path:%s" recursive path
+  Output.trace ~v:5 begin fun () ->
+    Output.Trace.printf ~kind "recursive:%b path:%s" recursive path
   end ;
   let fs = Sys.readdir path in
   Array.fast_sort String.compare fs ;
@@ -94,12 +94,12 @@ and process_thm recursive path =
 
 and process_thm_ recursive path =
   let kind = "process_thm" in
-  Output.trace ~v:5 begin fun (module Trace) ->
-    Trace.printf ~kind "recursive:%b path:%s" recursive path
+  Output.trace ~v:5 begin fun () ->
+    Output.Trace.printf ~kind "recursive:%b path:%s" recursive path
   end ;
   if Filename.check_suffix path ".thm" then begin
-    Output.trace ~v:2 begin fun (module Trace) ->
-      Trace.printf ~kind "TODO: %s" path
+    Output.trace ~v:2 begin fun () ->
+      Output.Trace.printf ~kind "TODO: %s" path
     end ;
     let ch = Stdlib.open_in_bin path in
     let contents = read_all ch in
@@ -122,8 +122,8 @@ and process_thm_ recursive path =
                 let repl = Printf.sprintf "\"ipfs:%s\" /* %s */" repl orig in
                 let edit = Edit.{ left ; right ; repl } in
                 edits := edit :: !edits ;
-                Output.trace ~v:2 begin fun (module Trace) ->
-                  Trace.format ~kind "@[<v2>IMPORT[%d-%d]: %s@,orig: %s@,repl: %s@]"
+                Output.trace ~v:2 begin fun () ->
+                  Output.Trace.format ~kind "@[<v2>IMPORT[%d-%d]: %s@,orig: %s@,repl: %s@]"
                     left right thm_file orig repl
                 end
             | None -> failwithf "Loading THM: %s" repl
@@ -138,8 +138,9 @@ and process_thm_ recursive path =
                 let repl = Printf.sprintf "\"ipfs:%s\" /* %s */" repl orig in
                 let edit = Edit.{ left ; right ; repl } in
                 edits := edit :: !edits ;
-                Output.trace ~v:2 begin fun (module Trace) ->
-                  Trace.format ~kind "@[<v2>SPECIFICATION[%d-%d]: %s@,orig: %s@,repl: %s@]"
+                Output.trace ~v:2 begin fun () ->
+                  Output.Trace.format ~kind
+                    "@[<v2>SPECIFICATION[%d-%d]: %s@,orig: %s@,repl: %s@]"
                     left right lp_base orig repl
                 end
             | None -> failwithf "Loading LP: %s" repl
@@ -153,13 +154,13 @@ and process_thm_ recursive path =
       | End_of_file -> ()
     in
     let cid = ipfs_add_string @@ rewrite ~edits:!edits contents in
-    Output.trace ~v:2 begin fun (module Trace) ->
-      Trace.format ~kind "@[<v0>THM: %s@,cid: %s@]" path cid ;
+    Output.trace ~v:2 begin fun () ->
+      Output.Trace.format ~kind "@[<v0>THM: %s@,cid: %s@]" path cid ;
     end ;
     Some cid
   end else begin
-    Output.trace ~v:2 begin fun (module Trace) ->
-      Trace.printf ~kind "IGNORE: %s" path
+    Output.trace ~v:2 begin fun () ->
+      Output.Trace.printf ~kind "IGNORE: %s" path
     end ; None
   end
 
@@ -189,8 +190,8 @@ and process_lp_ lp =
                       ) ;
                     ] in
   let cid = ipfs_add_json json in
-  Output.trace ~v:2 begin fun (module Trace) ->
-    Trace.format ~kind "@[<v0>LP: %s@,cid: %s@]" lp_base cid ;
+  Output.trace ~v:2 begin fun () ->
+    Output.Trace.format ~kind "@[<v0>LP: %s@,cid: %s@]" lp_base cid ;
   end ;
   Some cid
 

@@ -80,13 +80,8 @@ let msg_printf ?post ?severity fmt =
 let msg_format ?post ?severity fmt =
   Format.kasprintf (msg_printf ?post ?severity "%s") fmt
 
-module type TRACE = sig
-  val printf : ?kind:string -> ('a, unit, string, unit) Stdlib.format4 -> 'a
-  val format : ?kind:string -> ('a, Format.formatter, unit, unit) Stdlib.format4 -> 'a
-end
-
-open struct
-  module Trace : TRACE = struct
+module Trace = struct
+  open struct
     let kind_to_string = function
       | None -> ""
       | Some kind -> ":" ^ kind
@@ -95,16 +90,17 @@ open struct
       String.split_on_char '\n' str
       |> List.map (fun str -> prefix ^ str)
       |> String.concat "\n"
-    let printf ?kind fmt = msg_printf ~post:(str_prefix ?kind) fmt
-    let format ?kind fmt = msg_format ~post:(str_prefix ?kind) fmt
   end
+  let printf ?kind fmt = msg_printf ~post:(str_prefix ?kind) fmt
+  let format ?kind fmt = msg_format ~post:(str_prefix ?kind) fmt
 end
 
 let trace_verbosity = ref 0
+
 let trace ?v fn =
   match v with
   | Some v when v >= !trace_verbosity -> ()
-  | _ -> fn (module Trace : TRACE)
+  | _ -> fn ()
 
 let link_message ~pos ~url =
   match !dest with
