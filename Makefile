@@ -1,6 +1,8 @@
 # See LICENSE for licensing details.
 
-BINS := src/abella.exe src/abella_doc.exe src/abella_dep.exe
+CMDS := src/abella src/abella_doc src/abella_dep
+MODE := exe
+BINS := $(CMDS:%=%.$(MODE))
 
 .PHONY: all
 all: support/.stamp
