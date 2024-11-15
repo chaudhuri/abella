@@ -57,10 +57,17 @@ type clearable =
   | Keep          of id * ty list
   | Remove        of id * ty list
 
+type suspension = {
+  predicate : id ;
+  args : id list ;              (* pairwise distinct *)
+  flex : id list ;              (* subset of args *)
+}
+
 type common_command =
   | Back | Reset
   | Set           of string * set_value
   | Show          of string
+  | Suspend       of suspension
   | Quit
 
 type top_command =
@@ -240,6 +247,12 @@ let clearable_to_string cl =
   | Keep (h, tys) -> h ^ inst_to_string tys
   | Remove (h, tys) -> "*" ^ h ^ inst_to_string tys
 
+let suspension_to_string susp =
+  sprintf "%s %s := %s"
+    susp.predicate
+    (String.concat " " susp.args)
+    (String.concat " " susp.flex)
+
 let common_command_to_string cc =
   match cc with
   | Back ->
@@ -250,6 +263,8 @@ let common_command_to_string cc =
       sprintf "Set %s %s" k (set_value_to_string v)
   | Show nm ->
       sprintf "Show %s" nm
+  | Suspend sp ->
+      sprintf "Suspend %s" (suspension_to_string sp)
   | Quit ->
       sprintf "Quit"
 

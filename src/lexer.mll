@@ -35,6 +35,7 @@
     "Show",          SHOW ;
     "Specification", SPECIFICATION ;
     "Split",         SSPLIT ;
+    "Suspend",       SUSPEND ;
     "Theorem",       THEOREM ;
     "Type",          TTYPE ;
     "abbrev",        ABBREV ;

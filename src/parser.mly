@@ -127,7 +127,7 @@
 %token IND INST APPLY CASE FROM SEARCH TO ON WITH INTROS CUT ASSERT CLAUSEEQ
 %token SKIP UNDO ABORT COIND LEFT RIGHT MONOTONE IMPORT BY
 %token SPLIT SPLITSTAR UNFOLD ALL KEEP CLEAR SPECIFICATION SEMICOLON
-%token THEOREM DEFINE PLUS CODEFINE SET ABBREV UNABBREV QUERY SHOW
+%token THEOREM DEFINE PLUS CODEFINE SET ABBREV UNABBREV QUERY SHOW SUSPEND
 %token PERMUTE BACKCHAIN COMPUTE QUIT UNDERSCORE AS SSPLIT RENAME
 %token BACK RESET
 %token COLON RARROW FORALL NABLA EXISTS WITNESS STAR AT HASH OR AND CARET
@@ -706,6 +706,12 @@ common_command:
     { Types.Set(a, Types.QStr s) }
   | SHOW; l=loc_id; DOT
     { Types.Show(deloc_id l) }
+  | SUSPEND; predicate=id; args=list(id); DEFEQ; flex=nonempty_list(id); DOT
+    { if not (List.is_unique args) then
+        error_report "argument list is not unique: %s" (String.concat " " args) ;
+      if not (List.is_unique flex) then
+        error_report "flex list is not unique: %s" (String.concat " " flex) ;
+      Types.(Suspend { predicate ; args ; flex }) }
   | QUIT; DOT
     { Types.Quit }
   | BACK; DOT

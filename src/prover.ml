@@ -36,6 +36,9 @@ let lemmas : (string, string list * metaterm) H.t = State.table ()
 type subgoal = unit -> unit
 let subgoals : subgoal list ref = State.rref []
 
+let suspensions : (string, suspension) Hashtbl.t = State.table ()
+let add_suspension sp = Hashtbl.add suspensions sp.predicate sp
+
 let skip_seen : bool ref = State.rref false
 let start_proof () = skip_seen := false
 
@@ -1260,6 +1263,16 @@ let compute ?name ?(gas = 5) hs =
         match thing with
         | Binding (Forall, _, _)
         | Arrow _ -> true
+        | Pred (atm, _) -> begin
+            let pred, args = match Term.(observe (hnorm atm)) with
+              | App (pred, args) -> (Term.term_to_name pred, args)
+              | _ -> bugf "Invalid predicate: %s" (metaterm_to_string thing)
+            in
+            List.exists begin fun susp ->
+              Output.msg_printf "Need to check: %s" (suspension_to_string susp) ;
+              false
+            end (Hashtbl.find_all suspensions pred)
+          end
         | _ -> false
       end in
     if is_done then begin

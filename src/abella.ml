@@ -527,9 +527,6 @@ and proof_processor = {
 
 let current_state = State.rref Process_top
 
-let _print_clauses () =
-  List.iter print_clause !Prover.clauses
-
 let rec process1 () =
   State.Undo.push () ;
   try begin match !current_state with
@@ -674,6 +671,7 @@ and process_proof1 proc =
         Output.msg_format "%t" (Prover.show nm) ;
         if !Setup.mode = `interactive then Output.blank_line () ;
         suppress_proof_state_display := true
+    | Common (Suspend sp)    -> Prover.add_suspension sp
     | Common(Quit)           -> raise End_of_file
     end
   in
@@ -744,6 +742,7 @@ and process_top1 () =
       else failwith "Cannot use interactive commands in non-interactive mode"
   | TopCommon(Set(k, v)) -> set k v
   | TopCommon(Show(n)) -> Output.msg_format "%t" (Prover.show n)
+  | TopCommon (Suspend sp) -> Prover.add_suspension sp
   | TopCommon(Quit) -> raise End_of_file
   | Import(filename, pos, withs) ->
       compile (CImport (filename, withs)) ;
