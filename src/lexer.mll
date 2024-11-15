@@ -50,6 +50,7 @@
     "case",          CASE ;
     "clear",         CLEAR ;
     "coinduction",   COIND ;
+    "compute",       COMPUTE ;
     "cut",           CUT ;
     "end",           END ;
     "exists",        EXISTS ;

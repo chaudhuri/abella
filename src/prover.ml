@@ -1223,6 +1223,10 @@ let exists ew =
       normalize_sequent ()
   | _ -> ()
 
+(* Compute *)
+
+let compute ?name:_ _hs = failwithf "Compute not implemented"
+
 (* Skip *)
 
 let skip () =

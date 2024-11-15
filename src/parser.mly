@@ -128,7 +128,7 @@
 %token SKIP UNDO ABORT COIND LEFT RIGHT MONOTONE IMPORT BY
 %token SPLIT SPLITSTAR UNFOLD ALL KEEP CLEAR SPECIFICATION SEMICOLON
 %token THEOREM DEFINE PLUS CODEFINE SET ABBREV UNABBREV QUERY SHOW
-%token PERMUTE BACKCHAIN QUIT UNDERSCORE AS SSPLIT RENAME
+%token PERMUTE BACKCHAIN COMPUTE QUIT UNDERSCORE AS SSPLIT RENAME
 %token BACK RESET
 %token COLON RARROW FORALL NABLA EXISTS WITNESS STAR AT HASH OR AND CARET
 %token LBRACE RBRACE LBRACK RBRACK
@@ -209,6 +209,7 @@ id:
   | CASE          { "case" }
   | CLEAR         { "clear" }
   | COIND         { "coinduction" }
+  | COMPUTE       { "compute" }
   | CUT           { "cut" }
   | FROM          { "from" }
   | IND           { "induction" }
@@ -476,6 +477,8 @@ pure_command:
     args=loption(TO; args=apply_args {args});
     ws=loption(WITH; ws=withs {ws}); DOT
     { Types.Apply(dep, clr, args, ws, ht) }
+  | ht=hhint; COMPUTE; args=apply_args; DOT
+    { Types.Compute (args, ht) }
   | BACKCHAIN; dep=maybe_depth; clr=clearable;
     ws=loption(WITH; ws=withs {ws}); DOT
     { Types.Backchain(dep, clr, ws) }

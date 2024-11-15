@@ -143,6 +143,7 @@ type command =
   | Apply        of depth_bound option * clearable
                     * clearable list * (id * uterm) list * hhint
   | Backchain    of depth_bound option * clearable * (id * uterm) list
+  | Compute      of clearable list * hhint
   | CutFrom      of clearable * clearable * uterm * hhint
   | Cut          of clearable * clearable * hhint
   | SearchCut    of clearable * hhint
@@ -341,6 +342,10 @@ let command_to_string c =
           (dbound_to_string dbound)
           (clearable_to_string h)
           (withs_to_string ws)
+    | Compute (hs, hn) ->
+        sprintf "%scompute %s"
+          (hn_to_string hn)
+          (clearables_to_string hs)
     | Cut(h1, h2, hn) ->
         sprintf "%scut %s with %s"
           (hn_to_string hn)
