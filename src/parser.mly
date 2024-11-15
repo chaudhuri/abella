@@ -477,8 +477,13 @@ pure_command:
     args=loption(TO; args=apply_args {args});
     ws=loption(WITH; ws=withs {ws}); DOT
     { Types.Apply(dep, clr, args, ws, ht) }
-  | ht=hhint; COMPUTE; args=apply_args; DOT
-    { Types.Compute (args, ht) }
+  | ht=hhint; COMPUTE; dp=NUM; hs=nonempty_list(hyp);
+    kp=boption(LPAREN; KEEP; RPAREN {()}); DOT
+    { let hs = if kp
+               then List.map (fun h -> Types.Keep (h, [])) hs
+               else List.map (fun h -> Types.Remove (h, [])) hs
+      in
+      Types.Compute (hs, dp, ht) }
   | BACKCHAIN; dep=maybe_depth; clr=clearable;
     ws=loption(WITH; ws=withs {ws}); DOT
     { Types.Backchain(dep, clr, ws) }

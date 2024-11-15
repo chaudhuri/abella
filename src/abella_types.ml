@@ -52,6 +52,7 @@ type set_value =
   | Int           of int
   | QStr          of string
 
+(** The type of appeals to usable things (e.g., hypotheses, lemmas) *)
 type clearable =
   | Keep          of id * ty list
   | Remove        of id * ty list
@@ -143,7 +144,7 @@ type command =
   | Apply        of depth_bound option * clearable
                     * clearable list * (id * uterm) list * hhint
   | Backchain    of depth_bound option * clearable * (id * uterm) list
-  | Compute      of clearable list * hhint
+  | Compute      of clearable list * int * hhint
   | CutFrom      of clearable * clearable * uterm * hhint
   | Cut          of clearable * clearable * hhint
   | SearchCut    of clearable * hhint
@@ -342,9 +343,9 @@ let command_to_string c =
           (dbound_to_string dbound)
           (clearable_to_string h)
           (withs_to_string ws)
-    | Compute (hs, hn) ->
-        sprintf "%scompute %s"
-          (hn_to_string hn)
+    | Compute (hs, dp, hn) ->
+        sprintf "%scompute %d %s"
+          (hn_to_string hn) dp
           (clearables_to_string hs)
     | Cut(h1, h2, hn) ->
         sprintf "%scut %s with %s"
