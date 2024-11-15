@@ -36,9 +36,6 @@ let lemmas : (string, string list * metaterm) H.t = State.table ()
 type subgoal = unit -> unit
 let subgoals : subgoal list ref = State.rref []
 
-let suspensions : (string, suspension) Hashtbl.t = State.table ()
-let add_suspension sp = Hashtbl.add suspensions sp.predicate sp
-
 let skip_seen : bool ref = State.rref false
 let start_proof () = skip_seen := false
 
@@ -1232,15 +1229,28 @@ let exists ew =
 
 (* Compute *)
 
-let compute ?name ?(gas = 5) hs =
-  let pp_print_hs ff hs =
-    Format.(pp_print_list pp_print_string) ff (List.map stmt_name hs)
-  in
-  let rec compute_all gas susp todo =
+let suspensions : (string, suspension) Hashtbl.t = State.table ()
+let add_suspension sp =
+  let pred = Typing.(UCon (sp.predicate.pos, sp.predicate.el, Term.fresh_tyvar ())) in
+  let predtm = Typing.type_uterm ~sr:!sr ~sign:!sign ~ctx:[] pred in
+  let Ty (argtys, targty) = Term.tc [] predtm in
+  if List.length argtys <> sp.arity then
+    failwithf "Expected %d arguments, got %d" (List.length argtys) sp.arity ;
+  if not @@ Term.(eq_ty (tybase targty) propty) then
+    failwithf "Expected target type prop, got %s" (aty_to_string targty) ;
+  Hashtbl.add suspensions sp.predicate.el sp
+
+let compute ?name ?(gas = 10_000) hs =
+  let total_gas = gas in
+  let gas = ref total_gas in
+  (* let pp_print_hs ff hs = *)
+  (*   Format.(pp_print_list pp_print_string) ff (List.map stmt_name hs) *)
+  (* in *)
+  let rec compute_all susp todo =
     match todo with
     | [] ->
-        Output.msg_format "compute_all done; susp = [%a]"
-          pp_print_hs susp ;
+        (* Output.msg_format "compute_all done; susp = [%a]" *)
+        (*   pp_print_hs susp ; *)
         let sg =
           let state = Term.get_bind_state () in
           let current_seq = copy_sequent () in
@@ -1250,38 +1260,48 @@ let compute ?name ?(gas = 5) hs =
         in
         add_subgoals [sg]
     | h :: todo ->
-        Output.msg_format "compute_all: susp=[%a] todo=[%s :: %a]"
-          pp_print_hs susp
-          (stmt_name h)
-          pp_print_hs todo ;
+        (* Output.msg_format "compute_all: susp=[%a] todo=[%s :: %a]" *)
+        (*   pp_print_hs susp *)
+        (*   (stmt_name h) *)
+        (*   pp_print_hs todo ; *)
         compute_one gas susp todo h
   and compute_one gas susp todo h =
-    Output.msg_format "compute_one[%d]: %s" gas (stmt_name h) ;
-    let is_done = gas = 0 || begin
+    (* Output.msg_format "compute_one[%d]: %s" !gas (stmt_name h) ; *)
+    if !gas = 0 then Output.msg_printf "compute ran out of gas [given %d]" total_gas ;
+    let is_done = !gas = 0 || begin
         let thing = get_hyp_or_lemma (stmt_name h) in
-        Output.msg_format "compute_one: i.e., %a" format_metaterm thing ;
+        (* Output.msg_format "compute_one: i.e., %a" format_metaterm thing ; *)
         match thing with
         | Binding (Forall, _, _)
         | Arrow _ -> true
         | Pred (atm, _) -> begin
-            let pred, args = match Term.(observe (hnorm atm)) with
-              | App (pred, args) -> (Term.term_to_name pred, args)
+            let pred, args = match Term.(observe (hnorm atm) |> term_head) with
+              | Some (pred, args) -> (Term.term_to_name pred, args)
               | _ -> bugf "Invalid predicate: %s" (metaterm_to_string thing)
             in
+            let args = List.map (fun arg -> observe (hnorm arg)) args in
             List.exists begin fun susp ->
-              Output.msg_printf "Need to check: %s" (suspension_to_string susp) ;
-              false
+              (* Output.msg_printf "Need to check: %s" (suspension_to_string susp) ; *)
+              List.length args = susp.arity &&
+              List.for_all begin fun i ->
+                let b = Term.has_eigen_head (List.nth args i) in
+                (* if not b then *)
+                (*   Output.msg_format "Failed %s because #%d: %s is not flex" *)
+                (*     (suspension_to_string susp) *)
+                (*     (i + 1) (term_to_string (List.nth args i)) ; *)
+                b
+              end susp.flex
             end (Hashtbl.find_all suspensions pred)
           end
         | _ -> false
       end in
     if is_done then begin
-      Output.msg_printf "compute_one[%d]: done with %s" gas (stmt_name h) ;
-      compute_all gas susp todo
+      (* Output.msg_printf "compute_one[%d]: done with %s" !gas (stmt_name h) ; *)
+      compute_all susp todo
     end else begin
       let cases = case_subgoals h in
-      Output.msg_printf "compute_one: %s yielded %d cases"
-        (stmt_name h) (List.length cases) ;
+      (* Output.msg_printf "compute_one: %s yielded %d cases" *)
+      (*   (stmt_name h) (List.length cases) ; *)
       let saved_sequent = copy_sequent () in
       List.iter begin fun case ->
         set_sequent saved_sequent ;
@@ -1296,12 +1316,12 @@ let compute ?name ?(gas = 5) hs =
         Term.set_bind_state case.bind_state ;
         update_self_bound_vars () ;
         (* Output.msg_format "Result: @[<v0>%t@]" format_sequent ; *)
-        compute_all (gas - 1) susp (List.map (fun h -> Remove (h.id, [])) hs @ todo)
+        decr gas ;
+        compute_all susp (List.map (fun h -> Remove (h.id, [])) hs @ todo)
       end cases
     end in
-  compute_all gas [] hs ;
+  compute_all [] hs ;
   next_subgoal ()
-[@@ocaml.warning "-39-27"]
 
 (* Skip *)
 

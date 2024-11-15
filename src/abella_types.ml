@@ -58,9 +58,9 @@ type clearable =
   | Remove        of id * ty list
 
 type suspension = {
-  predicate : id ;
-  args : id list ;              (* pairwise distinct *)
-  flex : id list ;              (* subset of args *)
+  predicate : id wpos ;
+  arity : int ;
+  flex : int list ;             (* sorted, unique, all < arity *)
 }
 
 type common_command =
@@ -151,7 +151,7 @@ type command =
   | Apply        of depth_bound option * clearable
                     * clearable list * (id * uterm) list * hhint
   | Backchain    of depth_bound option * clearable * (id * uterm) list
-  | Compute      of clearable list * int * hhint
+  | Compute      of clearable list * int option * hhint
   | CutFrom      of clearable * clearable * uterm * hhint
   | Cut          of clearable * clearable * hhint
   | SearchCut    of clearable * hhint
@@ -248,10 +248,11 @@ let clearable_to_string cl =
   | Remove (h, tys) -> "*" ^ h ^ inst_to_string tys
 
 let suspension_to_string susp =
-  sprintf "%s %s := %s"
-    susp.predicate
-    (String.concat " " susp.args)
-    (String.concat " " susp.flex)
+  let args = List.init susp.arity (fun n -> "X" ^ string_of_int (n + 1))
+             |> String.concat " " in
+  let flex = List.map (fun n -> "X" ^ string_of_int (n + 1)) susp.flex
+             |> String.concat ", " in
+  sprintf "%s %s := %s" susp.predicate.el args flex
 
 let common_command_to_string cc =
   match cc with
@@ -359,8 +360,9 @@ let command_to_string c =
           (clearable_to_string h)
           (withs_to_string ws)
     | Compute (hs, dp, hn) ->
-        sprintf "%scompute %d %s"
-          (hn_to_string hn) dp
+        sprintf "%scompute%s %s"
+          (hn_to_string hn)
+          (match dp with Some dp -> " " ^ string_of_int dp | None -> "")
           (clearables_to_string hs)
     | Cut(h1, h2, hn) ->
         sprintf "%scut %s with %s"

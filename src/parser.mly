@@ -37,7 +37,7 @@
           pos.pos_fname pos.pos_lnum
           (pos.pos_cnum - pos.pos_bol + 1)
     in
-    Output.msg_printfk
+    Output.msg_formatk
       (fun _ -> raise Types.Reported_parse_error)
       ~severity:Error parse_fmt pos_string
 
@@ -477,13 +477,8 @@ pure_command:
     args=loption(TO; args=apply_args {args});
     ws=loption(WITH; ws=withs {ws}); DOT
     { Types.Apply(dep, clr, args, ws, ht) }
-  | ht=hhint; COMPUTE; dp=NUM; hs=nonempty_list(hyp);
-    kp=boption(LPAREN; KEEP; RPAREN {()}); DOT
-    { let hs = if kp
-               then List.map (fun h -> Types.Keep (h, [])) hs
-               else List.map (fun h -> Types.Remove (h, [])) hs
-      in
-      Types.Compute (hs, dp, ht) }
+  | ht=hhint; COMPUTE; dp=option(NUM); hs=nonempty_list(clearable); DOT
+    { Types.Compute (hs, dp, ht) }
   | BACKCHAIN; dep=maybe_depth; clr=clearable;
     ws=loption(WITH; ws=withs {ws}); DOT
     { Types.Backchain(dep, clr, ws) }
@@ -706,12 +701,19 @@ common_command:
     { Types.Set(a, Types.QStr s) }
   | SHOW; l=loc_id; DOT
     { Types.Show(deloc_id l) }
-  | SUSPEND; predicate=id; args=list(id); DEFEQ; flex=nonempty_list(id); DOT
-    { if not (List.is_unique args) then
-        error_report "argument list is not unique: %s" (String.concat " " args) ;
+  | SUSPEND; predicate=loc_id; args=list(id); DEFEQ; flex=separated_nonempty_list(COMMA, id); DOT
+    { let pos = $startpos in
+      if not (List.is_unique args) then
+        error_report ~pos "argument list is not unique: %s" (String.concat " " args) ;
       if not (List.is_unique flex) then
-        error_report "flex list is not unique: %s" (String.concat " " flex) ;
-      Types.(Suspend { predicate ; args ; flex }) }
+        error_report ~pos "flex list is not unique: %s" (String.concat " " flex) ;
+      if List.exists (fun f -> not @@ List.mem f args) flex then
+        error_report ~pos "flex list [%s] is not a subset of argument list [%s]"
+          (String.concat " " flex) (String.concat " " args) ;
+      let arity = List.length args in
+      let flex = List.mapi (fun i x -> if List.mem x flex then i else -1) args
+                 |> List.filter (fun x -> x >= 0) in
+      Types.(Suspend { predicate ; arity ; flex }) }
   | QUIT; DOT
     { Types.Quit }
   | BACK; DOT
