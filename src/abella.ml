@@ -243,7 +243,7 @@ let ensure_finalized_specification () =
   end
 
 let compile citem =
-  ensure_finalized_specification () ;
+  (* ensure_finalized_specification () ; *)
   comp_content := citem :: !comp_content
 
 let predicates (_ktable, ctable) =
@@ -806,12 +806,48 @@ and process_top1 () =
   | TopCommon(Show(n)) -> Prover.show n
   | TopCommon(Quit) -> raise End_of_file
   | Import(filename, withs) ->
-      compile (CImport (filename, withs)) ;
-      import (normalize_filename filename) withs;
+      let parts = String.split_on_char ':' filename in
+      let len_of_list = List.length parts in
+      if len_of_list = 1 then ( (* no flag - simple file name *)
+        compile (CImport (filename, withs)) ;
+        import (normalize_filename filename) withs;
+      )
+      else (
+        match parts with
+        | [] -> Printf.printf "empty"
+        | flag::path::_ ->
+            if flag = "cid" then (
+              (* assuming that we only deal with importing a direct 'cid' from ipfs -- without a long path of directories*)
+              compile (CImport (path, withs)) ;
+              import (normalize_filename path) withs;
+            )
+            else (
+              failwith "unknown flag"
+            )
+        | _ -> ()
+    )
   | Specification(filename) ->
       if !can_read_specification then begin
-        read_specification (normalize_filename filename) ;
-        ensure_finalized_specification ()
+        let parts = String.split_on_char ':' filename in
+        let len_of_list = List.length parts in
+        if len_of_list = 1 then ( (* no flag - simple file name *)
+          read_specification (normalize_filename filename) ;
+          ensure_finalized_specification ()
+        )
+        else (
+          match parts with
+          | [] -> Printf.printf "empty"
+          | flag::path::_ ->
+              if flag = "cid" then (
+                (* assuming that we only deal with importing a direct 'cid' from ipfs -- without a long path of directories*)
+                read_specification (normalize_filename path) ;
+                ensure_finalized_specification ()
+              )
+              else (
+                failwith "unknown flag"
+              )
+          | _ -> ()
+        )
       end else
         failwith "Specification can only be read \
                  \ at the begining of a development."
