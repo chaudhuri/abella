@@ -1,0 +1,154 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Result of Seal
+
+Kind mset type -> type.
+
+Type perm mset A -> mset A -> prop. %% our equivalence relation
+
+Suspend perm S _.
+Suspend perm _ S.
+
+Theorem perm_refl[A] : forall (S : mset A), perm S S.
+skip.
+
+Theorem perm_sym[A] : forall (S T : mset A), perm S T -> perm T S.
+skip.
+
+Theorem perm_trans[A] : forall (S T U : mset A), perm S T -> perm T U -> perm S U.
+skip.
+
+Type mset_nil mset A -> prop.
+
+Theorem mset_nil_perm_stable[A]: forall (S T : mset A),
+  perm S T -> mset_nil S -> mset_nil T.
+skip.
+
+Theorem mset_nil_deterministic[A]: forall (S T : mset A),
+  mset_nil S -> mset_nil T -> perm S T.
+skip.
+
+Type adj mset A -> A -> mset A -> prop.
+
+Suspend adj S _ _.
+Suspend adj _ _ S.
+
+Theorem adj_perm_stable[A] : forall (E : A) (S1 T1 S2 T2 : mset A),
+  perm S1 S2 -> perm T1 T2 ->
+  adj S1 E T1 -> adj S2 E T2.
+skip.
+
+Theorem adj_perm_forward[A] : forall (E : A) (S1 T1 S2 : mset A),
+  perm S1 S2 -> adj S1 E T1 -> exists T2, perm T1 T2 /\ adj S2 E T2.
+skip.
+
+Theorem adj_perm_backward[A] : forall (E : A) (S1 T1 T2 : mset A),
+  perm T1 T2 -> adj S1 E T1 -> exists S2, perm S1 S2 /\ adj S2 E T2.
+skip.
+
+Theorem adj_deterministic[A] : forall (E : A) (S1 S2 T1 T2 : mset A),
+  perm S1 S2 -> adj S1 E T1 -> adj S2 E T2 -> perm T1 T2.
+skip.
+
+Theorem adj_swap[A] : forall (E F : A) (S T U : mset A),
+  adj S E T -> adj T F U -> exists V, adj S F V /\ adj V E U.
+skip.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Below Seal
+
+Define mset : list A -> mset A -> prop by
+; mset nil S := mset_nil S
+; mset (E :: L) S := exists T, adj T E S /\ mset L T.
+
+Suspend mset L _.
+
+Theorem mset_perm_stable[A] : forall (L : list A) (S T : mset A),
+  perm S T ->
+  mset L S -> mset L T.
+induction on 2. intros. case H2.
+  apply mset_nil_perm_stable to H1 *H3. search.
+  apply adj_perm_backward to H1 *H3.
+   apply IH to H5 H4. search.
+
+Theorem mset_deterministic[A] : forall (L : list A) (S T : mset A),
+  mset L S -> mset L T -> perm S T.
+induction on 1. intros. case H1.
+  case H2. backchain mset_nil_deterministic.
+  case H2. apply IH to *H4 *H6.
+   apply adj_perm_forward to *H7 *H3.
+   apply adj_deterministic to _ *H9 *H5. backchain perm_refl.
+   backchain perm_trans.
+
+Define merge : mset A -> mset A -> mset A -> prop by
+  merge S T U :=
+     (mset nil S /\ mset nil T /\ mset nil U)
+  \/ (exists E S1 U1, adj S1 E S /\ adj U1 E U /\ merge S1 T U1)
+  \/ (exists E T1 U1, adj T1 E T /\ adj U1 E U /\ merge S T1 U1).
+
+Theorem merge_perm_stable[A] : forall (S1 T1 U1 S2 T2 U2 : mset A),
+  perm S1 S2 -> perm T1 T2 -> perm U1 U2 ->
+  merge S1 T1 U1 -> merge S2 T2 U2.
+induction on 4. intros. case H4. case H5.
+  apply mset_perm_stable to H1 *H6.
+   apply mset_perm_stable to H2 *H7.
+   apply mset_perm_stable to H3 *H8.
+   search.
+  apply adj_perm_backward to _ *H6 with T1 = S1, T2 = S2.
+   apply adj_perm_backward to _ *H7 with T1 = U1, T2 = U2.
+   apply IH to _ _ _ H8. search.
+  apply adj_perm_backward to _ *H6 with T1 = T1, T2 = T2.
+   apply adj_perm_backward to _ *H7 with T1 = U1, T2 = U2.
+   apply IH to _ _ _ H8. search.
+
+Define append : list A -> list A -> list A -> prop by
+; append nil K K
+; append (X :: J) K (X :: L) := append J K L.
+
+Suspend append J _ K.
+
+Kind nat type.
+Type zero, one, two, three, four nat.
+
+%%% Theorem mset_unadj[A] : forall (E : A) (L : list A) (S : mset A),
+%%%   mset (E :: L) S ->
+%%%   exists T, adj T E S /\ mset L T.
+%%% intros. compute H1. search.
+
+% Set instantiations on.
+
+Theorem test : forall S T U L,
+  mset (one :: two :: nil) S ->
+  mset (three :: four :: nil) T ->
+  append (one :: two :: nil) (three :: four :: nil) L ->
+  mset L U -> merge S T U.
+intros.
+  compute (*all).
+  search 10.
+
+Theorem test2 : forall S T,
+  mset (one :: two :: three :: nil) S ->
+  mset (two :: one :: three :: nil) T ->
+  perm S T.
+intros.
+  compute (*all).
+  apply mset_nil_deterministic to *H7 *H3.
+  apply adj_deterministic to *H11 *H8 *H4.
+  apply adj_swap to *H5 *H6.
+  apply adj_deterministic to *H12 *H9 *H13.
+  apply adj_deterministic to *H15 *H10 *H14.
+  search.
+
+%%% below not needed
+%   unfold. left. right. witness one.
+%    apply mset_unadj to *H1. apply mset_unadj to *H4. witness T1. witness T2.
+%    split. search. search.
+%   unfold. left. right. witness two.
+%    apply mset_unadj to *H6. apply mset_unadj to *H8. witness T3. witness T4.
+%    split. search. search.
+%   unfold. right. witness three.
+%    apply mset_unadj to *H2. apply mset_unadj to *H12. witness T5. witness T6.
+%    split. search. search.
+%   unfold. right. witness four.
+%    apply mset_unadj to *H14. apply mset_unadj to *H16. witness T7. witness T8.
+%    split. search. search.
+%   search.
