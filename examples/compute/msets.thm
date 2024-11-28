@@ -151,12 +151,45 @@ Define $form : form -> prop by
 ; $form (par F G) := $form F /\ $form G
 ; $form bot.
 
-Define $ctx_list : list form -> prop by
-; $ctx_list nil
-; $ctx_list (F :: L) := $form F /\ $ctx_list L.
+Define $lctx : list form -> prop by
+; $lctx nil
+; $lctx (F :: L) := $form F /\ $lctx L.
 
 Define $ctx : mset form -> prop by
-  $ctx GG := exists L, mset L GG /\ $ctx_list L.
+  $ctx GG := exists L, mset L GG /\ $lctx L.
+
+Theorem ctx_exists : forall L, $lctx L -> exists DD, mset L DD.
+induction on 1. intros. case H1.
+  apply mset_nil_exists. search.
+  apply IH to *H3. apply adj_exists with S = DD, E = F. search.
+
+Define lctx_adj : list A -> A -> list A -> prop by
+; lctx_adj L F (F :: L)
+; lctx_adj (G :: L) F (G :: K) := lctx_adj L F K.
+
+Define lctx_perm : list A -> list A -> prop by
+; lctx_perm nil nil
+; lctx_perm K L := exists F K1 L1, lctx_adj K1 F K /\ lctx_adj L1 F L /\ lctx_perm K1 L1.
+
+Theorem lctx_adj_mset[A] : forall (E : A) (J K : list A) (GG : mset A),
+  mset K GG -> lctx_adj J E K -> exists DD, mset J DD /\ adj DD E GG.
+induction on 2. intros. case H2.
+  compute *H1. search.
+  compute *H1. apply IH to H5 H3.
+    apply adj_swap to *H7 *H4. search.
+
+Theorem align_adjs[A] : forall (E : A) (J K : list A) (GG DD : mset A),
+  mset J GG -> adj GG E DD -> lctx_adj J E K -> mset K DD.
+induction on 3. intros. case H3.
+  search.
+  compute *H1. apply adj_swap to *H5 *H2.
+   apply IH to H6 H7 H4. search.
+
+Theorem lctx_mset_stable[A] : forall (K L : list A) GG, mset K GG -> lctx_perm K L -> mset L GG.
+induction on 2. intros. case H2.
+  case H1. search.
+  apply lctx_adj_mset to H1 H3. apply IH to H6 H5.
+   apply align_adjs to H8 H7 H4. search.
 
 Define dual : form -> form -> prop by
 ; dual (atm A) (natm A)
@@ -201,33 +234,13 @@ Define mll : mset form -> prop by
 Theorem example : forall A B GG, mset (tens (atm A) (atm B) :: par (natm A) (natm B) :: nil) GG -> mll GG.
 intros.
   unfold 5. witness (tens (atm A) (atm B) :: nil). witness (natm A). witness (natm B).
-   split. compute *H1. apply adj_swap to *H3 *H4. search.
-   assert exists GG1, mset (natm A :: natm B :: tens (atm A) (atm B) :: nil) GG1.
-     %% this should be a witness compute
-     apply mset_nil_exists.
-     apply adj_exists with E = tens (atm A) (atm B), S = S.
-     apply adj_exists with E = natm B, S = T.
-     apply adj_exists with E = natm A, S = T1.
-     search. case H2.
-   witness GG1. split. search.
+   split. backchain lctx_mset_stable.
+   apply ctx_exists to _ with L = (natm A :: natm B :: tens (atm A) (atm B) :: nil).
+   witness DD. split. search.
   unfold 4. witness (natm A :: natm B :: nil). witness (atm A). witness (atm B).
-   split. compute *H3. apply adj_swap to *H5 *H6. apply adj_swap to *H9 *H7. search.
-   assert exists GG2, mset (natm A :: nil) GG2.
-     %% this should be a witness compute
-     apply mset_nil_exists.
-     apply adj_exists with E = natm A, S = S.
-     search. case H4.
-   witness natm A :: nil.
-   assert exists GG3, mset (natm B :: nil) GG3.
-     %% this should be a witness compute
-     apply mset_nil_exists.
-     apply adj_exists with E = natm B, S = S.
-     search. case H6.
-   witness (natm B :: nil). split. search.
-   assert exists GG4, mset (atm A :: natm A :: nil) GG4.
-     apply adj_exists with E = atm A, S = GG2. compute *H5. search. case H8.
-   witness GG4. split. search.
-   assert exists GG5, mset (atm B :: natm B :: nil) GG5.
-     apply adj_exists with E = atm B, S = GG3. compute *H7. search. case H10.
-   witness GG5. split. search.
-   search. search.
+   split. backchain lctx_mset_stable.
+   witness natm A :: nil. witness natm B :: nil. split. search.
+   apply ctx_exists to _ with L = (atm A :: natm A :: nil). witness DD1. split. search.
+   apply ctx_exists to _ with L = (atm B :: natm B :: nil). witness DD2. split. search.
+  search.
+  search.
