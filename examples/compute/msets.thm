@@ -19,6 +19,9 @@ skip.
 
 Type mset_nil mset A -> prop.
 
+Theorem mset_nil_exists[A]: exists (S : mset A), mset_nil S.
+skip.
+
 Theorem mset_nil_perm_stable[A]: forall (S T : mset A),
   perm S T -> mset_nil S -> mset_nil T.
 skip.
@@ -31,6 +34,10 @@ Type adj mset A -> A -> mset A -> prop.
 
 Suspend adj S _ _.
 Suspend adj _ _ S.
+
+Theorem adj_exists[A]: forall (E : A) (S : mset A),
+  exists (T : mset A), adj S E T.
+skip.
 
 Theorem adj_perm_stable[A] : forall (E : A) (S1 T1 S2 T2 : mset A),
   perm S1 S2 -> perm T1 T2 ->
@@ -107,27 +114,20 @@ Define append : list A -> list A -> list A -> prop by
 Suspend append J _ K.
 
 Kind nat type.
-Type zero, one, two, three, four nat.
-
-%%% Theorem mset_unadj[A] : forall (E : A) (L : list A) (S : mset A),
-%%%   mset (E :: L) S ->
-%%%   exists T, adj T E S /\ mset L T.
-%%% intros. compute H1. search.
-
-% Set instantiations on.
+Type zero, two, three, four nat.
 
 Theorem test : forall S T U L,
-  mset (one :: two :: nil) S ->
+  mset (zero :: two :: nil) S ->
   mset (three :: four :: nil) T ->
-  append (one :: two :: nil) (three :: four :: nil) L ->
+  append (zero :: two :: nil) (three :: four :: nil) L ->
   mset L U -> merge S T U.
 intros.
   compute (*all).
   search 10.
 
 Theorem test2 : forall S T,
-  mset (one :: two :: three :: nil) S ->
-  mset (two :: one :: three :: nil) T ->
+  mset (zero :: two :: three :: nil) S ->
+  mset (two :: zero :: three :: nil) T ->
   perm S T.
 intros.
   compute (*all).
@@ -138,17 +138,96 @@ intros.
   apply adj_deterministic to *H15 *H10 *H14.
   search.
 
-%%% below not needed
-%   unfold. left. right. witness one.
-%    apply mset_unadj to *H1. apply mset_unadj to *H4. witness T1. witness T2.
-%    split. search. search.
-%   unfold. left. right. witness two.
-%    apply mset_unadj to *H6. apply mset_unadj to *H8. witness T3. witness T4.
-%    split. search. search.
-%   unfold. right. witness three.
-%    apply mset_unadj to *H2. apply mset_unadj to *H12. witness T5. witness T6.
-%    split. search. search.
-%   unfold. right. witness four.
-%    apply mset_unadj to *H14. apply mset_unadj to *H16. witness T7. witness T8.
-%    split. search. search.
-%   search.
+Kind atm, form type.
+Type atm, natm atm -> form.
+Type tens, par form -> form -> form.
+Type one, bot  form.
+
+Define $form : form -> prop by
+; $form (atm A)
+; $form (natm A)
+; $form (tens F G) := $form F /\ $form G
+; $form one
+; $form (par F G) := $form F /\ $form G
+; $form bot.
+
+Define $ctx_list : list form -> prop by
+; $ctx_list nil
+; $ctx_list (F :: L) := $form F /\ $ctx_list L.
+
+Define $ctx : mset form -> prop by
+  $ctx GG := exists L, mset L GG /\ $ctx_list L.
+
+Define dual : form -> form -> prop by
+; dual (atm A) (natm A)
+; dual (natm A) (atm A)
+; dual (tens F G) (par Fd Gd) := dual F Fd /\ dual G Gd
+; dual (par F G) (tens Fd Gd) := dual F Fd /\ dual G Gd
+; dual one bot
+; dual bot one.
+
+Theorem dual_sym : forall F G, dual F G -> dual G F.
+induction on 1. intros. case H1.
+  search.
+  search.
+  apply IH to *H2. apply IH to *H3. search.
+  apply IH to *H2. apply IH to *H3. search.
+  search.
+  search.
+
+Theorem dual_idemp : forall F G H, dual F G -> dual G H -> F = H.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2. search.
+  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
+  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
+  case H2. search.
+  case H2. search.
+
+Define mll : mset form -> prop by
+; mll GG := exists A, mset (atm A :: natm A :: nil) GG
+; mll GG := mset (one :: nil) GG
+; mll GG := exists L, mset (bot :: L) GG /\
+            exists DD, mset L DD /\ mll DD
+; mll GG := exists L A B, mset (tens A B :: L) GG /\
+            exists L1 L2, append L1 L2 L /\
+            exists DD1, mset (A :: L1) DD1 /\
+            exists DD2, mset (B :: L2) DD2 /\
+            mll DD1 /\ mll DD2
+; mll GG := exists L A B, mset (par A B :: L) GG /\
+            exists DD, mset (A :: B :: L) DD /\ mll DD
+.
+
+Theorem example : forall A B GG, mset (tens (atm A) (atm B) :: par (natm A) (natm B) :: nil) GG -> mll GG.
+intros.
+  unfold 5. witness (tens (atm A) (atm B) :: nil). witness (natm A). witness (natm B).
+   split. compute *H1. apply adj_swap to *H3 *H4. search.
+   assert exists GG1, mset (natm A :: natm B :: tens (atm A) (atm B) :: nil) GG1.
+     %% this should be a witness compute
+     apply mset_nil_exists.
+     apply adj_exists with E = tens (atm A) (atm B), S = S.
+     apply adj_exists with E = natm B, S = T.
+     apply adj_exists with E = natm A, S = T1.
+     search. case H2.
+   witness GG1. split. search.
+  unfold 4. witness (natm A :: natm B :: nil). witness (atm A). witness (atm B).
+   split. compute *H3. apply adj_swap to *H5 *H6. apply adj_swap to *H9 *H7. search.
+   assert exists GG2, mset (natm A :: nil) GG2.
+     %% this should be a witness compute
+     apply mset_nil_exists.
+     apply adj_exists with E = natm A, S = S.
+     search. case H4.
+   witness natm A :: nil.
+   assert exists GG3, mset (natm B :: nil) GG3.
+     %% this should be a witness compute
+     apply mset_nil_exists.
+     apply adj_exists with E = natm B, S = S.
+     search. case H6.
+   witness (natm B :: nil). split. search.
+   assert exists GG4, mset (atm A :: natm A :: nil) GG4.
+     apply adj_exists with E = atm A, S = GG2. compute *H5. search. case H8.
+   witness GG4. split. search.
+   assert exists GG5, mset (atm B :: natm B :: nil) GG5.
+     apply adj_exists with E = atm B, S = GG3. compute *H7. search. case H10.
+   witness GG5. split. search.
+   search. search.
