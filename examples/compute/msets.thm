@@ -2,22 +2,30 @@
 %% Result of Seal
 
 Kind mset type -> type.
+Type $mset mset A -> prop.
 
 Type perm mset A -> mset A -> prop. %% our equivalence relation
 
 Suspend perm S _.
 Suspend perm _ S.
 
-Theorem perm_refl[A] : forall (S : mset A), perm S S.
+Theorem perm_mset[A] : forall (S T : mset A), perm S T -> $mset S /\ $mset T.
+skip.
+
+Theorem perm_refl[A] : forall (S : mset A), $mset S -> perm S S.
 skip.
 
 Theorem perm_sym[A] : forall (S T : mset A), perm S T -> perm T S.
 skip.
 
-Theorem perm_trans[A] : forall (S T U : mset A), perm S T -> perm T U -> perm S U.
+Theorem perm_trans[A] : forall (S T U : mset A),
+  perm S T -> perm T U -> perm S U.
 skip.
 
 Type mset_nil mset A -> prop.
+
+Theorem mset_nil_mset[A] : forall (S : mset A), mset_nil S -> $mset S.
+skip.
 
 Theorem mset_nil_exists[A]: exists (S : mset A), mset_nil S.
 skip.
@@ -35,8 +43,12 @@ Type adj mset A -> A -> mset A -> prop.
 Suspend adj S _ _.
 Suspend adj _ _ S.
 
+Theorem adj_mset[A]: forall (E : A) (S T : mset A),
+  adj S E T -> $mset S /\ $mset T.
+skip.
+
 Theorem adj_exists[A]: forall (E : A) (S : mset A),
-  exists (T : mset A), adj S E T.
+  $mset S -> exists (T : mset A), adj S E T.
 skip.
 
 Theorem adj_perm_stable[A] : forall (E : A) (S1 T1 S2 T2 : mset A),
@@ -69,6 +81,12 @@ Define mset : list A -> mset A -> prop by
 
 Suspend mset L _.
 
+Theorem mset_mset[A] : forall (L : list A) (S : mset A),
+  mset L S -> $mset S.
+intros. case H1.
+  apply mset_nil_mset to H2. search.
+  apply adj_mset to H2. search.
+
 Theorem mset_perm_stable[A] : forall (L : list A) (S T : mset A),
   perm S T ->
   mset L S -> mset L T.
@@ -83,6 +101,7 @@ induction on 1. intros. case H1.
   case H2. backchain mset_nil_deterministic.
   case H2. apply IH to *H4 *H6.
    apply adj_perm_forward to *H7 *H3.
+   apply adj_mset to H5.
    apply adj_deterministic to _ *H9 *H5. backchain perm_refl.
    backchain perm_trans.
 
@@ -113,31 +132,6 @@ Define append : list A -> list A -> list A -> prop by
 
 Suspend append J _ K.
 
-Kind nat type.
-Type zero, two, three, four nat.
-
-Theorem test : forall S T U L,
-  mset (zero :: two :: nil) S ->
-  mset (three :: four :: nil) T ->
-  append (zero :: two :: nil) (three :: four :: nil) L ->
-  mset L U -> merge S T U.
-intros.
-  compute (*all).
-  search 10.
-
-Theorem test2 : forall S T,
-  mset (zero :: two :: three :: nil) S ->
-  mset (two :: zero :: three :: nil) T ->
-  perm S T.
-intros.
-  compute (*all).
-  apply mset_nil_deterministic to *H7 *H3.
-  apply adj_deterministic to *H11 *H8 *H4.
-  apply adj_swap to *H5 *H6.
-  apply adj_deterministic to *H12 *H9 *H13.
-  apply adj_deterministic to *H15 *H10 *H14.
-  search.
-
 Kind atm, form type.
 Type atm, natm atm -> form.
 Type tens, par form -> form -> form.
@@ -161,15 +155,30 @@ Define $ctx : mset form -> prop by
 Theorem ctx_exists : forall L, $lctx L -> exists DD, mset L DD.
 induction on 1. intros. case H1.
   apply mset_nil_exists. search.
-  apply IH to *H3. apply adj_exists with S = DD, E = F. search.
+  apply IH to *H3.
+  apply adj_exists to _ with S = DD, E = F.
+    backchain mset_mset.
+    search.
+
+%% The next two definitions are used for their computational
+%% feature alone. We will never prove any properties about
+%% these definitions, such as the reflexivity/symmetry/
+%% transitivity of lctx_perm
 
 Define lctx_adj : list A -> A -> list A -> prop by
 ; lctx_adj L F (F :: L)
 ; lctx_adj (G :: L) F (G :: K) := lctx_adj L F K.
 
+Suspend lctx_adj J _ K.
+
 Define lctx_perm : list A -> list A -> prop by
 ; lctx_perm nil nil
-; lctx_perm K L := exists F K1 L1, lctx_adj K1 F K /\ lctx_adj L1 F L /\ lctx_perm K1 L1.
+; lctx_perm (E1 :: K) (E2 :: L) :=
+    exists F K1 L1, lctx_adj K1 F (E1 :: K) /\
+                    lctx_adj L1 F (E2 :: L) /\
+                    lctx_perm K1 L1.
+
+Suspend lctx_perm J K.
 
 Theorem lctx_adj_mset[A] : forall (E : A) (J K : list A) (GG : mset A),
   mset K GG -> lctx_adj J E K -> exists DD, mset J DD /\ adj DD E GG.
@@ -185,37 +194,12 @@ induction on 3. intros. case H3.
   compute *H1. apply adj_swap to *H5 *H2.
    apply IH to H6 H7 H4. search.
 
-Theorem lctx_mset_stable[A] : forall (K L : list A) GG, mset K GG -> lctx_perm K L -> mset L GG.
+Theorem lctx_mset_stable[A] : forall (K L : list A) (GG : mset A),
+  mset K GG -> lctx_perm K L -> mset L GG.
 induction on 2. intros. case H2.
   case H1. search.
   apply lctx_adj_mset to H1 H3. apply IH to H6 H5.
    apply align_adjs to H8 H7 H4. search.
-
-Define dual : form -> form -> prop by
-; dual (atm A) (natm A)
-; dual (natm A) (atm A)
-; dual (tens F G) (par Fd Gd) := dual F Fd /\ dual G Gd
-; dual (par F G) (tens Fd Gd) := dual F Fd /\ dual G Gd
-; dual one bot
-; dual bot one.
-
-Theorem dual_sym : forall F G, dual F G -> dual G F.
-induction on 1. intros. case H1.
-  search.
-  search.
-  apply IH to *H2. apply IH to *H3. search.
-  apply IH to *H2. apply IH to *H3. search.
-  search.
-  search.
-
-Theorem dual_idemp : forall F G H, dual F G -> dual G H -> F = H.
-induction on 1. intros. case H1.
-  case H2. search.
-  case H2. search.
-  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
-  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
-  case H2. search.
-  case H2. search.
 
 Define mll : mset form -> prop by
 ; mll GG := exists A, mset (atm A :: natm A :: nil) GG
@@ -231,7 +215,9 @@ Define mll : mset form -> prop by
             exists DD, mset (A :: B :: L) DD /\ mll DD
 .
 
-Theorem example : forall A B GG, mset (tens (atm A) (atm B) :: par (natm A) (natm B) :: nil) GG -> mll GG.
+Theorem example : forall A B GG,
+   mset (tens (atm A) (atm B) :: par (natm A) (natm B) :: nil) GG ->
+   mll GG.
 intros.
   unfold 5. witness (tens (atm A) (atm B) :: nil). witness (natm A). witness (natm B).
    split. backchain lctx_mset_stable.
@@ -255,3 +241,88 @@ intros. case H1.
   apply mset_perm_stable to *H2 *H3. search.
   apply mset_perm_stable to *H2 *H3. search.
   apply mset_perm_stable to *H2 *H3. search.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Cut elimination
+
+Define dual : form -> form -> prop by
+; dual (atm A) (natm A)
+% ; dual (natm A) (atm A)
+; dual (tens F G) (par Fd Gd) := dual F Fd /\ dual G Gd
+% ; dual (par F G) (tens Fd Gd) := dual F Fd /\ dual G Gd
+; dual one bot
+% ; dual bot one
+.
+
+% Theorem dual_sym : forall F G, dual F G -> dual G F.
+% induction on 1. intros. case H1.
+%   search.
+%   search.
+%   apply IH to *H2. apply IH to *H3. search.
+%   apply IH to *H2. apply IH to *H3. search.
+%   search.
+%   search.
+
+% Theorem dual_idemp : forall F G H, dual F G -> dual G H -> F = H.
+% induction on 1. intros. case H1.
+%   case H2. search.
+%   case H2. search.
+%   case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
+%   case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
+%   case H2. search.
+%   case H2. search.
+
+Theorem dual_det_2 : forall F G H, dual F G -> dual F H -> G = H.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
+  case H2. search.
+
+Theorem dual_det_1 : forall F G H, dual F H -> dual G H -> F = G.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
+  case H2. search.
+
+Theorem dual_form : forall F G, dual F G -> $form F /\ $form G.
+induction on 1. intros. case H1.
+  search.
+  apply IH to *H2. apply IH to *H3. search.
+  search.
+
+Theorem genid : forall A B GG, dual A B -> mset (A :: B :: nil) GG -> mll GG.
+induction on 1. intros. case H1.
+  % atomic
+  search.
+  % tens/par
+  unfold 5. witness tens F G :: nil. witness Fd. witness Gd. split.
+    backchain lctx_mset_stable.
+    apply ctx_exists to _ with L = Fd :: Gd :: tens F G :: nil.
+      apply dual_form to H3. apply dual_form to H4. search.
+    witness DD. split. search.
+  unfold 4. witness Fd :: Gd :: nil. witness F. witness G. split.
+    backchain lctx_mset_stable.
+    witness Fd :: nil. witness Gd :: nil. split. search.
+    apply ctx_exists to _ with L = F :: Fd :: nil.
+      apply dual_form to H3. search.
+    witness DD1. split. search.
+    apply ctx_exists to _ with L = G :: Gd :: nil.
+      apply dual_form to H4. search.
+    witness DD2. split. search.
+    apply IH to *H3 *H6. search.
+    apply IH to *H4 *H7. search.
+  % one/bot
+  unfold 3. witness one :: nil. split. backchain lctx_mset_stable.
+    apply ctx_exists to _ with L = one :: nil.
+    witness DD. split. search. search.
+
+Theorem cut : forall (GG DD WW : mset form) (GL DL WL : list form) (A B : form),
+  dual A B ->
+  mset (A :: GL) GG -> mll GG ->
+  mset (B :: DL) DD -> mll DD ->
+  append GL DL WL -> mset WL WW -> mll WW.
+induction on 1. induction on 3. intros. case H3 (keep).
+
+%%  assert lctx_perm (atm A1 :: natm A1 :: nil) (A :: GL). skip.
+%%    case H9. case H10. case H11. case H12. case H13. case H14. case H15.
+abort. %% UNFINISHED
