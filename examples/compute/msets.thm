@@ -244,3 +244,14 @@ intros.
    apply ctx_exists to _ with L = (atm B :: natm B :: nil). witness DD2. split. search.
   search.
   search.
+
+%% MAIN CLAIM: because mll was defined outside the seal, its stability
+%% wrt perm is a **standard induction** (i.e., trivial). Indeed, the proof
+%% below shows why it is trivial.
+Theorem mll_perm_stable : forall GG DD, mll GG -> perm GG DD -> mll DD.
+intros. case H1.
+  apply mset_perm_stable to *H2 *H3. search.
+  apply mset_perm_stable to *H2 *H3. search.
+  apply mset_perm_stable to *H2 *H3. search.
+  apply mset_perm_stable to *H2 *H3. search.
+  apply mset_perm_stable to *H2 *H3. search.
