@@ -30,20 +30,20 @@ open Unifyty
 let gen_binder_ids n =
   List.map (fun i -> "z"^(string_of_int i)) (List.range 1 n)
 
-let seals : (tycons, id) Hashtbl.t = State.table ()
-let seal tyc id =
+let seals : (tycons, ty * id) Hashtbl.t = State.table ()
+let seal tyc cty id =
   match Hashtbl.find seals tyc with
   | exception Not_found ->
-      Hashtbl.add seals tyc id
-  | old ->
+      Hashtbl.add seals tyc (cty, id)
+  | (_, old) ->
       failwithf "Seal failure: %s has already been sealed (with %s)"
         tyc old
 let get_seal_opt ty =
   match observe_ty ty with
   | Ty ([], Tycons (tyc, _)) ->
       Option.(
-        let* eqv = Hashtbl.find_opt seals tyc in
-        return (tyc, eqv))
+        let* (cty, eqv) = Hashtbl.find_opt seals tyc in
+        return (tyc, cty, eqv))
   | _ -> None
 
 type unify_failure =
@@ -68,7 +68,7 @@ let fail f = raise (UnifyFailure f)
 type unify_error =
   | NotLLambda
   | InstGenericTyvar of string * ty
-
+  | InvalidSealing of tycons
 
 let explain_error = function
   | NotLLambda -> "Unification incompleteness (non-pattern unification problem)"
@@ -76,6 +76,8 @@ let explain_error = function
      Printf.sprintf
       "Unification incompleteness (generic type variable %s cannot be instantiated, instead it is being instantiated to %s)"
       v (ty_to_string ty)
+  | InvalidSealing tyc ->
+      Printf.sprintf "Badly sealed version of %s" tyc
 
 exception UnifyError of unify_error
 
@@ -771,22 +773,31 @@ and unify_lam_term tyctx tys1 t1 t2 =
   * of binders through the eta rule is done on the fly. *)
 and unify tyctx t1 t2 =
   let ty1 = tc tyctx t1 in
-  match get_seal_opt ty1 with  (***** HERE *****)
-  | Some eqv -> begin
-      let seal_term = app (const eqv (tyarrow [ty1 ; ty1] propty)) [t1 ; t2] in
-      Output.msg_printf "Generated equivalence: %s"
-        (term_to_string ~cx:tyctx seal_term) ;
-      try match observe (hnorm t1), observe (hnorm t2) with
+  match get_seal_opt ty1 with
+  | Some (tyc, cty, eqv) -> begin
+      match observe (hnorm t1), observe (hnorm t2) with
         | App (h1, [t1]), App (h2, [t2]) -> begin
-            match observe (hnorm h1), observe (hnorm t2) with
+            match observe (hnorm h1), observe (hnorm h2) with
             | Var k1, Var k2 when
                 constant k1.tag && constant k2.tag &&
-                k1.name = eqv.
+                k1.name = eqv && k2.name = eqv ->
+                let ty = tc tyctx t1 in
+                let seal_term = app (const eqv (tyarrow [ty ; ty] propty)) [t1 ; t2] in
+                Output.msg_printf "Generated equivalence for %s: %s"
+                  tyc (term_to_string ~cx:tyctx seal_term) ;
+                handle_seal seal_term
+            | _ -> fail Generic
           end
         | Var v1, _ when variable v1.tag ->
-            failwithf "Make it rigid #1"
+            let nv = fresh ~tag:v1.tag v1.ts cty in
+            let seal = app (const tyc (tyarrow [cty] ty1)) [nv] in
+            bind seal t2
         | _, Var v2 when variable v2.tag ->
-            failwithf "Make it rigid #2"
+            let nv = fresh ~tag:v2.tag v2.ts cty in
+            let seal = app (const tyc (tyarrow [cty] ty1)) [nv] in
+            bind seal t1
+        | _ ->
+            fail Generic
     end
   | None -> begin
       try match observe t1, observe t2 with
@@ -982,6 +993,8 @@ let try_left_unify_cpairs ~used t1 t2 =
       | InstGenericTyvar (v,ty) ->
           let msg = msg ^ (Unifyty.inst_gen_tyvar_msg v ty) in
           failwith msg
+      | InvalidSealing tyc ->
+          failwithf "invalid sealing for %s" tyc
 
 let try_right_unify_cpairs t1 t2 =
   try_with_state ~fail:None begin fun () ->

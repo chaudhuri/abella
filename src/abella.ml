@@ -421,7 +421,7 @@ and import_load modname withs =
               Compute.add_guard g ;
               process_decls decls
           | CSeal (tyc, eqv) ->
-              Unify.seal tyc eqv ;
+              Prover.seal tyc eqv ;
               process_decls decls
         end
     in
@@ -747,7 +747,7 @@ and process_top1 () =
       Compute.add_guard g ;
       compile @@ CSuspend g
   | Seal (tyc, eqv) ->
-      Unify.seal tyc eqv ;
+      Prover.seal tyc eqv ;
       compile @@ CSeal (tyc, eqv)
   | TopCommon(Back) ->
       if !Setup.mode = `interactive then State.Undo.back 2

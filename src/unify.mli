@@ -22,8 +22,8 @@
 
 open Term
 
-val seal : tycons -> id -> unit
-val get_seal_opt : ty -> id option
+val seal : tycons -> ty -> id -> unit
+val get_seal_opt : ty -> (tycons * ty * id) option
 
 type unify_failure =
   | OccursCheck
@@ -38,6 +38,7 @@ exception UnifyFailure of unify_failure
 type unify_error =
   | NotLLambda
   | InstGenericTyvar of string * ty
+  | InvalidSealing of tycons
 
 val explain_error : unify_error -> string
 
