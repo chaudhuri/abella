@@ -31,7 +31,7 @@ type id = string
 type tyvar = id
 type tycons = id
 
-type knd = Knd of int
+type knd = Knd of int [@@unboxed]
 type ty = Ty of ty list * aty
 and aty =
   | Tygenvar of tyvar

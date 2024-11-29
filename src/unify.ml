@@ -30,19 +30,20 @@ open Unifyty
 let gen_binder_ids n =
   List.map (fun i -> "z"^(string_of_int i)) (List.range 1 n)
 
-let seals : (tycons, ty * id) Hashtbl.t = State.table ()
-let seal tyc cty id =
-  match Hashtbl.find seals tyc with
+let seals : (tycons, tycons * id) Hashtbl.t = State.table ()
+let seal tyc_seal tyc_carrier eqv =
+  match Hashtbl.find seals tyc_seal with
   | exception Not_found ->
-      Hashtbl.add seals tyc (cty, id)
-  | (_, old) ->
+      Hashtbl.add seals tyc_seal (tyc_carrier, eqv)
+  | (_, old_eqv) ->
       failwithf "Seal failure: %s has already been sealed (with %s)"
-        tyc old
+        tyc_seal old_eqv
 let get_seal_opt ty =
   match observe_ty ty with
-  | Ty ([], Tycons (tyc, _)) ->
+  | Ty ([], Tycons (tyc, tyargs)) ->
       Option.(
-        let* (cty, eqv) = Hashtbl.find_opt seals tyc in
+        let* (tyc_carrier, eqv) = Hashtbl.find_opt seals tyc in
+        let cty = tybase @@ Tycons (tyc_carrier, tyargs) in
         return (tyc, cty, eqv))
   | _ -> None
 

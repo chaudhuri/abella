@@ -22,7 +22,7 @@
 
 open Term
 
-val seal : tycons -> ty -> id -> unit
+val seal : tycons -> tycons -> id -> unit
 val get_seal_opt : ty -> (tycons * ty * id) option
 
 type unify_failure =
