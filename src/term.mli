@@ -23,7 +23,7 @@
 type id = string
 
 (* Kinds *)
-type knd = Knd of int
+type knd = Knd of int [@@unboxed]
 
 val kind : int -> knd
 val kincr : knd -> knd

@@ -183,9 +183,9 @@ let add_defs typarams preds flavor clauses =
   List.iter (fun (id, _) -> H.add defs_table id def) preds
 
 let lookup_poly_const k =
-  try let Poly (typarams, ty) = List.assoc k (snd !sign) in (typarams, ty) with
-  | Not_found -> failwithf "Unknown constant: %S" k
-
+  match List.assoc k (snd !sign) with
+  | Poly (typarams, ty) -> (typarams, ty)
+  | exception Not_found -> failwithf "Unknown constant: %S" k
 
 let register_definition = function
   | Define (flav, idtys, udefs) ->
@@ -1390,4 +1390,34 @@ let cut_from ?name h arg term =
 
 (* Seal *)
 
-let seal _tyc _eqv : unit = failwithf "seal unfinished"
+let seal tyc eqv : unit =
+  let v, kind = 2, "seal" in
+  Output.trace ~v begin fun (module Trace) ->
+    Trace.printf ~kind "Looking up %s" eqv
+  end ;
+  let (params, eqv_ty) = lookup_poly_const eqv in
+  Output.trace ~v begin fun (module Trace) ->
+    Trace.printf ~kind "Found %s : [%s] %s" eqv
+      (String.concat "," params) (ty_to_string eqv_ty)
+  end ;
+  match observe_ty eqv_ty with
+  | Ty ([Ty ([], Tycons (tyc_carrier, _)) as ty_arg1 ; ty_arg2], targ) when
+      eq_ty ty_arg1 ty_arg2 && targ = propaty -> begin
+      Output.trace ~v begin fun (module Trace) ->
+        Trace.printf ~kind "Carrier of %s : %s"
+          eqv tyc_carrier
+      end ;
+      let cons_targ_ty =
+        tybase @@ Tycons (tyc, List.map (fun p -> tybase @@ Tygenvar p) params) in
+      let cons_ty = tyarrow [ty_arg1] cons_targ_ty in
+      Output.trace ~v begin fun (module Trace) ->
+        Trace.printf ~kind "Constructor %s : [%s] %s" tyc
+          (String.concat "," params) (ty_to_string cons_ty)
+      end ;
+      let cons_kind = Knd (List.length params) in
+      sign := add_types !sign [tyc] cons_kind ;
+      sign := add_consts !sign [tyc, cons_ty] ;
+      Unify.seal tyc tyc_carrier eqv
+    end
+  | ty ->
+      failwithf "Invalid type for %s: %s" eqv (ty_to_string ty)
