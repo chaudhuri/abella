@@ -234,7 +234,9 @@ let stateless_case_to_case case =
     new_vars = case.stateless_new_vars ;
     new_hyps = case.stateless_new_hyps }
 
-let cpairs_to_eqs cpairs = List.map (fun (x, y) -> Eq(x, y)) cpairs
+let unify_result_to_forms (res : Unify.unify_result) =
+    List.map (fun (x, y) -> Eq (x, y)) res.cpairs @
+    List.map (fun t -> Pred (t, Irrelevant)) res.equivs
 
 (* This handles asynchrony on the left *)
 let rec recursive_metaterm_case ~used ~sr term =
@@ -247,7 +249,7 @@ let rec recursive_metaterm_case ~used ~sr term =
           Some {
             (* Names created perhaps by unification *)
             stateless_new_vars = term_vars_alist Eigen [a;b] ;
-            stateless_new_hyps = cpairs_to_eqs cpairs
+            stateless_new_hyps = unify_result_to_forms cpairs
           }
       | None -> None
       end
@@ -411,14 +413,15 @@ let spec_view t =
 let terms_tyvars l =
   List.unique (List.fold_left (fun vs t -> (term_collect_tyvar_names t)@vs) [] l)
 
-let extract_terms_from_cpairs cpairs =
-  match cpairs with
+let extract_terms_from_result res =
+  match res with
   | None -> []
-  | Some pl -> List.fold_left (fun l (a,b) -> a::b::l) [] pl
+  | Some Unify.{ cpairs ; equivs } ->
+      List.fold_left (fun l (a, b) -> a :: b :: l) equivs cpairs
 
 let try_left_unify_cpairs_fully_inferred ~used ~msg t1 t2 =
   let cpairs = try_left_unify_cpairs ~used t1 t2 in
-  let rterms = t1 :: t2 :: (extract_terms_from_cpairs cpairs) in
+  let rterms = t1 :: t2 :: (extract_terms_from_result cpairs) in
   (match cpairs with
    | None -> ()
    | Some _ ->
@@ -428,7 +431,7 @@ let try_left_unify_cpairs_fully_inferred ~used ~msg t1 t2 =
 
 let try_right_unify_cpairs_fully_inferred ~msg t1 t2 =
   let cpairs = try_right_unify_cpairs t1 t2 in
-  let rterms = t1 :: t2 :: (extract_terms_from_cpairs cpairs) in
+  let rterms = t1 :: t2 :: (extract_terms_from_result cpairs) in
   (match cpairs with
    | None -> ()
    | Some _ ->
@@ -467,7 +470,7 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
               [{ bind_state = get_bind_state () ;
                  new_vars = case.stateless_new_vars @ used ;
                  new_hyps =
-                   cpairs_to_eqs cpairs @
+                   unify_result_to_forms cpairs @
                    List.map wrapper case.stateless_new_hyps }]
           end
       | None -> []
@@ -541,7 +544,7 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
               let body = List.map rewrap_antecedent fresh_body in
               Some { bind_state = get_bind_state () ;
                      new_vars = new_vars ;
-                     new_hyps = cpairs_to_eqs cpairs @ body }
+                     new_hyps = unify_result_to_forms cpairs @ body }
           | None -> None
         end
       end clause
@@ -796,8 +799,9 @@ let unfold ~sr ~mdefs ~used clause_sel sol_sel goal0 =
       (* Find suitable solutions without lingering conflict pairs *)
       let rec select_non_cpairs emit list =
         match list with
-        | (state, [], body, _)::rest ->
+        | (state, Unify.{ cpairs = [] ; equivs }, body, _)::rest ->
             set_bind_state state;
+            let emit = List.map (fun t -> Pred (t, r)) equivs @ emit in
             select_non_cpairs (Metaterm.map_terms Term.deep_copy body :: emit) rest
         | _::rest -> select_non_cpairs emit rest
         | [] -> emit
@@ -834,7 +838,7 @@ let unfold ~sr ~mdefs ~used clause_sel sol_sel goal0 =
                     failwithf "Head of program clause named %S not\
                               \ unifiable with goal"
                       nm
-                | Some cpairs ->
+                | Some Unify.{ cpairs ; equivs } ->
                     if try_unify_cpairs cpairs then begin
                       let new_vars = List.map (fun (x, xv) -> (x, find_vars Logic [xv])) vars in
                       let quant_vars =
@@ -842,6 +846,9 @@ let unfold ~sr ~mdefs ~used clause_sel sol_sel goal0 =
                           (fun vs (x, nvs) -> if nvs = [] then vs else (x, nvs) :: vs)
                           [] new_vars in
                       let body =
+                        List.map begin fun eqv ->
+                          Pred (eqv, sz)
+                        end equivs @
                         List.map begin fun g ->
                           let aobj = {goal with right = g} in
                           map_on_objs_full normalize_obj (Obj (aobj, sz))
@@ -949,7 +956,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       let msg = msg_cannot_fully_infer_prog_clause head body in
       match try_right_unify_cpairs_fully_inferred ~msg head goal with
       | None -> ()
-      | Some cpairs ->
+      | Some Unify.{ cpairs ; equivs } ->
           let sc ws =
             if try_unify_cpairs cpairs then
               sc (WUnfold(p, i, ws)) in
@@ -962,6 +969,8 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
             | WUnfold _ -> n
             | _ -> n - 1
           in
+          if equivs <> [] then
+            bugf "clause_aux: missing handler for generated equivs" ;
           async_obj_aux_conj n (wrap body) r ts ~sc ~witnesses
     end
 
@@ -1235,8 +1244,9 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       in
       let doit () =
         unfold_defs ~sr ~mdefs csel ~ts goal r |>
-        List.iter begin fun (state, cpairs, body, i) ->
+        List.iter begin fun (state, Unify.{ cpairs ; equivs }, body, i) ->
           set_bind_state state ;
+          let body = conjoin (List.map (fun eqv -> Pred (eqv, r)) equivs @ [body]) in
           metaterm_aux subn hyps body ts
             ~witness
             ~sc:(fun w -> if try_unify_cpairs cpairs then

@@ -30,6 +30,21 @@ open Unifyty
 let gen_binder_ids n =
   List.map (fun i -> "z"^(string_of_int i)) (List.range 1 n)
 
+let seals : (tycons, id) Hashtbl.t = State.table ()
+let seal tyc id =
+  match Hashtbl.find seals tyc with
+  | exception Not_found ->
+      Hashtbl.add seals tyc id
+  | old ->
+      failwithf "Seal failure: %s has already been sealed (with %s)"
+        tyc old
+let get_seal_opt ty =
+  match observe_ty ty with
+  | Ty ([], Tycons (tyc, _)) ->
+      Option.(
+        let* eqv = Hashtbl.find_opt seals tyc in
+        return (tyc, eqv))
+  | _ -> None
 
 type unify_failure =
   | OccursCheck
@@ -64,13 +79,14 @@ let explain_error = function
 
 exception UnifyError of unify_error
 
-(* An explicit handler is specified for how to deal with
-   non-llambda conflict pairs *)
+(* Explicit handlers is specified for how to deal with
+   unresolvable unification problems *)
 module type Param =
 sig
   val instantiatable : tag
   val constant_like  : tag
-  val handler : term -> term -> unit
+  val handle_nonpattern : term -> term -> unit
+  val handle_seal : term -> unit [@@ocaml.warning "-32"]
 end
 
 module Make (P:Param) =
@@ -754,40 +770,60 @@ and unify_lam_term tyctx tys1 t1 t2 =
   * lambdas or applications at the top level. Any necessary adjustment
   * of binders through the eta rule is done on the fly. *)
 and unify tyctx t1 t2 =
-  try match observe t1,observe t2 with
-    | Var v1, Var v2 when v1 = v2 -> ()
-    | Var v1,_ when variable v1.tag -> unify_var_term tyctx v1 t1 t2
-    | _,Var v2 when variable v2.tag -> unify_var_term tyctx v2 t2 t1
+  let ty1 = tc tyctx t1 in
+  match get_seal_opt ty1 with  (***** HERE *****)
+  | Some eqv -> begin
+      let seal_term = app (const eqv (tyarrow [ty1 ; ty1] propty)) [t1 ; t2] in
+      Output.msg_printf "Generated equivalence: %s"
+        (term_to_string ~cx:tyctx seal_term) ;
+      try match observe (hnorm t1), observe (hnorm t2) with
+        | App (h1, [t1]), App (h2, [t2]) -> begin
+            match observe (hnorm h1), observe (hnorm t2) with
+            | Var k1, Var k2 when
+                constant k1.tag && constant k2.tag &&
+                k1.name = eqv.
+          end
+        | Var v1, _ when variable v1.tag ->
+            failwithf "Make it rigid #1"
+        | _, Var v2 when variable v2.tag ->
+            failwithf "Make it rigid #2"
+    end
+  | None -> begin
+      try match observe t1, observe t2 with
+        | Var v1, Var v2 when v1 = v2 -> ()
+        | Var v1,_ when variable v1.tag -> unify_var_term tyctx v1 t1 t2
+        | _,Var v2 when variable v2.tag -> unify_var_term tyctx v2 t2 t1
 
-    | Lam(idtys1,t1),_    -> unify_lam_term tyctx idtys1 t1 t2
-    | _,Lam(idtys2,t2)    -> unify_lam_term tyctx idtys2 t2 t1
+        | Lam(idtys1,t1),_    -> unify_lam_term tyctx idtys1 t1 t2
+        | _,Lam(idtys2,t2)    -> unify_lam_term tyctx idtys2 t2 t1
 
-    (* Check for a special case of asymmetric unification outside of LLambda *)
-    | App(h1,a1), App(h2,a2) ->
-        begin match observe h1, observe h2 with
-          | Var v1, _ when variable v1.tag &&
-              check_flex_args (List.map hnorm a1) v1.ts ->
-              unify_app_term tyctx h1 a1 t1 t2
+        (* Check for a special case of asymmetric unification outside of LLambda *)
+        | App(h1,a1), App(h2,a2) ->
+            begin match observe h1, observe h2 with
+            | Var v1, _ when variable v1.tag &&
+                             check_flex_args (List.map hnorm a1) v1.ts ->
+                unify_app_term tyctx h1 a1 t1 t2
 
-          | _, Var v2 when variable v2.tag &&
-              check_flex_args (List.map hnorm a2) v2.ts ->
-              unify_app_term tyctx h2 a2 t2 t1
+            | _, Var v2 when variable v2.tag &&
+                             check_flex_args (List.map hnorm a2) v2.ts ->
+                unify_app_term tyctx h2 a2 t2 t1
 
-          | _ -> unify_app_term tyctx h1 a1 t1 t2
-        end
+            | _ -> unify_app_term tyctx h1 a1 t1 t2
+            end
 
-    | App (h1,a1),_                 -> unify_app_term tyctx h1 a1 t1 t2
-    | _,App (h2,a2)                 -> unify_app_term tyctx h2 a2 t2 t1
-    | Var c1,_ when constant c1.tag -> unify_const_term tyctx t1 t2
-    | _,Var c2 when constant c2.tag -> unify_const_term tyctx t2 t1
-    | DB i1,DB i2                   -> if i1 <> i2 then fail (ConstClash(t1, t2))
+        | App (h1,a1),_                 -> unify_app_term tyctx h1 a1 t1 t2
+        | _,App (h2,a2)                 -> unify_app_term tyctx h2 a2 t2 t1
+        | Var c1,_ when constant c1.tag -> unify_const_term tyctx t1 t2
+        | _,Var c2 when constant c2.tag -> unify_const_term tyctx t2 t1
+        | DB i1,DB i2                   -> if i1 <> i2 then fail (ConstClash(t1, t2))
 
-    | _ -> bugf "logic variable on the left (7)"
-  with
-    | UnifyError NotLLambda ->
-        let n = max (closing_depth t1) (closing_depth t2) in
-        let tys = List.rev (List.take n tyctx) in
-          handler (lambda tys t1) (lambda tys t2)
+        | _ -> bugf "logic variable on the left (7)"
+      with
+      | UnifyError NotLLambda ->
+          let n = max (closing_depth t1) (closing_depth t2) in
+          let tys = List.rev (List.take n tyctx) in
+          handle_nonpattern (lambda tys t1) (lambda tys t2)
+    end
 
 let pattern_unify ~used t1 t2 =
   local_used := used ;
@@ -870,20 +906,23 @@ let flexible_heads ~used ~sr (tys1, h1, a1) (tys2, h2, a2) =
 
 end
 
-let standard_handler _t1 _t2 = raise (UnifyError NotLLambda)
+let handle_nonpattern_std _t1 _t2 = raise (UnifyError NotLLambda)
+let handle_seal_std _t = bugf "handle_seal_std: unimplemented"
 
 module Right =
   Make (struct
           let instantiatable = Logic
           let constant_like = Eigen
-          let handler = standard_handler
+          let handle_nonpattern = handle_nonpattern_std
+          let handle_seal = handle_seal_std
         end)
 
 module Left =
   Make (struct
           let instantiatable = Eigen
           let constant_like = Logic
-          let handler = standard_handler
+          let handle_nonpattern = handle_nonpattern_std
+          let handle_seal = handle_seal_std
         end)
 
 let right_unify ?used:(used=[]) t1 t2 =
@@ -911,44 +950,55 @@ let try_left_unify ?used:(used=[]) t1 t2 =
        left_unify ~used t1 t2 ;
        true)
 
+type unify_result = {
+  cpairs : (term * term) list ;
+  equivs : term list ;
+}
+
 let try_left_unify_cpairs ~used t1 t2 =
   let state = get_scoped_bind_state () in
   let cpairs = ref [] in
   let cpairs_handler x y = cpairs := (x,y)::!cpairs in
+  let eqvs = ref [] in
+  let seal_handler eqv = eqvs := eqv :: !eqvs in
   let module LeftCpairs =
     Make (struct
-            let instantiatable = Eigen
-            let constant_like = Logic
-            let handler = cpairs_handler
-          end)
+      let instantiatable = Eigen
+      let constant_like = Logic
+      let handle_nonpattern = cpairs_handler
+      let handle_seal = seal_handler
+    end)
   in
-    try
-      LeftCpairs.pattern_unify ~used t1 t2 ;
-      Some !cpairs
-    with
-      | UnifyFailure _ -> set_scoped_bind_state state ; None
-      | UnifyError err -> set_scoped_bind_state state ;
-        let msg = "Unification error during case analysis: " in
-        match err with
-        | NotLLambda ->
-           failwith (msg ^ "encountered non-pattern unification problem")
-        | InstGenericTyvar (v,ty) ->
-           let msg = msg ^ (Unifyty.inst_gen_tyvar_msg v ty) in
-           failwith msg
+  try
+    LeftCpairs.pattern_unify ~used t1 t2 ;
+    Some { cpairs = !cpairs ; equivs = !eqvs }
+  with
+  | UnifyFailure _ -> set_scoped_bind_state state ; None
+  | UnifyError err -> set_scoped_bind_state state ;
+      let msg = "Unification error during case analysis: " in
+      match err with
+      | NotLLambda ->
+          failwith (msg ^ "encountered non-pattern unification problem")
+      | InstGenericTyvar (v,ty) ->
+          let msg = msg ^ (Unifyty.inst_gen_tyvar_msg v ty) in
+          failwith msg
 
 let try_right_unify_cpairs t1 t2 =
-  try_with_state ~fail:None
-    (fun () ->
-       let cpairs = ref [] in
-       let cpairs_handler x y = cpairs := (x,y)::!cpairs in
-       let module RightCpairs =
-         Make (struct
-                 let instantiatable = Logic
-                 let constant_like = Eigen
-                 let handler = cpairs_handler
-               end)
-       in
-         RightCpairs.pattern_unify ~used:[] t1 t2 ;
-         Some !cpairs)
+  try_with_state ~fail:None begin fun () ->
+    let cpairs = ref [] in
+    let cpairs_handler x y = cpairs := (x,y)::!cpairs in
+    let eqvs = ref [] in
+    let seal_handler eqv = eqvs := eqv :: !eqvs in
+    let module RightCpairs =
+      Make (struct
+        let instantiatable = Logic
+        let constant_like = Eigen
+        let handle_nonpattern = cpairs_handler
+        let handle_seal = seal_handler
+      end)
+    in
+    RightCpairs.pattern_unify ~used:[] t1 t2 ;
+    Some { cpairs = !cpairs ; equivs = !eqvs }
+  end
 
 let left_flexible_heads = Left.flexible_heads

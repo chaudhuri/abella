@@ -31,6 +31,7 @@
     "Kind",          KKIND ;
     "Query",         QUERY ;
     "Quit",          QUIT ;
+    "Seal",          SEAL ;
     "Set",           SET ;
     "Show",          SHOW ;
     "Specification", SPECIFICATION ;

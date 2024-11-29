@@ -301,7 +301,8 @@ module Replacement = struct
           ~what:"declared constant"
           ~mem:(fun id -> Itab.mem id repl.map) ;
         comp
-    | CSuspend _
+    | CSuspend _ -> bugf "Replacement for Suspend unimplemented"
+    | CSeal _ -> bugf "Replacement for Seal unimplemented"
     | CClose _ -> comp
 end
 
@@ -418,6 +419,9 @@ and import_load modname withs =
               process_decls decls
           | CSuspend g ->
               Compute.add_guard g ;
+              process_decls decls
+          | CSeal (tyc, eqv) ->
+              Unify.seal tyc eqv ;
               process_decls decls
         end
     in
@@ -742,6 +746,9 @@ and process_top1 () =
       let g = Compute.make_guard ~head ~test in
       Compute.add_guard g ;
       compile @@ CSuspend g
+  | Seal (tyc, eqv) ->
+      Unify.seal tyc eqv ;
+      compile @@ CSeal (tyc, eqv)
   | TopCommon(Back) ->
       if !Setup.mode = `interactive then State.Undo.back 2
       else failwith "Cannot use interactive commands in non-interactive mode"
