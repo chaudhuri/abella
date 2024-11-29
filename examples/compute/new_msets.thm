@@ -5,22 +5,42 @@ Define adj : list A -> A -> list A -> prop by
 Suspend adj J _ L.
 
 Define perm : list A -> list A -> prop by
-  perm J1 K1 :=
+; perm nil nil
+; perm J1 K1 :=
     exists X J2 K2, adj J2 X J1 /\ adj K2 X K1 /\ perm J2 K2.
 
+% Suspend perm J K.
 Suspend perm J _.
 Suspend perm _ K.
 
 Seal Type mset with perm.
 
-Define r : mset A -> prop by
-  r S := r S.
-
 Define p : mset A -> prop by
   p (mset (A :: L)) := member A L.
 
-Theorem test[A] : forall (a b : A), r (mset (b :: a :: nil)) -> false.
+Suspend p (mset L).
+
+Kind i type.
+Type a,b i.
+
+Theorem perm_nil2[A] : forall (L : list A), perm L nil -> L = nil.
+intros. case H1.
+  search.
+  case H3.
+Theorem perm_nil1[A] : forall (L : list A), perm nil L -> L = nil.
+intros. case H1.
+  search.
+  case H2.
+Theorem perm_sing1[A] : forall (L : list A) (E : A), perm L (E :: nil) -> L = E :: nil.
+intros. case H1. case H3.
+  apply perm_nil2 to *H4. case H2. search.
+  case H5.
+
+Theorem test : p (mset (b :: a :: nil)) -> false.
 intros.
-  case H1 (keep).
-  case H2 (keep).
-  case H4 (keep).
+  case H1.
+  compute *H2.
+    apply perm_sing1 to H4. compute H3.
+    apply perm_nil2 to H4. case H5. compute H3.
+    apply perm_sing1 to H4. compute H3.
+    apply perm_nil2 to H4. case H5. compute H3.

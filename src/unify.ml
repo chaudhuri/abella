@@ -773,30 +773,49 @@ and unify_lam_term tyctx tys1 t1 t2 =
   * lambdas or applications at the top level. Any necessary adjustment
   * of binders through the eta rule is done on the fly. *)
 and unify tyctx t1 t2 =
+  let v, kind = 2, "unify" in
   let ty1 = tc tyctx t1 in
   match get_seal_opt ty1 with
-  | Some (tyc, cty, eqv) -> begin
+  | Some (tyc_seal, ty_carrier, eqv) -> begin
       match observe (hnorm t1), observe (hnorm t2) with
         | App (h1, [t1]), App (h2, [t2]) -> begin
             match observe (hnorm h1), observe (hnorm h2) with
             | Var k1, Var k2 when
                 constant k1.tag && constant k2.tag &&
-                k1.name = eqv && k2.name = eqv ->
+                k1.name = tyc_seal && k2.name = tyc_seal ->
                 let ty = tc tyctx t1 in
                 let seal_term = app (const eqv (tyarrow [ty ; ty] propty)) [t1 ; t2] in
                 Output.msg_printf "Generated equivalence for %s: %s"
-                  tyc (term_to_string ~cx:tyctx seal_term) ;
+                  tyc_seal (term_to_string ~cx:tyctx seal_term) ;
                 handle_seal seal_term
             | _ -> fail Generic
           end
-        | Var v1, _ when variable v1.tag ->
-            let nv = fresh ~tag:v1.tag v1.ts cty in
-            let seal = app (const tyc (tyarrow [cty] ty1)) [nv] in
-            bind seal t2
-        | _, Var v2 when variable v2.tag ->
-            let nv = fresh ~tag:v2.tag v2.ts cty in
-            let seal = app (const tyc (tyarrow [cty] ty1)) [nv] in
-            bind seal t1
+        | Var vr, t2 ->
+            if not @@ variable vr.tag then fail Generic ;
+            let nv = named_fresh vr.name vr.ts ty_carrier in
+            let seal = app (const tyc_seal (tyarrow [ty_carrier] ty1)) [nv] in
+            Output.trace ~v begin fun (module Trace) ->
+              Trace.printf ~kind "[ltr] %s : %s <- %s : %s"
+                (term_to_string ~cx:tyctx t1)
+                (ty_to_string (tc tyctx t1))
+                (term_to_string ~cx:tyctx seal)
+                (ty_to_string (tc tyctx seal)) ;
+              Trace.printf "other term: %s" (term_to_string ~cx:tyctx t2) ;
+            end ;
+            bind t1 seal ;
+            unify tyctx seal t2
+        | t1, Var vr ->
+            if not @@ variable vr.tag then fail Generic ;
+            let nv = named_fresh vr.name vr.ts ty_carrier in
+            let seal = app (const tyc_seal (tyarrow [ty_carrier] ty1)) [nv] in
+            Output.trace ~v begin fun (module Trace) ->
+              Trace.printf ~kind "[rtl] %s <- %s"
+                (term_to_string ~cx:tyctx t2)
+                (term_to_string ~cx:tyctx seal) ;
+              Trace.printf "other term: %s" (term_to_string ~cx:tyctx t1) ;
+            end ;
+            bind t2 seal ;
+            unify tyctx t1 seal
         | _ ->
             fail Generic
     end

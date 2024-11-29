@@ -382,15 +382,15 @@ let prefix = function
 
 let fresh =
   let varcount = ref 1 in
-    fun () ->
-      let i = !varcount in
-        incr varcount ;
-        i
+  fun () ->
+    let i = !varcount in
+    incr varcount ;
+    i
 
 let fresh ?(tag=Logic) ts ty =
   let i = fresh () in
   let name = (prefix tag) ^ (string_of_int i) in
-    var tag name ts ty
+  var tag name ts ty
 
 let remove_trailing_numbers s =
   let rec scan i =
