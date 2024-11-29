@@ -80,6 +80,7 @@ type top_command =
   | Close         of aty list
   | SSplit        of id * id list
   | Suspend       of uterm * id list option
+  | Seal          of tycons * id
   | TopCommon     of common_command
 
 type fin = Finished | Unfinished
@@ -98,6 +99,7 @@ type compiled =
   | CType         of id list * ty
   | CClose        of (aty * aty list) list
   | CSuspend      of guard
+  | CSeal         of tycons * id
 
 type witness =
   | WTrue
@@ -319,6 +321,8 @@ let top_command_to_string tc =
         sprintf "Suspend %s := %s"
           (uterm_to_string head)
           (String.concat ", " test)
+    | Seal (tyc, eqv) ->
+        sprintf "Seal %s with %s" tyc eqv
     | TopCommon(cc) ->
         common_command_to_string cc
 

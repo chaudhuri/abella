@@ -47,6 +47,10 @@ Theorem adj_mset[A]: forall (E : A) (S T : mset A),
   adj S E T -> $mset S /\ $mset T.
 skip.
 
+Theorem adj_not_empty[A] : forall (E : A) (S T : mset A),
+  mset_nil T -> adj S E T -> false.
+skip.
+
 Theorem adj_exists[A]: forall (E : A) (S : mset A),
   $mset S -> exists (T : mset A), adj S E T.
 skip.
@@ -66,6 +70,10 @@ skip.
 
 Theorem adj_deterministic[A] : forall (E : A) (S1 S2 T1 T2 : mset A),
   perm S1 S2 -> adj S1 E T1 -> adj S2 E T2 -> perm T1 T2.
+skip.
+
+Theorem adj_injective[A] : forall (E : A) (S1 S2 T : mset A),
+  adj S1 E T -> adj S2 E T -> perm S1 S2.
 skip.
 
 Theorem adj_swap[A] : forall (E F : A) (S T U : mset A),
@@ -171,15 +179,6 @@ Define lctx_adj : list A -> A -> list A -> prop by
 
 Suspend lctx_adj J _ K.
 
-Define lctx_perm : list A -> list A -> prop by
-; lctx_perm nil nil
-; lctx_perm (E1 :: K) (E2 :: L) :=
-    exists F K1 L1, lctx_adj K1 F (E1 :: K) /\
-                    lctx_adj L1 F (E2 :: L) /\
-                    lctx_perm K1 L1.
-
-Suspend lctx_perm J K.
-
 Theorem lctx_adj_mset[A] : forall (E : A) (J K : list A) (GG : mset A),
   mset K GG -> lctx_adj J E K -> exists DD, mset J DD /\ adj DD E GG.
 induction on 2. intros. case H2.
@@ -194,12 +193,50 @@ induction on 3. intros. case H3.
   compute *H1. apply adj_swap to *H5 *H2.
    apply IH to H6 H7 H4. search.
 
+Define lctx_perm : list A -> list A -> prop by
+; lctx_perm nil nil
+; lctx_perm K L :=
+    exists F K1 L1, lctx_adj K1 F K /\
+                    lctx_adj L1 F L /\
+                    lctx_perm K1 L1.
+
+Suspend lctx_perm J K.
+
 Theorem lctx_mset_stable[A] : forall (K L : list A) (GG : mset A),
   mset K GG -> lctx_perm K L -> mset L GG.
 induction on 2. intros. case H2.
   case H1. search.
   apply lctx_adj_mset to H1 H3. apply IH to H6 H5.
    apply align_adjs to H8 H7 H4. search.
+
+Define lctx_perm2 : list A -> list A -> prop by
+; lctx_perm2 nil nil
+; lctx_perm2 (E :: J) L :=
+    exists K, lctx_adj K E L /\ lctx_perm2 J K.
+
+Suspend lctx_perm2 J _.
+
+Theorem lctx2_mset_stable[A] : forall (K L : list A) (GG : mset A),
+  mset K GG -> lctx_perm2 K L -> mset L GG.
+induction on 2. intros. case H2.
+  case H1. search.
+  case H1. apply IH to H6 H4. apply align_adjs to H7 H5 H3. search.
+
+Theorem adj_backwards[A] : forall (S T U : mset A) (E F : A),
+  adj S E U -> adj T F U ->
+  (E = F /\ perm S T) \/
+  (exists V W, adj V F S /\ adj W E T /\ perm V W).
+skip.
+
+Theorem mset_diff[A] : forall (J K : list A) (GG : mset A),
+  mset J GG -> mset K GG -> lctx_perm J K.
+induction on 1. intros. case H1.
+  case H2. search. apply adj_not_empty to H3 H4.
+  case H2. apply adj_not_empty to H5 H3.
+    apply adj_backwards to H5 H3. case H7.
+      apply mset_perm_stable to *H8 *H6. apply IH to H4 H9. search.
+      apply adj_swap to *H8 *H3. apply adj_injective to *H5 H10.
+       apply mset_perm_stable to *H11 *H6.
 
 Define mll : mset form -> prop by
 ; mll GG := exists A, mset (atm A :: natm A :: nil) GG
@@ -322,6 +359,8 @@ Theorem cut : forall (GG DD WW : mset form) (GL DL WL : list form) (A B : form),
   mset (B :: DL) DD -> mll DD ->
   append GL DL WL -> mset WL WW -> mll WW.
 induction on 1. induction on 3. intros. case H3 (keep).
+  assert lctx_perm2 (A :: GL) (atm A1 :: natm A1 :: nil). skip.
+   compute H9. skip. skip.
 
 %%  assert lctx_perm (atm A1 :: natm A1 :: nil) (A :: GL). skip.
 %%    case H9. case H10. case H11. case H12. case H13. case H14. case H15.

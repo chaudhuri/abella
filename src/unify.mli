@@ -22,6 +22,9 @@
 
 open Term
 
+val seal : tycons -> id -> unit
+val get_seal_opt : ty -> id option
+
 type unify_failure =
   | OccursCheck
   | ConstClash of (term * term)
@@ -48,9 +51,14 @@ val try_with_state : fail:'a -> (unit -> 'a) -> 'a
 val try_right_unify : ?used:(id * term) list -> term -> term -> bool
 val try_left_unify : ?used:(id * term) list -> term -> term -> bool
 
+type unify_result = {
+  cpairs : (term * term) list ;
+  equivs : term list ;
+}
+
 val try_left_unify_cpairs :
-  used:(id * term) list -> term -> term -> (term * term) list option
-val try_right_unify_cpairs : term -> term -> (term * term) list option
+  used:(id * term) list -> term -> term -> unify_result option
+val try_right_unify_cpairs : term -> term -> unify_result option
 
 val left_flexible_heads :
   used:(id * term) list ->

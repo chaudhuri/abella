@@ -1,0 +1,26 @@
+Define adj : list A -> A -> list A -> prop by
+; adj L X (X :: L)
+; adj (Y :: J) X (Y :: L) := adj J X L.
+
+Suspend adj J _ L.
+
+Define perm : list A -> list A -> prop by
+  perm J1 K1 :=
+    exists X J2 K2, adj J2 X J1 /\ adj K2 X K1 /\ perm J2 K2.
+
+Suspend perm J _.
+Suspend perm _ K.
+
+Seal Type mset with perm.
+
+Define r : mset A -> prop by
+  r S := r S.
+
+Define p : mset A -> prop by
+  p (mset (A :: L)) := member A L.
+
+Theorem test[A] : forall (a b : A), r (mset (b :: a :: nil)) -> false.
+intros.
+  case H1 (keep).
+  case H2 (keep).
+  case H4 (keep).
