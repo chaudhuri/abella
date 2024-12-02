@@ -27,18 +27,14 @@ Kind i type.
 Type a,b i.
 
 Theorem test_ag1 : mset (a :: nil) = mset (b :: nil) -> false.
-intros. case H1.
-  compute *H2.
+intros. compute H1.
 
 Theorem test_ag2[A] : forall (X Y : A), mset (X :: nil) = mset (Y :: nil) -> X = Y.
-intros. case H1.
-  compute *H2. search.
+intros. compute *H1. search.
 
 Theorem test : p (mset (b :: a :: nil)) -> false.
-intros.
-  case H1. % compute on p/mset isn't yet implemented
-  compute *H2 *H3.
-    abort. % compute is often stuck
+intros. compute *H1.
+  abort. % compute is often stuck
 
 %% Theorems to get perm unstuck
 
@@ -60,9 +56,7 @@ intros. case H1. case H2.
   case H5.
 
 Theorem test_modulo : p (mset (b :: a :: nil)) -> false.
-intros.
-  case H1. % compute on p/mset isn't yet implemented
-  compute *H2 *H3 with perm_nil1, perm_nil2, perm_sing1, perm_sing2.
+intros. compute *H1 with perm_nil1, perm_nil2, perm_sing1, perm_sing2.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Fully computational version
@@ -83,6 +77,52 @@ Define p2 : mset2 A -> prop by
 Suspend p2 (mset2 L).
 
 Theorem test2 : p2 (mset2 (b :: a :: nil)) -> false.
+intros. compute H1.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% New MLL
+
+Kind atm, form type.
+Type atm,natm  atm -> form.
+Type tens, par form -> form -> form.
+Type one, bot  form.
+
+Define append : list A -> list A -> list A -> prop by
+; append nil K K
+; append (X :: J) K (X :: L) := append J K L.
+
+Suspend append J _ K.
+
+Define mll : mset2 form -> prop by
+; mll (mset2 (atm A :: natm A :: nil))
+; mll (mset2 (one :: nil))
+; mll (mset2 (bot :: L)) := mll (mset2 L)
+; mll (mset2 (tens A B :: L)) :=
+    exists J K, append J K L /\
+    mll (mset2 (A :: J)) /\ mll (mset2 (B :: K))
+; mll (mset2 (par A B :: L)) :=
+    mll (mset2 (A :: B :: L)).
+
+Suspend mll (mset2 L).
+
+
+Theorem fail_1 : forall A B, mll (mset2 (tens (atm A) (atm B) :: nil)) -> false.
+intros. compute H1.
+
+Type pp, qq atm.
+
+Query 4 mll (mset2 (A :: B :: nil)).
+
+%% Query 100 mll (mset2 (tens (atm pp) (atm qq) ::
+%%                       tens (atm pp) (natm qq) ::
+%%                       tens (natm pp) (atm qq) ::
+%%                       tens (natm pp) (natm qq) :: nil)).
+
+%%% this is not currently working
+Theorem fail_2 : mll (mset2 (tens (atm pp) (atm qq) ::
+                             tens (atm pp) (natm qq) ::
+                             tens (natm pp) (atm qq) ::
+                             tens (natm pp) (natm qq) :: nil)) -> false.
 intros.
-  case H1. % compute on p2/mset2 not yet implemented
-  compute H2 H3.
+  % compute H1.
+  abort.

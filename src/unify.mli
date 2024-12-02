@@ -38,7 +38,7 @@ exception UnifyFailure of unify_failure
 type unify_error =
   | NotLLambda
   | InstGenericTyvar of string * ty
-  | InvalidSealing of tycons
+  | InvalidSealing
 
 val explain_error : unify_error -> string
 

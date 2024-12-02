@@ -69,12 +69,14 @@ type common_command =
   | Show          of string
   | Quit
 
+type depth_bound = int
+
 type top_command =
   | Theorem       of id * id list * umetaterm
   | Define        of flavor * tyctx * udef_clause list
   | Import        of string * pos * (string * string) list
   | Specification of string * pos
-  | Query         of umetaterm
+  | Query         of depth_bound option * umetaterm
   | Kind          of id list * knd
   | Type          of id list * ty
   | Close         of aty list
@@ -141,8 +143,6 @@ let witness_to_string =
     | WMagic -> "*"
   in
   aux
-
-type depth_bound = int
 
 type ewitness =
   | ETerm of uterm
@@ -302,8 +302,10 @@ let top_command_to_string tc =
            String.concat ", ")
     | Specification (filename, _) ->
         sprintf "Specification \"%s\"" filename
-    | Query q ->
-        sprintf "Query %s" (umetaterm_to_formatted_string q)
+    | Query (db, q) ->
+        sprintf "Query%s %s"
+          (match db with None -> "" | Some db -> " " ^ string_of_int db)
+          (umetaterm_to_formatted_string q)
     | Kind (ids, knd) ->
         sprintf "Kind %s %s" (id_list_to_string ids) (knd_to_string knd)
     | Type(ids, ty) ->

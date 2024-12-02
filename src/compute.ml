@@ -170,6 +170,11 @@ let is_unchanged wait =
 exception Out_of_gas
 exception Suspended
 
+let branch_to_string branch =
+  branch |>
+  List.rev_map (fun x -> string_of_int @@ x + 1) |>
+  String.concat "."
+
 let compute ?name ?(gas = 1_000) hs wrt =
   let v, kind = 2, "compute" in
   let total_gas = gas in
@@ -190,10 +195,11 @@ let compute ?name ?(gas = 1_000) hs wrt =
       "compute wrt %s" (String.concat ", " wrt)
   end ;
   let subgoals = ref [] in
-  let rec compute_all ~chs ~wait ~todo =
+  let rec compute_all ~(branch : int list) ~chs ~wait ~todo =
     Output.trace ~v begin fun (module Trace) ->
       Trace.printf ~kind
-        "compute_all ~chs:[%s] ~wait:[%s] ~todo:[%s]"
+        "BRANCH_ALL [%s] chs:[%s] wait:[%s] todo:[%s]"
+        (branch_to_string branch)
         (List.map ch_to_string chs |> String.concat ",")
         (List.map cw_to_string wait |> String.concat ",")
         (List.map ch_to_string todo |> String.concat ",")
@@ -215,11 +221,30 @@ let compute ?name ?(gas = 1_000) hs wrt =
             Prover.set_sequent current_seq
         in
         subgoals := sg :: !subgoals ;
+        Output.trace ~v begin fun (module Trace) ->
+          Trace.printf ~kind
+            "BRANCH_END [%s] with new subgoal"
+            (branch_to_string branch)
+        end
     | h :: todo ->
-        compute_one ~chs ~wait ~todo h
-  and compute_one ~chs ~wait ~todo (ch : compute_hyp) =
-    let suspend () = compute_all ~chs ~wait:(get_wait ch.clr ch.form :: wait) ~todo in
-    let doit () = compute_case ~chs ~wait ~todo ch in
+        compute_one ~branch ~chs ~wait ~todo h ;
+        Output.trace ~v begin fun (module Trace) ->
+          Trace.printf ~kind
+            "BRANCH_END [%s]"
+            (branch_to_string branch)
+        end
+  and compute_one ~branch ~chs ~wait ~todo (ch : compute_hyp) =
+    Output.trace ~v begin fun (module Trace) ->
+      Trace.printf ~kind
+        "BRANCH_START [%s] chs:[%s] wait:[%s] todo:[%s] %s"
+        (branch_to_string branch)
+        (List.map ch_to_string chs |> String.concat ",")
+        (List.map cw_to_string wait |> String.concat ",")
+        (List.map ch_to_string todo |> String.concat ",")
+        (ch_to_string ch)
+    end ;
+    let suspend () = compute_all ~branch ~chs ~wait:(get_wait ch.clr ch.form :: wait) ~todo in
+    let doit () = compute_case ~branch ~chs ~wait ~todo ch in
     match ch.form with
     | Binding (Forall, _, _)
     | Arrow _ ->
@@ -244,7 +269,7 @@ let compute ?name ?(gas = 1_000) hs wrt =
                       format_metaterm f
                   end ;
                   let todo = {ch with form = f} :: todo in
-                  compute_all ~chs ~wait ~todo
+                  compute_all ~branch ~chs ~wait ~todo
               | _ | exception _ ->
                   Prover.set_sequent saved ;
                   try_wrts wrt
@@ -258,23 +283,23 @@ let compute ?name ?(gas = 1_000) hs wrt =
         | _ -> doit ()
       end
     | _ -> doit ()
-  and compute_case ~chs ~wait ~todo (ch : compute_hyp) =
+  and compute_case ~branch ~chs ~wait ~todo (ch : compute_hyp) =
     consume_gas 1 ;
     let saved = Prover.copy_sequent () in
     match Prover.case_subgoals ch.clr with
     | exception _ ->
         Prover.set_sequent saved ;
-        compute_all ~chs ~wait:(get_wait ch.clr ch.form :: wait) ~todo
+        compute_all ~branch ~chs ~wait:(get_wait ch.clr ch.form :: wait) ~todo
     | cases ->
         let chs = List.filter (fun oldch -> oldch.clr <> ch.clr) chs in
         let saved = Prover.copy_sequent () in
-        List.iter begin fun case ->
+        List.iteri begin fun br case ->
           Prover.set_sequent saved ;
           Output.trace ~v begin fun (module Trace) ->
             Trace.format ~kind "Case %a" format_ch ch
           end ;
           List.iter Prover.add_if_new_var case.Tactics.new_vars ;
-          let hs = List.map (fun h -> Prover.unsafe_add_hyp (fresh_compute_hyp ()) h) case.new_hyps in
+          let hs = List.rev_map (fun h -> Prover.unsafe_add_hyp (fresh_compute_hyp ()) h) case.new_hyps in
           Term.set_bind_state case.bind_state ;
           Prover.update_self_bound_vars () ;
           Output.trace ~v begin fun (module Trace) ->
@@ -296,11 +321,11 @@ let compute ?name ?(gas = 1_000) hs wrt =
           let todo =
             List.rev_map (fun w -> w.chyp) newly_active
             @ new_chs @ todo in
-          compute_all ~chs ~wait ~todo
+          compute_all ~branch:(br :: branch) ~chs ~wait ~todo
         end cases
   in
   let todo = List.map (fun h -> { clr = h ; form = Prover.get_hyp_or_lemma (Prover.stmt_name h) }) hs in
-  match compute_all ~chs:[] ~wait:[] ~todo with
+  match compute_all ~branch:[] ~chs:[] ~wait:[] ~todo with
   | exception Out_of_gas ->
       failwithf "Compute ran out of gas (given %d) -- looping?" total_gas
   | _ ->

@@ -681,8 +681,8 @@ pure_top_command:
     { Types.Define(Types.Inductive, xs, ds) }
   | CODEFINE; xs=id_tys; BY; option(SEMICOLON); ds=defs; DOT
     { Types.Define(Types.CoInductive, xs, ds) }
-  | QUERY; f=metaterm; DOT
-    { Types.Query(f) }
+  | QUERY; db=option(NUM); f=metaterm; DOT
+    { Types.Query(db, f) }
   | IMPORT; im=located(QSTRING);
     ws=loption(WITH; ws=import_withs {ws}); DOT
     { Types.Import(im.el, im.pos, ws) }

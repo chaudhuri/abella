@@ -430,7 +430,7 @@ and import_load modname withs =
 
 (* Proof processing *)
 
-let query q =
+let query ?(depth = !Prover.search_depth) q =
   let fv = ids_to_fresh_tyctx (umetaterm_extract_if is_capital_name q) in
   let ctx = fresh_alist ~tag:Logic ~used:[] fv in
   match type_umetaterm ~sr:!sr ~sign:!sign ~ctx (UBinding(Metaterm.Exists, fv, q)) with
@@ -439,7 +439,7 @@ let query q =
       let ctx = Tactics.fresh_nameless_alist ~sr:!sr ~support ~ts:0 ~tag:Logic fv in
       let q = replace_metaterm_vars ctx q in
       let _ = Tactics.search q
-          ~depth:!Prover.search_depth
+          ~depth
           ~hyps:[]
           ~clauses:!Prover.clauses
           ~def_unfold:Prover.def_unfold
@@ -771,7 +771,7 @@ and process_top1 () =
       end else
         failwith "Specification can only be read \
                  \ at the begining of a development."
-  | Query(q) -> query q
+  | Query(depth, q) -> query ?depth q
   | Kind(ids,knd) ->
       check_noredef ids;
       Prover.add_global_types ids knd;
