@@ -70,7 +70,7 @@ type common_command =
   | Quit
 
 type top_command =
-  | Theorem       of id * string list * umetaterm
+  | Theorem       of id * id list * umetaterm
   | Define        of flavor * tyctx * udef_clause list
   | Import        of string * pos * (string * string) list
   | Specification of string * pos
@@ -92,8 +92,8 @@ type guard = {
 }
 
 type compiled =
-  | CTheorem      of id * string list * metaterm * fin
-  | CDefine       of flavor * string list * tyctx * def_clause list
+  | CTheorem      of id * id list * metaterm * fin
+  | CDefine       of flavor * id list * tyctx * def_clause list
   | CImport       of string * (string * string) list
   | CKind         of id list * knd
   | CType         of id list * ty
@@ -160,8 +160,8 @@ type command =
   | Apply        of depth_bound option * clearable
                     * clearable list * (id * uterm) list * hhint
   | Backchain    of depth_bound option * clearable * (id * uterm) list
-  | Compute      of clearable list * int option * hhint
-  | ComputeAll   of int option * hhint * [`CLEAR | `KEEP]
+  | Compute      of clearable list * int option * hhint * id list
+  | ComputeAll   of int option * hhint * [`CLEAR | `KEEP] * id list
   | CutFrom      of clearable * clearable * uterm * hhint
   | Cut          of clearable * clearable * hhint
   | SearchCut    of clearable * hhint
@@ -375,16 +375,22 @@ let command_to_string c =
           (dbound_to_string dbound)
           (clearable_to_string h)
           (withs_to_string ws)
-    | Compute (hs, dp, hn) ->
-        sprintf "%scompute%s %s"
+    | Compute (hs, dp, hn, wrt) ->
+        sprintf "%scompute%s %s%s"
           (hn_to_string hn)
           (match dp with Some dp -> " " ^ string_of_int dp | None -> "")
           (clearables_to_string hs)
-    | ComputeAll (dp, hn, clr) ->
-        sprintf "%scompute%s (%sall)"
+          (match wrt with
+           | [] -> ""
+           | _ -> " with " ^ String.concat ", " wrt)
+    | ComputeAll (dp, hn, clr, wrt) ->
+        sprintf "%scompute%s (%sall)%s"
           (hn_to_string hn)
           (match dp with Some dp -> " " ^ string_of_int dp | None -> "")
           (if clr = `CLEAR then "*" else "")
+          (match wrt with
+           | [] -> ""
+           | _ -> " with {" ^ String.concat ", " wrt ^ "}")
     | Cut(h1, h2, hn) ->
         sprintf "%scut %s with %s"
           (hn_to_string hn)

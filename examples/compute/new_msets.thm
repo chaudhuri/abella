@@ -38,15 +38,15 @@ Theorem perm_sing1[A] : forall (L : list A) (E : A), perm L (E :: nil) -> L = E 
 intros. case H1. case H3.
   apply perm_nil2 to *H4. case H2. search.
   case H5.
+Theorem perm_sing2[A] : forall (L : list A) (E : A), perm (E :: nil) L -> L = E :: nil.
+intros. case H1. case H2.
+  apply perm_nil1 to *H4. case H3. search.
+  case H5.
 
 Theorem test : p (mset (b :: a :: nil)) -> false.
 intros.
   case H1. % compute on p/mset isn't yet implemented
-  compute *H2 *H3.
-    apply perm_sing1 to H4. compute H3.
-    apply perm_nil2 to H4. compute H5 H3.
-    apply perm_sing1 to H4. compute H3.
-    apply perm_nil2 to H4. compute H5 H3.
+  compute *H2 *H3 with perm_nil1, perm_nil2, perm_sing1, perm_sing2.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Fully computational version
