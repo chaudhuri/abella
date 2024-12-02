@@ -166,8 +166,12 @@ exception Suspended
 let compute ?name ?(gas = 1_000) hs wrt =
   let total_gas = gas in
   let gas = ref total_gas in
-  let consume_gas () =
-    if !gas < 0 then raise Out_of_gas ; decr gas
+  let consume_gas n =
+    if !gas < n then raise Out_of_gas ;
+    gas := !gas - n ;
+    Output.trace ~v begin fun (module Trace) ->
+      Trace.printf ~kind "Consumed %d gas (%d left)" n !gas
+    end ;
   in
   let fresh_compute_hyp =
     let count = ref @@ -1 in
@@ -220,7 +224,7 @@ let compute ?name ?(gas = 1_000) hs wrt =
               let lem = Prover.get_lemma lem in
               match Tactics.apply ~sr:!Typing.sr lem [Some ch.form] with
               | f, [] ->
-                  consume_gas () ;
+                  consume_gas 1 ;
                   Output.trace ~v begin fun (module Trace) ->
                     Trace.format ~kind "Changed %a to %a"
                       format_metaterm ch.form
@@ -242,7 +246,7 @@ let compute ?name ?(gas = 1_000) hs wrt =
       end
     | _ -> doit ()
   and compute_case ~chs ~wait ~todo (ch : compute_hyp) =
-    consume_gas () ;
+    consume_gas 1 ;
     let saved = Prover.copy_sequent () in
     match Prover.case_subgoals ch.clr with
     | exception _ ->
@@ -282,7 +286,7 @@ let compute ?name ?(gas = 1_000) hs wrt =
       failwithf "Compute ran out of gas (given %d) -- looping?" total_gas
   | _ ->
       Output.trace ~v begin fun (module Trace) ->
-        Trace.printf ~kind "Consumed %d gas" (total_gas - !gas)
+        Trace.printf ~kind "Computation used %d gas" (total_gas - !gas)
       end ;
       Prover.add_subgoals @@ List.rev !subgoals ;
       Prover.next_subgoal ()
