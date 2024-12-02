@@ -4,6 +4,9 @@ Define adj : list A -> A -> list A -> prop by
 
 Suspend adj J _ L.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Partially computational version
+
 Define perm : list A -> list A -> prop by
 ; perm nil nil
 ; perm J1 K1 :=
@@ -38,9 +41,32 @@ intros. case H1. case H3.
 
 Theorem test : p (mset (b :: a :: nil)) -> false.
 intros.
-  case H1.
-  compute *H2.
+  case H1. % compute on p/mset isn't yet implemented
+  compute *H2 *H3.
     apply perm_sing1 to H4. compute H3.
-    apply perm_nil2 to H4. case H5. compute H3.
+    apply perm_nil2 to H4. compute H5 H3.
     apply perm_sing1 to H4. compute H3.
-    apply perm_nil2 to H4. case H5. compute H3.
+    apply perm_nil2 to H4. compute H5 H3.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Fully computational version
+
+Define perm2 : list A -> list A -> prop by
+; perm2 nil nil
+; perm2 (X :: J) (Y :: K) :=
+    (X = Y /\ perm2 J K) \/
+    (exists J1 K1, adj J1 Y J /\ adj K1 X K /\ perm2 J1 K1).
+
+Suspend perm2 J K.
+
+Seal Type mset2 with perm2.
+
+Define p2 : mset2 A -> prop by
+  p2 (mset2 (A :: L)) := member A L.
+
+Suspend p2 (mset2 L).
+
+Theorem test2 : p2 (mset2 (b :: a :: nil)) -> false.
+intros.
+  case H1. % compute on p2/mset2 not yet implemented
+  compute H2 H3.
