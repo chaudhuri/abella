@@ -628,26 +628,26 @@ and process_proof1 proc =
   in
   let perform () =
     begin match input.el with
-    | Induction(args, hn)           -> Prover.induction ?name:hn args
-    | CoInduction hn                -> Prover.coinduction ?name:hn ()
-    | Apply(depth, h, args, ws, hn) -> Prover.apply ?depth ?name:hn h args ws ~term_witness
-    | Backchain(depth, h, ws)       -> Prover.backchain ?depth h ws ~term_witness
-    | Compute (hs, gas, hn)         -> Compute.compute ?name:hn ?gas hs
-    | ComputeAll (gas, hn, clr)     -> Compute.compute_all ?name:hn ?gas clr
-    | Cut(h, arg, hn)               -> Prover.cut ?name:hn h arg
-    | CutFrom(h, arg, t, hn)        -> Prover.cut_from ?name:hn h arg t
-    | SearchCut(h, hn)              -> Prover.search_cut ?name:hn h
-    | Inst(h, ws, hn)               -> Prover.inst ?name:hn h ws
-    | Case(str, hn)                 -> Prover.case ?name:hn str
-    | Assert(t, dp, hn)             ->
+    | Induction(args, hn)            -> Prover.induction ?name:hn args
+    | CoInduction hn                 -> Prover.coinduction ?name:hn ()
+    | Apply(depth, h, args, ws, hn)  -> Prover.apply ?depth ?name:hn h args ws ~term_witness
+    | Backchain(depth, h, ws)        -> Prover.backchain ?depth h ws ~term_witness
+    | Compute (hs, gas, hn, wrt)     -> Compute.compute ?name:hn ?gas hs wrt
+    | ComputeAll (gas, hn, clr, wrt) -> Compute.compute_all ?name:hn ?gas clr wrt
+    | Cut(h, arg, hn)                -> Prover.cut ?name:hn h arg
+    | CutFrom(h, arg, t, hn)         -> Prover.cut_from ?name:hn h arg t
+    | SearchCut(h, hn)               -> Prover.search_cut ?name:hn h
+    | Inst(h, ws, hn)                -> Prover.inst ?name:hn h ws
+    | Case(str, hn)                  -> Prover.case ?name:hn str
+    | Assert(t, dp, hn)              ->
         untyped_ensure_no_restrictions t ;
         Prover.assert_hyp ?name:hn ?depth:dp t
-    | Monotone(h, t, hn)            -> Prover.monotone ?name:hn h t
-    | Exists(_, ts)                 -> List.iter Prover.exists ts
-    | Clear(cm, hs)                 -> Prover.clear cm hs
-    | Abbrev(hs, s)                 -> Prover.abbrev (Iset.of_list hs) s
-    | Unabbrev(hs)                  -> Prover.unabbrev (Iset.of_list hs)
-    | Rename(hfr, hto)              -> Prover.rename hfr hto
+    | Monotone(h, t, hn)             -> Prover.monotone ?name:hn h t
+    | Exists(_, ts)                  -> List.iter Prover.exists ts
+    | Clear(cm, hs)                  -> Prover.clear cm hs
+    | Abbrev(hs, s)                  -> Prover.abbrev (Iset.of_list hs) s
+    | Unabbrev(hs)                   -> Prover.unabbrev (Iset.of_list hs)
+    | Rename(hfr, hto)               -> Prover.rename hfr hto
     | Search(bounds) -> begin
         let depth = match bounds with
           | `depth n -> Some n

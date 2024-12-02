@@ -170,14 +170,21 @@ let is_unchanged wait =
 exception Out_of_gas
 exception Suspended
 
-let compute ?name ?(gas = 1_000) hs =
+let compute ?name ?(gas = 1_000) hs wrt =
   let v, kind = 2, "compute" in
   let total_gas = gas in
   let gas = ref total_gas in
+  let consume_gas () =
+    if !gas < 0 then raise Out_of_gas ; decr gas
+  in
   let fresh_compute_hyp =
     let count = ref @@ -1 in
     fun () -> incr count ; "<#" ^ string_of_int !count ^ ">"
   in
+  Output.trace ~v begin fun (module Trace) ->
+    Trace.printf ~kind
+      "compute wrt %s" (String.concat ", " wrt)
+  end ;
   let subgoals = ref [] in
   let rec compute_all ~chs ~wait ~todo =
     Output.trace ~v begin fun (module Trace) ->
@@ -215,8 +222,32 @@ let compute ?name ?(gas = 1_000) hs =
         suspend ()
     | Obj ({ mode = Async ; right = atm ; _ }, _)
     | Pred (atm, _)
-      when is_guarded atm ->
-        suspend ()
+      when is_guarded atm -> begin
+        let saved = Prover.copy_sequent () in
+        let rec try_wrts wrt =
+          match wrt with
+          | [] ->
+              Prover.set_sequent saved ;
+              suspend ()
+          | lem :: wrt -> begin
+              let lem = Prover.get_lemma lem in
+              match Tactics.apply ~sr:!Typing.sr lem [Some ch.form] with
+              | f, [] ->
+                  consume_gas () ;
+                  Output.trace ~v begin fun (module Trace) ->
+                    Trace.format ~kind "Changed %a to %a"
+                      format_metaterm ch.form
+                      format_metaterm f
+                  end ;
+                  let todo = {ch with form = f} :: todo in
+                  compute_all ~chs ~wait ~todo
+              | _ | exception _ ->
+                  Prover.set_sequent saved ;
+                  try_wrts wrt
+            end
+        in
+        try_wrts wrt
+      end
     | Obj ({ mode = Sync f ; _ }, _) -> begin
         match Term.(observe @@ hnorm f) with
         | Var _ -> suspend ()
@@ -224,7 +255,7 @@ let compute ?name ?(gas = 1_000) hs =
       end
     | _ -> doit ()
   and compute_case ~chs ~wait ~todo (ch : compute_hyp) =
-    if !gas <= 0 then raise Out_of_gas ;
+    consume_gas () ;
     let saved = Prover.copy_sequent () in
     match Prover.case_subgoals ch.clr with
     | exception _ ->
@@ -269,6 +300,9 @@ let compute ?name ?(gas = 1_000) hs =
   | exception Out_of_gas ->
       failwithf "Compute ran out of gas (given %d) -- looping?" total_gas
   | _ ->
+      Output.trace ~v begin fun (module Trace) ->
+        Trace.printf ~kind "Consumed %d gas" (total_gas - !gas)
+      end ;
       Prover.add_subgoals @@ List.rev !subgoals ;
       Prover.next_subgoal ()
 

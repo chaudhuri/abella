@@ -469,6 +469,10 @@ apply_arg:
 maybe_depth:
   | n=option(NUM) { n }
 
+compute_wrt:
+  | WITH; wrt=separated_nonempty_list(COMMA, id) { wrt }
+  | { [] }
+
 pure_command:
   | ht=hhint; IND; ON; ns=num_list; DOT
     { Types.Induction(ns, ht) }
@@ -478,10 +482,14 @@ pure_command:
     args=loption(TO; args=apply_args {args});
     ws=loption(WITH; ws=withs {ws}); DOT
     { Types.Apply(dep, clr, args, ws, ht) }
-  | ht=hhint; COMPUTE; dp=option(NUM); hs=nonempty_list(clearable); DOT
-    { Types.Compute (hs, dp, ht) }
-  | ht=hhint; COMPUTE; dp=option(NUM); LPAREN; clr=boption(STAR); ALL; RPAREN; DOT
-    { Types.ComputeAll (dp, ht, if clr then `CLEAR else `KEEP) }
+  | ht=hhint; COMPUTE; dp=option(NUM); hs=nonempty_list(clearable);
+    wrt=compute_wrt; DOT
+    { Types.Compute (hs, dp, ht, wrt) }
+  | ht=hhint; COMPUTE; dp=option(NUM);
+    LPAREN; clr=boption(STAR); ALL; RPAREN;
+    wrt=compute_wrt; DOT
+    { (* [FIXME] improve the clr thing *)
+      Types.ComputeAll (dp, ht, (if clr then `CLEAR else `KEEP), wrt) }
   | BACKCHAIN; dep=maybe_depth; clr=clearable;
     ws=loption(WITH; ws=withs {ws}); DOT
     { Types.Backchain(dep, clr, ws) }
