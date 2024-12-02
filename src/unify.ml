@@ -69,7 +69,7 @@ let fail f = raise (UnifyFailure f)
 type unify_error =
   | NotLLambda
   | InstGenericTyvar of string * ty
-  | InvalidSealing of tycons
+  | InvalidSealing
 
 let explain_error = function
   | NotLLambda -> "Unification incompleteness (non-pattern unification problem)"
@@ -77,8 +77,8 @@ let explain_error = function
      Printf.sprintf
       "Unification incompleteness (generic type variable %s cannot be instantiated, instead it is being instantiated to %s)"
       v (ty_to_string ty)
-  | InvalidSealing tyc ->
-      Printf.sprintf "Badly sealed version of %s" tyc
+  | InvalidSealing ->
+      Printf.sprintf "Sealed types issue"
 
 exception UnifyError of unify_error
 
@@ -89,7 +89,9 @@ sig
   val instantiatable : tag
   val constant_like  : tag
   val handle_nonpattern : term -> term -> unit
-  val handle_seal : term -> unit [@@ocaml.warning "-32"]
+
+  val support_sealed_terms : bool
+  val handle_seal : term -> unit
 end
 
 module Make (P:Param) =
@@ -775,7 +777,7 @@ and unify_lam_term tyctx tys1 t1 t2 =
 and unify tyctx t1 t2 =
   let v, kind = 2, "unify" in
   let ty1 = tc tyctx t1 in
-  match get_seal_opt ty1 with
+  match if support_sealed_terms then get_seal_opt ty1 else None with
   | Some (tyc_seal, ty_carrier, eqv) -> begin
       match observe (hnorm t1), observe (hnorm t2) with
         | App (h1, [t1]), App (h2, [t2]) -> begin
@@ -785,8 +787,10 @@ and unify tyctx t1 t2 =
                 k1.name = tyc_seal && k2.name = tyc_seal ->
                 let ty = tc tyctx t1 in
                 let seal_term = app (const eqv (tyarrow [ty ; ty] propty)) [t1 ; t2] in
-                Output.msg_printf "Generated equivalence for %s: %s"
-                  tyc_seal (term_to_string ~cx:tyctx seal_term) ;
+                Output.trace ~v begin fun (module Trace) ->
+                  Trace.printf ~kind "Generated equivalence for %s: %s"
+                    tyc_seal (term_to_string ~cx:tyctx seal_term)
+                end ;
                 handle_seal seal_term
             | _ -> fail Generic
           end
@@ -938,13 +942,14 @@ let flexible_heads ~used ~sr (tys1, h1, a1) (tys2, h2, a2) =
 end
 
 let handle_nonpattern_std _t1 _t2 = raise (UnifyError NotLLambda)
-let handle_seal_std _t = bugf "handle_seal_std: unimplemented"
+let handle_seal_std _t = raise (UnifyError InvalidSealing)
 
 module Right =
   Make (struct
           let instantiatable = Logic
           let constant_like = Eigen
           let handle_nonpattern = handle_nonpattern_std
+          let support_sealed_terms = false
           let handle_seal = handle_seal_std
         end)
 
@@ -953,6 +958,7 @@ module Left =
           let instantiatable = Eigen
           let constant_like = Logic
           let handle_nonpattern = handle_nonpattern_std
+          let support_sealed_terms = false
           let handle_seal = handle_seal_std
         end)
 
@@ -997,6 +1003,7 @@ let try_left_unify_cpairs ~used t1 t2 =
       let instantiatable = Eigen
       let constant_like = Logic
       let handle_nonpattern = cpairs_handler
+      let support_sealed_terms = true
       let handle_seal = seal_handler
     end)
   in
@@ -1013,8 +1020,8 @@ let try_left_unify_cpairs ~used t1 t2 =
       | InstGenericTyvar (v,ty) ->
           let msg = msg ^ (Unifyty.inst_gen_tyvar_msg v ty) in
           failwith msg
-      | InvalidSealing tyc ->
-          failwithf "invalid sealing for %s" tyc
+      | InvalidSealing ->
+          bugf "Sealed types error"
 
 let try_right_unify_cpairs t1 t2 =
   try_with_state ~fail:None begin fun () ->
@@ -1027,6 +1034,7 @@ let try_right_unify_cpairs t1 t2 =
         let instantiatable = Logic
         let constant_like = Eigen
         let handle_nonpattern = cpairs_handler
+        let support_sealed_terms = true
         let handle_seal = seal_handler
       end)
     in
