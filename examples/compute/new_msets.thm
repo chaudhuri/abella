@@ -4,6 +4,15 @@ Define adj : list A -> A -> list A -> prop by
 
 Suspend adj J _ L.
 
+Theorem adj_swap[A] : forall (E F : A) (J K L : list A),
+  adj J E K -> adj K F L ->
+  exists U, adj J F U /\ adj U E L.
+induction on 2. intros. case H2.
+  search.
+  case H1.
+    search.
+    apply IH to H4 H3. search.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Partially computational version
 
@@ -16,6 +25,10 @@ Define perm : list A -> list A -> prop by
 Suspend perm J _.
 Suspend perm _ K.
 
+Theorem adj_det[A] : forall (X : A) (J1 J2 K1 K2 : list A),
+  perm J1 J2 -> adj J1 X K1 -> adj J2 X K2 -> perm K1 K2.
+skip.
+
 Seal Type mset with perm.
 
 Define p : mset A -> prop by
@@ -24,7 +37,7 @@ Define p : mset A -> prop by
 Suspend p (mset L).
 
 Kind i type.
-Type a,b i.
+Type a,b,c i.
 
 Theorem test_ag1 : mset (a :: nil) = mset (b :: nil) -> false.
 intros. compute H1.
@@ -54,6 +67,18 @@ Theorem perm_sing2[A] : forall (L : list A) (E : A), perm (E :: nil) L -> L = E 
 intros. case H1. case H2.
   apply perm_nil1 to *H4. case H3. search.
   case H5.
+Theorem perm_uncons1[A] : forall (J L : list A) (E : A), perm (E :: J) L ->
+  exists K, adj K E L /\ perm J K.
+induction on 1. intros. case H1. case H2.
+  search.
+  apply IH to *H4. apply adj_swap to *H6 *H3. apply adj_det to *H7 *H5 *H8.
+    search.
+Theorem perm_uncons2[A] : forall (J L : list A) (E : A), perm J (E :: L) ->
+  exists K, adj K E J /\ perm K L.
+induction on 1. intros. case H1. case H3.
+  search.
+  apply IH to *H4. apply adj_swap to *H6 *H2. apply adj_det to *H7 *H8 *H5.
+    search.
 
 Theorem test_modulo : p (mset (b :: a :: nil)) -> false.
 intros. compute *H1 with perm_nil1, perm_nil2, perm_sing1, perm_sing2.
@@ -63,9 +88,9 @@ intros. compute *H1 with perm_nil1, perm_nil2, perm_sing1, perm_sing2.
 
 Define perm2 : list A -> list A -> prop by
 ; perm2 nil nil
-; perm2 (X :: J) (Y :: K) :=
-    (X = Y /\ perm2 J K) \/
-    (exists J1 K1, adj J1 Y J /\ adj K1 X K /\ perm2 J1 K1).
+; perm2 (X :: nil) (X :: nil)
+; perm2 (X :: X1 :: J) (Y :: Y1 :: K) :=
+    (exists J1 K1, adj J1 Y (X1 :: J) /\ adj K1 X (Y1 :: K) /\ perm2 J1 K1).
 
 Suspend perm2 J K.
 
@@ -78,6 +103,10 @@ Suspend p2 (mset2 L).
 
 Theorem test2 : p2 (mset2 (b :: a :: nil)) -> false.
 intros. compute H1.
+
+Theorem egads : perm2 (a :: b :: c :: nil) (b :: a :: c :: nil).
+search.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% New MLL
@@ -93,36 +122,61 @@ Define append : list A -> list A -> list A -> prop by
 
 Suspend append J _ K.
 
-Define mll : mset2 form -> prop by
-; mll (mset2 (atm A :: natm A :: nil))
-; mll (mset2 (one :: nil))
-; mll (mset2 (bot :: L)) := mll (mset2 L)
-; mll (mset2 (tens A B :: L)) :=
-    exists J K, append J K L /\
-    mll (mset2 (A :: J)) /\ mll (mset2 (B :: K))
-; mll (mset2 (par A B :: L)) :=
-    mll (mset2 (A :: B :: L)).
-
-Suspend mll (mset2 L).
-
-
-Theorem fail_1 : forall A B, mll (mset2 (tens (atm A) (atm B) :: nil)) -> false.
-intros. compute H1.
-
 Type pp, qq atm.
 
-Query 4 mll (mset2 (A :: B :: nil)).
+Define mll : mset form -> prop by
+; mll (mset (atm A :: natm A :: nil))
+% ; mll (mset (one :: nil))
+% ; mll (mset (bot :: L)) := mll (mset L)
+; mll (mset (tens A B :: L)) :=
+    exists J K, append J K L /\
+    mll (mset (A :: J)) /\ mll (mset (B :: K))
+; mll (mset (par A B :: L)) :=
+    mll (mset (A :: B :: L)).
 
-%% Query 100 mll (mset2 (tens (atm pp) (atm qq) ::
+Suspend mll (mset L).
+
+Theorem mll_fail_1 : forall A B, mll (mset (tens (atm A) (atm B) :: nil)) -> false.
+intros. compute H1 with perm_nil1, perm_nil2, perm_uncons1, perm_uncons2.
+
+Theorem mll_fail_2 : mll (mset (tens (atm pp) (natm qq) ::
+                                tens (natm pp) (atm qq) :: nil)) -> false.
+intros.
+ compute 5000 H1 with perm_nil1, perm_nil2, perm_uncons1, perm_uncons2.
+
+Define mll2 : mset2 form -> prop by
+; mll2 (mset2 (atm A :: natm A :: nil))
+% ; mll2 (mset2 (one :: nil))
+% ; mll2 (mset2 (bot :: L)) := mll2 (mset2 L)
+; mll2 (mset2 (tens A B :: L)) :=
+    exists J K, append J K L /\
+    mll2 (mset2 (A :: J)) /\ mll2 (mset2 (B :: K))
+; mll2 (mset2 (par A B :: L)) :=
+    mll2 (mset2 (A :: B :: L)).
+
+Suspend mll2 (mset2 L).
+
+Theorem mll2_fail_1 : forall A B, mll2 (mset2 (tens (atm A) (atm B) :: nil)) -> false.
+intros. compute H1.
+
+Query 4 mll2 (mset2 (A :: B :: nil)).
+
+Theorem mll2_fail_2 : mll2 (mset2 (tens (atm pp) (natm qq) ::
+                             tens (natm pp) (atm qq) :: nil)) -> false.
+intros. compute H1.
+
+%%% Not currently working:
+
+%% Query 100 mll2 (mset2 (tens (atm pp) (atm qq) ::
 %%                       tens (atm pp) (natm qq) ::
 %%                       tens (natm pp) (atm qq) ::
 %%                       tens (natm pp) (natm qq) :: nil)).
 
-%%% this is not currently working
-Theorem fail_2 : mll (mset2 (tens (atm pp) (atm qq) ::
+Theorem mll2_fail_3 : mll2 (mset2 (tens (atm pp) (atm qq) ::
                              tens (atm pp) (natm qq) ::
                              tens (natm pp) (atm qq) ::
                              tens (natm pp) (natm qq) :: nil)) -> false.
 intros.
-  % compute H1.
+  compute 50000 H1.
+  % compute 500000 H1.
   abort.
