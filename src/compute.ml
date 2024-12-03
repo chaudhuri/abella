@@ -89,10 +89,10 @@ let evaluate_guard guard t =
   let state = Term.get_scoped_bind_state () in
   let result = try
       Unify.left_unify t guard.pattern ;
-      Output.trace ~v begin fun (module Trace) ->
-        Trace.format ~kind "Unification resulted in %a"
-          format_term guard.pattern
-      end ;
+      (* Output.trace ~v begin fun (module Trace) -> *)
+      (*   Trace.format ~kind "Unification resulted in %a" *)
+      (*     format_term guard.pattern *)
+      (* end ; *)
       (* all test vars neeed to be eigen to stop *)
       List.for_all Term.has_eigen_head guard.condition
     with _ -> false
@@ -227,22 +227,17 @@ let compute ?name ?(gas = 1_000) hs wrt =
             (branch_to_string branch)
         end
     | h :: todo ->
-        compute_one ~branch ~chs ~wait ~todo h ;
-        Output.trace ~v begin fun (module Trace) ->
-          Trace.printf ~kind
-            "BRANCH_END [%s]"
-            (branch_to_string branch)
-        end
+        compute_one ~branch ~chs ~wait ~todo h
   and compute_one ~branch ~chs ~wait ~todo (ch : compute_hyp) =
-    Output.trace ~v begin fun (module Trace) ->
-      Trace.printf ~kind
-        "BRANCH_START [%s] chs:[%s] wait:[%s] todo:[%s] %s"
-        (branch_to_string branch)
-        (List.map ch_to_string chs |> String.concat ",")
-        (List.map cw_to_string wait |> String.concat ",")
-        (List.map ch_to_string todo |> String.concat ",")
-        (ch_to_string ch)
-    end ;
+    (* Output.trace ~v begin fun (module Trace) -> *)
+    (*   Trace.printf ~kind *)
+    (*     "BRANCH_START [%s] chs:[%s] wait:[%s] todo:[%s] %s" *)
+    (*     (branch_to_string branch) *)
+    (*     (List.map ch_to_string chs |> String.concat ",") *)
+    (*     (List.map cw_to_string wait |> String.concat ",") *)
+    (*     (List.map ch_to_string todo |> String.concat ",") *)
+    (*     (ch_to_string ch) *)
+    (* end ; *)
     let suspend () = compute_all ~branch ~chs ~wait:(get_wait ch.clr ch.form :: wait) ~todo in
     let doit () = compute_case ~branch ~chs ~wait ~todo ch in
     match ch.form with
@@ -254,24 +249,27 @@ let compute ?name ?(gas = 1_000) hs wrt =
       when is_guarded atm -> begin
         let saved = Prover.copy_sequent () in
         let rec try_wrts wrt =
+          Prover.set_sequent saved ;
           match wrt with
           | [] ->
-              Prover.set_sequent saved ;
               suspend ()
           | lem :: wrt -> begin
-              let lem = Prover.get_lemma lem in
-              match Tactics.apply ~sr:!Typing.sr lem [Some ch.form] with
+              let lem_term = Prover.get_lemma lem in
+              match Tactics.apply ~sr:!Typing.sr lem_term [Some ch.form] with
               | f, [] ->
                   consume_gas 1 ;
+                  Prover.(replace_hyp (stmt_name ch.clr) f) ;
                   Output.trace ~v begin fun (module Trace) ->
-                    Trace.format ~kind "Changed %a to %a"
+                    let hn = Prover.stmt_name ch.clr in
+                    Trace.format ~kind "@[<v0>Did: %s : apply %s to *%s.@,  old: %a@,  new: %a@]"
+                      hn lem hn
                       format_metaterm ch.form
-                      format_metaterm f
+                      format_metaterm f ;
+                    (* Trace.format ~kind "Resulting sequent: @[<v0>%t@]" Prover.format_sequent *)
                   end ;
                   let todo = {ch with form = f} :: todo in
                   compute_all ~branch ~chs ~wait ~todo
               | _ | exception _ ->
-                  Prover.set_sequent saved ;
                   try_wrts wrt
             end
         in
@@ -286,6 +284,9 @@ let compute ?name ?(gas = 1_000) hs wrt =
   and compute_case ~branch ~chs ~wait ~todo (ch : compute_hyp) =
     consume_gas 1 ;
     let saved = Prover.copy_sequent () in
+    Output.trace ~v begin fun (module Trace) ->
+      Trace.format ~kind "compute_case: %a" format_ch ch ;
+    end ;
     match Prover.case_subgoals ch.clr with
     | exception _ ->
         Prover.set_sequent saved ;
@@ -293,21 +294,35 @@ let compute ?name ?(gas = 1_000) hs wrt =
     | cases ->
         let chs = List.filter (fun oldch -> oldch.clr <> ch.clr) chs in
         let saved = Prover.copy_sequent () in
-        List.iteri begin fun br case ->
+        Output.trace ~v begin fun (module Trace) ->
+          Trace.printf ~kind "compute_case: there were %d cases" (List.length cases) ;
+        end ;
+        List.iteri begin fun br (case : Tactics.case) ->
+          (* Output.trace ~v begin fun (module Trace) -> *)
+          (*   List.iter begin fun (v, t) -> *)
+          (*     Trace.printf ~kind "New var: %s : %s" v (term_to_string t) *)
+          (*   end case.new_vars ; *)
+          (*   List.iter begin fun t -> *)
+          (*     Trace.format ~kind "New hyp: %a" format_metaterm t *)
+          (*   end case.new_hyps ; *)
+          (* end ; *)
           Prover.set_sequent saved ;
-          Output.trace ~v begin fun (module Trace) ->
-            Trace.format ~kind "Case %a" format_ch ch
-          end ;
           List.iter Prover.add_if_new_var case.Tactics.new_vars ;
+          (* Output.trace ~v begin fun (module Trace) -> *)
+          (*   List.iter begin fun h -> *)
+          (*     Trace.format ~kind "New hyp: %a" format_metaterm h *)
+          (*   end case.new_hyps ; *)
+          (* end ; *)
           let hs = List.rev_map (fun h -> Prover.unsafe_add_hyp (fresh_compute_hyp ()) h) case.new_hyps in
           Term.set_bind_state case.bind_state ;
           Prover.update_self_bound_vars () ;
           Output.trace ~v begin fun (module Trace) ->
+            Trace.format ~kind "Case %a" format_ch ch ;
             List.iter begin fun h ->
               Trace.format ~kind "Adding: %s : %a" h.Prover.id format_metaterm h.term
-            end hs
+            end hs ;
+            (* Trace.format ~kind "Result: @[<v0>%t@]" Prover.format_sequent *)
           end ;
-          decr gas ;
           let (wait, newly_active) = List.partition is_unchanged wait in
           Output.trace ~v begin fun (module Trace) ->
             List.iter begin fun w ->

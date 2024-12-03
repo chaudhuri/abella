@@ -931,8 +931,22 @@ let case_subgoals str =
     ~mutual ~defs ~global_support term
 
 let case ?name h =
+  let[@ocaml.warning "-26"] v, kind = 2, "Prover.case" in
   let cases = case_subgoals h in
   (* Output.msg_printf "case: there were %d new subgoals" (List.length cases) ; *)
+  (* Output.trace ~v begin fun (module Trace) -> *)
+  (*   Trace.format ~kind "trying: %s" (clearable_to_string h) ; *)
+  (*   Trace.format ~kind "%d cases found" (List.length cases) ; *)
+  (*   List.iteri begin fun i case -> *)
+  (*     Trace.format ~kind "CASE #%d" i ; *)
+  (*     List.iter begin fun (v, t) -> *)
+  (*       Trace.format ~kind "New var: %s : %s" v (term_to_string t) *)
+  (*     end case.new_vars ; *)
+  (*     List.iter begin fun t -> *)
+  (*       Trace.format ~kind "New hyp: %a" format_metaterm t *)
+  (*     end case.new_hyps ; *)
+  (*   end cases *)
+  (* end ; *)
   add_subgoals (List.map (case_to_subgoal ?name) cases) ;
   next_subgoal ()
 

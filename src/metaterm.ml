@@ -822,43 +822,43 @@ open Unify
 
 let rec meta_right_unify t1 t2 =
   match t1, t2 with
-    | True, True -> ()
-    | False, False -> ()
-    | Eq(l1, r1), Eq(l2, r2) ->
-        right_unify l1 l2 ;
-        right_unify r1 r2
-    | Obj (o1, _), Obj (o2, _)
-        when Context.equiv o1.context o2.context ->
-        right_unify o1.right o2.right ;
-        begin match o1.mode, o2.mode with
-        | Async, Async -> ()
-        | Sync f1, Sync f2 ->
-            right_unify f1 f2
-        | _ -> raise (UnifyFailure Generic)
-        end
-    | Pred(t1, _), Pred(t2, _) ->
-        right_unify t1 t2
-    | And(l1, r1), And(l2, r2)
-    | Or(l1, r1), Or(l2, r2)
-    | Arrow(l1, r1), Arrow(l2, r2) ->
-        meta_right_unify l1 l2 ;
-        meta_right_unify r1 r2
-    | Binding(b1, tids1, t1), Binding(b2, tids2, t2)
-      when b1 = b2 &&
-           List.length tids1 = List.length tids2 &&
-           tids_unifyable tids1 tids2 ->
-        (* Replace bound variables with constants with "infinite"
-           timestamp. This prevents illegal variable capture.
-           We use max_int-1 since max_int is for nominal constants. *)
-        let new_bindings =
-          List.map (fun (_, ty) -> fresh ~tag:Constant (max_int-1) ty) tids1
-        in
-        let alist1 = List.combine (List.map fst tids1) new_bindings in
-        let alist2 = List.combine (List.map fst tids2) new_bindings in
-        meta_right_unify
-          (replace_metaterm_vars alist1 t1)
-          (replace_metaterm_vars alist2 t2)
-    | _, _ -> raise (UnifyFailure Generic)
+  | True, True -> ()
+  | False, False -> ()
+  | Eq(l1, r1), Eq(l2, r2) ->
+      right_unify l1 l2 ;
+      right_unify r1 r2
+  | Obj (o1, _), Obj (o2, _)
+    when Context.equiv o1.context o2.context ->
+      right_unify o1.right o2.right ;
+      begin match o1.mode, o2.mode with
+      | Async, Async -> ()
+      | Sync f1, Sync f2 ->
+          right_unify f1 f2
+      | _ -> raise (UnifyFailure Generic)
+      end
+  | Pred(t1, _), Pred(t2, _) ->
+      right_unify t1 t2
+  | And(l1, r1), And(l2, r2)
+  | Or(l1, r1), Or(l2, r2)
+  | Arrow(l1, r1), Arrow(l2, r2) ->
+      meta_right_unify l1 l2 ;
+      meta_right_unify r1 r2
+  | Binding(b1, tids1, t1), Binding(b2, tids2, t2)
+    when b1 = b2 &&
+         List.length tids1 = List.length tids2 &&
+         tids_unifyable tids1 tids2 ->
+      (* Replace bound variables with constants with "infinite"
+         timestamp. This prevents illegal variable capture.
+         We use max_int-1 since max_int is for nominal constants. *)
+      let new_bindings =
+        List.map (fun (_, ty) -> fresh ~tag:Constant (max_int-1) ty) tids1
+      in
+      let alist1 = List.combine (List.map fst tids1) new_bindings in
+      let alist2 = List.combine (List.map fst tids2) new_bindings in
+      meta_right_unify
+        (replace_metaterm_vars alist1 t1)
+        (replace_metaterm_vars alist2 t2)
+  | _, _ -> raise (UnifyFailure Generic)
 
 and tids_unifyable tids1 tids2 =
   let tys1 = List.map snd tids1 in

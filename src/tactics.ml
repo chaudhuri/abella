@@ -801,7 +801,11 @@ let unfold ~sr ~mdefs ~used clause_sel sol_sel goal0 =
         match list with
         | (state, Unify.{ cpairs = [] ; equivs }, body, _)::rest ->
             set_bind_state state;
-            let emit = List.map (fun t -> Pred (t, r)) equivs @ emit in
+            let body =
+              List.map (fun t -> Pred (t, r)) equivs @ [body]
+              |> conjoin
+            in
+            (* let emit = List.map (fun t -> Pred (t, r)) equivs @ emit in *)
             select_non_cpairs (Metaterm.map_terms Term.deep_copy body :: emit) rest
         | _::rest -> select_non_cpairs emit rest
         | [] -> emit
@@ -915,6 +919,8 @@ let satisfies r1 r2 =
 let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
     ?(witness=WMagic)
     ?(sc=fun w -> raise (SearchSuccess w)) goal =
+
+  let[@ocaml.warning "-26"] v, kind = 2, "Tactics.search" in
 
   let bad_witness () = failwithf "Bad search witness: %s" (witness_to_string witness) in
 
@@ -1061,8 +1067,10 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       end
 
   and metaterm_aux n hyps goal ts ~sc ~witness =
-    (* Printf.eprintf "metaterm_aux[%d]: %s\n%!  -- %s\n%!" n *)
-    (*   (witness_to_string witness) (metaterm_to_string goal) ; *)
+    (* Output.trace ~v begin fun (module Trace) -> *)
+    (*   Trace.printf ~kind "metaterm_aux[%d]: %s\n%!  -- %s\n%!" n *)
+    (*     (witness_to_string witness) (metaterm_to_string goal) ; *)
+    (* end ; *)
     let goal = normalize goal in
     let () =
       hyps |>
