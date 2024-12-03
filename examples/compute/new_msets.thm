@@ -27,7 +27,10 @@ Suspend perm _ K.
 
 Theorem adj_det[A] : forall (X : A) (J1 J2 K1 K2 : list A),
   perm J1 J2 -> adj J1 X K1 -> adj J2 X K2 -> perm K1 K2.
-skip.
+induction on 1. intros. case H1.
+  search.
+  apply adj_swap to *H4 *H2. apply adj_swap to *H5 *H3.
+    apply IH to *H6 H7 H9. search.
 
 Seal Type mset with perm.
 
@@ -59,21 +62,13 @@ Theorem perm_nil1[A] : forall (L : list A), perm nil L -> L = nil.
 intros. case H1.
   search.
   case H2.
-Theorem perm_sing1[A] : forall (L : list A) (E : A), perm L (E :: nil) -> L = E :: nil.
-intros. case H1. case H3.
-  apply perm_nil2 to *H4. case H2. search.
-  case H5.
-Theorem perm_sing2[A] : forall (L : list A) (E : A), perm (E :: nil) L -> L = E :: nil.
-intros. case H1. case H2.
-  apply perm_nil1 to *H4. case H3. search.
-  case H5.
-Theorem perm_uncons1[A] : forall (J L : list A) (E : A), perm (E :: J) L ->
+Theorem perm_cons1[A] : forall (J L : list A) (E : A), perm (E :: J) L ->
   exists K, adj K E L /\ perm J K.
 induction on 1. intros. case H1. case H2.
   search.
   apply IH to *H4. apply adj_swap to *H6 *H3. apply adj_det to *H7 *H5 *H8.
     search.
-Theorem perm_uncons2[A] : forall (J L : list A) (E : A), perm J (E :: L) ->
+Theorem perm_cons2[A] : forall (J L : list A) (E : A), perm J (E :: L) ->
   exists K, adj K E J /\ perm K L.
 induction on 1. intros. case H1. case H3.
   search.
@@ -81,18 +76,26 @@ induction on 1. intros. case H1. case H3.
     search.
 
 Theorem test_modulo : p (mset (b :: a :: nil)) -> false.
-intros. compute *H1 with perm_nil1, perm_nil2, perm_sing1, perm_sing2.
+intros. compute *H1 with perm_nil1, perm_nil2, perm_cons1, perm_cons2.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Fully computational version
+%% More computational, fewer rewrites, better async
 
 Define perm2 : list A -> list A -> prop by
 ; perm2 nil nil
-; perm2 (X :: nil) (X :: nil)
-; perm2 (X :: X1 :: J) (Y :: Y1 :: K) :=
-    (exists J1 K1, adj J1 Y (X1 :: J) /\ adj K1 X (Y1 :: K) /\ perm2 J1 K1).
+; perm2 (X :: J) K :=
+    exists K1, adj K1 X K /\ perm2 J K1.
 
-Suspend perm2 J K.
+Suspend perm2 J _.
+
+Theorem perm2_nil2[A] : forall (L : list A), perm2 L nil -> L = nil.
+intros. case H1. search. case H2.
+
+Theorem perm2_cons2[A] : forall (J L : list A) (E : A), perm2 J (E :: L) ->
+  exists K, adj K E J /\ perm2 K L.
+induction on 1. intros. case H1.
+  compute H2. search.
+  apply IH to *H3. search.
 
 Seal Type mset2 with perm2.
 
@@ -102,11 +105,7 @@ Define p2 : mset2 A -> prop by
 Suspend p2 (mset2 L).
 
 Theorem test2 : p2 (mset2 (b :: a :: nil)) -> false.
-intros. compute H1.
-
-Theorem egads : perm2 (a :: b :: c :: nil) (b :: a :: c :: nil).
-search.
-
+intros. compute H1 with perm2_nil2, perm2_cons2.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% New MLL
@@ -137,12 +136,13 @@ Define mll : mset form -> prop by
 Suspend mll (mset L).
 
 Theorem mll_fail_1 : forall A B, mll (mset (tens (atm A) (atm B) :: nil)) -> false.
-intros. compute H1 with perm_nil1, perm_nil2, perm_uncons1, perm_uncons2.
+intros. compute H1 with perm_nil1, perm_nil2, perm_cons1, perm_cons2.
 
 Theorem mll_fail_2 : mll (mset (tens (atm pp) (natm qq) ::
                                 tens (natm pp) (atm qq) :: nil)) -> false.
 intros.
- compute 5000 H1 with perm_nil1, perm_nil2, perm_uncons1, perm_uncons2.
+ % compute 5000 H1 with perm_nil1, perm_nil2, perm_cons1, perm_cons2.
+ abort.
 
 Define mll2 : mset2 form -> prop by
 ; mll2 (mset2 (atm A :: natm A :: nil))
@@ -157,82 +157,200 @@ Define mll2 : mset2 form -> prop by
 Suspend mll2 (mset2 L).
 
 Theorem mll2_fail_1 : forall A B, mll2 (mset2 (tens (atm A) (atm B) :: nil)) -> false.
-intros. compute H1.
+intros. compute H1 with perm2_nil2, perm2_cons2.
 
 Query 4 mll2 (mset2 (A :: B :: nil)).
 
 Theorem mll2_fail_2 : mll2 (mset2 (tens (atm pp) (natm qq) ::
-                             tens (natm pp) (atm qq) :: nil)) -> false.
-intros. compute H1.
-
-%%% Not currently working:
-
-%% Query 100 mll2 (mset2 (tens (atm pp) (atm qq) ::
-%%                        tens (atm pp) (natm qq) ::
-%%                        tens (natm pp) (atm qq) ::
-%%                        tens (natm pp) (natm qq) :: nil)).
+                                   tens (natm pp) (atm qq) :: nil)) -> false.
+intros. compute H1 with perm2_nil2, perm2_cons2.
 
 Theorem mll2_fail_3 : mll2 (mset2 (tens (atm pp) (atm qq) ::
                                    tens (atm pp) (natm qq) ::
                                    tens (natm pp) (atm qq) ::
                                    tens (natm pp) (natm qq) :: nil)) -> false.
 intros.
-  % DOESN'T WORK: compute 500000 H1.
   case H1.
-    compute H2.
-    compute *H2.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-      case H3.
-        compute H4.
-        compute *H6.
-          compute H4.
-          compute H5.
-          compute H5.
-    compute H2.
+    compute H2 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+      compute H3.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H4 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+        compute H5 with perm2_nil2, perm2_cons2.
+    compute H2 with perm2_nil2, perm2_cons2.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Some meta-theorems
+
+Theorem perm2_trans[A] : forall (J K L : list A), perm2 J K -> perm2 K L -> perm2 J L. skip.
+
+Theorem mll2_perm : forall J K, perm2 J K -> mll2 (mset2 J) -> mll2 (mset2 K).
+intros. case H2.
+  apply perm2_trans to H3 H1. search.
+  apply perm2_trans to H3 H1. search.
+  apply perm2_trans to H3 H1. search.
+
+Define dual : form -> form -> prop by
+; dual (atm A) (natm A)
+; dual (tens A B) (par Ad Bd) := dual A Ad /\ dual B Bd
+% ; dual one bot
+.
+
+Theorem dual_det : forall A B C, dual A B -> dual A C -> B = C.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2. apply IH to *H3 *H5. apply IH to *H4 *H6. search.
+
+Theorem mll2_gid : forall A B, dual A B -> mll2 (mset2 (A :: B :: nil)).
+induction on 1. intros. case H1.
+  search.
+  apply IH to *H2. apply IH to *H3.
+    assert mll2 (mset2 (tens A1 Bd :: Ad :: Bd :: nil)). unfold 2. search.
+    unfold 3. search.
+
+Theorem mll2_cut : forall A B J K L, dual A B ->
+  mll2 (mset2 (A :: J)) -> mll2 (mset2 (B :: K)) ->
+  append J K L -> mll2 (mset2 L).
+induction on 1. induction on 2. intros. case H1.
+  case H2.
+    compute *H5 *H4 with perm2_nil2, perm2_cons2. search.
+    compute *H5. compute H10 with perm2_cons2.
