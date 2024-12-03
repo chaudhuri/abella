@@ -168,15 +168,71 @@ intros. compute H1.
 %%% Not currently working:
 
 %% Query 100 mll2 (mset2 (tens (atm pp) (atm qq) ::
-%%                       tens (atm pp) (natm qq) ::
-%%                       tens (natm pp) (atm qq) ::
-%%                       tens (natm pp) (natm qq) :: nil)).
+%%                        tens (atm pp) (natm qq) ::
+%%                        tens (natm pp) (atm qq) ::
+%%                        tens (natm pp) (natm qq) :: nil)).
 
 Theorem mll2_fail_3 : mll2 (mset2 (tens (atm pp) (atm qq) ::
-                             tens (atm pp) (natm qq) ::
-                             tens (natm pp) (atm qq) ::
-                             tens (natm pp) (natm qq) :: nil)) -> false.
+                                   tens (atm pp) (natm qq) ::
+                                   tens (natm pp) (atm qq) ::
+                                   tens (natm pp) (natm qq) :: nil)) -> false.
 intros.
-  compute 50000 H1.
-  % compute 500000 H1.
-  abort.
+  % DOESN'T WORK: compute 500000 H1.
+  case H1.
+    compute H2.
+    compute *H2.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+      case H3.
+        compute H4.
+        compute *H6.
+          compute H4.
+          compute H5.
+          compute H5.
+    compute H2.
