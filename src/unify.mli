@@ -52,14 +52,18 @@ val try_with_state : fail:'a -> (unit -> 'a) -> 'a
 val try_right_unify : ?used:(id * term) list -> term -> term -> bool
 val try_left_unify : ?used:(id * term) list -> term -> term -> bool
 
-type unify_result = {
-  cpairs : (term * term) list ;
-  equivs : term list ;
-}
+module Res : sig
+  type t = {
+    cpairs : (term * term) list ;
+    equivs : term list ;
+  }
+  val empty : t
+  val join : t -> t -> t
+end
 
 val try_left_unify_cpairs :
-  used:(id * term) list -> term -> term -> unify_result option
-val try_right_unify_cpairs : term -> term -> unify_result option
+  used:(id * term) list -> term -> term -> Res.t option
+val try_right_unify_cpairs : term -> term -> Res.t option
 
 val left_flexible_heads :
   used:(id * term) list ->

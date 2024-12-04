@@ -987,10 +987,18 @@ let try_left_unify ?used:(used=[]) t1 t2 =
        left_unify ~used t1 t2 ;
        true)
 
-type unify_result = {
-  cpairs : (term * term) list ;
-  equivs : term list ;
-}
+module Res = struct
+  type t = {
+    cpairs : (term * term) list ;
+    equivs : term list ;
+  }
+
+  let empty = { cpairs = [] ; equivs = [] }
+
+  let join res1 res2 =
+    { cpairs = res1.cpairs @ res2.cpairs ;
+      equivs = res1.equivs @ res2.equivs }
+end
 
 let try_left_unify_cpairs ~used t1 t2 =
   let state = get_scoped_bind_state () in
@@ -1009,7 +1017,7 @@ let try_left_unify_cpairs ~used t1 t2 =
   in
   try
     LeftCpairs.pattern_unify ~used t1 t2 ;
-    Some { cpairs = !cpairs ; equivs = !eqvs }
+    Some Res.{ cpairs = !cpairs ; equivs = !eqvs }
   with
   | UnifyFailure _ -> set_scoped_bind_state state ; None
   | UnifyError err -> set_scoped_bind_state state ;
@@ -1039,7 +1047,7 @@ let try_right_unify_cpairs t1 t2 =
       end)
     in
     RightCpairs.pattern_unify ~used:[] t1 t2 ;
-    Some { cpairs = !cpairs ; equivs = !eqvs }
+    Some Res.{ cpairs = !cpairs ; equivs = !eqvs }
   end
 
 let left_flexible_heads = Left.flexible_heads

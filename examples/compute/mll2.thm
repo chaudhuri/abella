@@ -35,7 +35,22 @@ induction on 1. intros. case H1.
   compute H2. search.
   apply IH to *H3. search.
 
+% Theorem perm2_sym[A] : forall (J L : list A), perm2 J L -> perm2 L J.
+% induction on 1. intros. case H1.
+%   search.
+%   apply IH to *H3.
+
 Seal Type mset2 with perm2.
+
+Theorem mset2_perm_stable[A] : forall (J K : list A), perm2 J K -> mset2 J = mset2 K.
+intros. search.
+
+Type use mset2 A -> prop.
+
+Set witnesses on.
+
+Theorem mset2_use[A] : forall (J K : list A), perm2 K J -> use (mset2 J) -> use (mset2 K).
+intros. search.
 
 %%%%% Define p2 : mset2 A -> prop by
 %%%%%   p2 (mset2 (A :: L)) := member A L.
@@ -215,11 +230,8 @@ Set subgoals on.
 
 Theorem perm2_trans[A] : forall (J K L : list A), perm2 J K -> perm2 K L -> perm2 J L. skip.
 
-Theorem mll2_perm : forall J K, perm2 J K -> mll2 (mset2 J) -> mll2 (mset2 K).
-intros. case H2.
-  apply perm2_trans to *H3 *H1. search.
-  apply perm2_trans to *H3 *H1. search.
-  apply perm2_trans to *H3 *H1. search.
+Theorem mll2_perm : forall J K, perm2 K J -> mll2 (mset2 J) -> mll2 (mset2 K).
+intros. search.
 
 Theorem mll2_perm_alt : forall J K, perm2 J K -> mll2 (mset2 J) -> mll2 (mset2 K).
 intros. assert mll2 (mset2 J) = mll2 (mset2 K).

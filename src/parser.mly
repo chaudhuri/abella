@@ -731,7 +731,7 @@ search_witness:
   | TRUE
     { Types.WTrue }
   | APPLY; x=id
-    { Types.WHyp x }
+    { Types.WHyp (x, []) }
   | LEFT; w=search_witness
     { Types.WLeft w }
   | RIGHT; w=search_witness

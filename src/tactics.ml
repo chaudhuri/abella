@@ -234,9 +234,12 @@ let stateless_case_to_case case =
     new_vars = case.stateless_new_vars ;
     new_hyps = case.stateless_new_hyps }
 
-let unify_result_to_forms (res : Unify.unify_result) =
+module Res = struct
+  include Unify.Res
+  let to_forms (res : t) =
     List.map (fun (x, y) -> Eq (x, y)) res.cpairs @
     List.map (fun t -> Pred (t, Irrelevant)) res.equivs
+end
 
 (* This handles asynchrony on the left *)
 let rec recursive_metaterm_case ~used ~sr term =
@@ -249,7 +252,7 @@ let rec recursive_metaterm_case ~used ~sr term =
           Some {
             (* Names created perhaps by unification *)
             stateless_new_vars = term_vars_alist Eigen [a;b] ;
-            stateless_new_hyps = unify_result_to_forms cpairs
+            stateless_new_hyps = Res.to_forms cpairs
           }
       | None -> None
       end
@@ -416,7 +419,7 @@ let terms_tyvars l =
 let extract_terms_from_result res =
   match res with
   | None -> []
-  | Some Unify.{ cpairs ; equivs } ->
+  | Some Unify.Res.{ cpairs ; equivs } ->
       List.fold_left (fun l (a, b) -> a :: b :: l) equivs cpairs
 
 let try_left_unify_cpairs_fully_inferred ~used ~msg t1 t2 =
@@ -470,7 +473,7 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
               [{ bind_state = get_bind_state () ;
                  new_vars = case.stateless_new_vars @ used ;
                  new_hyps =
-                   unify_result_to_forms cpairs @
+                   Res.to_forms cpairs @
                    List.map wrapper case.stateless_new_hyps }]
           end
       | None -> []
@@ -544,7 +547,7 @@ let case ~used ~sr ~clauses ~mutual ~defs ~global_support term =
               let body = List.map rewrap_antecedent fresh_body in
               Some { bind_state = get_bind_state () ;
                      new_vars = new_vars ;
-                     new_hyps = unify_result_to_forms cpairs @ body }
+                     new_hyps = Res.to_forms cpairs @ body }
           | None -> None
         end
       end clause
@@ -799,7 +802,7 @@ let unfold ~sr ~mdefs ~used clause_sel sol_sel goal0 =
       (* Find suitable solutions without lingering conflict pairs *)
       let rec select_non_cpairs emit list =
         match list with
-        | (state, Unify.{ cpairs = [] ; equivs }, body, _)::rest ->
+        | (state, Unify.Res.{ cpairs = [] ; equivs }, body, _)::rest ->
             set_bind_state state;
             let body =
               List.map (fun t -> Pred (t, r)) equivs @ [body]
@@ -842,7 +845,7 @@ let unfold ~sr ~mdefs ~used clause_sel sol_sel goal0 =
                     failwithf "Head of program clause named %S not\
                               \ unifiable with goal"
                       nm
-                | Some Unify.{ cpairs ; equivs } ->
+                | Some Unify.Res.{ cpairs ; equivs } ->
                     if try_unify_cpairs cpairs then begin
                       let new_vars = List.map (fun (x, xv) -> (x, find_vars Logic [xv])) vars in
                       let quant_vars =
@@ -962,7 +965,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       let msg = msg_cannot_fully_infer_prog_clause head body in
       match try_right_unify_cpairs_fully_inferred ~msg head goal with
       | None -> ()
-      | Some Unify.{ cpairs ; equivs } ->
+      | Some Unify.Res.{ cpairs ; equivs } ->
           let sc ws =
             if try_unify_cpairs cpairs then
               sc (WUnfold(p, i, ws)) in
@@ -993,7 +996,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
         List.find_all (fun (_id, h) -> satisfies (term_to_restriction h) r) |>
         List.map (fun (id, h) -> (id, term_to_async_obj h)) |>
         List.iter ~guard:unwind_state begin fun (id, obj) ->
-          if derivable goal obj then sc (WHyp id)
+          if derivable goal obj then sc (WHyp (id, []))
         end in
       match r with
       | Smaller _ | Equal _ -> ()
@@ -1030,7 +1033,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       let filter_by_witness =
         match witness with
         | WMagic -> (fun _ -> true)
-        | WHyp wid -> (fun (id, _) -> id = wid)
+        | WHyp (wid, _) -> (fun (id, _) -> id = wid)
         | _ -> (fun _ -> false)
       in
       (* Check hyps for derivability *)
@@ -1041,7 +1044,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
         List.find_all (fun (_id, h) -> satisfies (term_to_restriction h) r) |>
         List.map (fun (id, h) -> (id, term_to_sync_obj h)) |>
         List.iter ~guard:unwind_state begin fun (id, obj) ->
-          if derivable goal obj then sc (WHyp id)
+          if derivable goal obj then sc (WHyp (id, []))
         end in
       match r with
       | Smaller _ | Equal _ -> ()
@@ -1067,17 +1070,17 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       end
 
   and metaterm_aux n hyps goal ts ~sc ~witness =
-    (* Output.trace ~v begin fun (module Trace) -> *)
-    (*   Trace.printf ~kind "metaterm_aux[%d]: %s\n%!  -- %s\n%!" n *)
-    (*     (witness_to_string witness) (metaterm_to_string goal) ; *)
-    (* end ; *)
+    Output.trace ~v begin fun (module Trace) ->
+      Trace.printf ~kind "metaterm_aux[%d]: %s\n%!  -- %s\n%!" n
+        (witness_to_string witness) (metaterm_to_string goal) ;
+    end ;
     let goal = normalize goal in
     let () =
       hyps |>
       List.iter ~guard:unwind_state begin fun (id, hyp) ->
         let wmatch = match witness with
           | WMagic -> true
-          | WHyp h when h = id -> true
+          | WHyp (h, _) when h = id -> true
           | _ -> false
         in
         if wmatch then
@@ -1087,7 +1090,9 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
           | _ -> true
         in
         if pmatch then
-          all_meta_right_permute_unify ~sc:(fun () -> sc (WHyp id)) goal hyp
+          all_meta_right_permute_unify goal hyp
+            ~sc:(fun ws -> sc (WHyp (id, ws)))
+            ~eqv:(fun f -> metaterm_aux n hyps (Pred (f, Irrelevant)) ts ~witness:WMagic)
       end in
     match goal with
     | True -> begin
@@ -1258,7 +1263,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       in
       let doit () =
         unfold_defs ~sr ~mdefs csel ~ts goal r |>
-        List.iter begin fun (state, Unify.{ cpairs ; equivs }, body, i) ->
+        List.iter begin fun (state, Unify.Res.{ cpairs ; equivs }, body, i) ->
           set_bind_state state ;
           let body = conjoin (List.map (fun eqv -> Pred (eqv, r)) equivs @ [body]) in
           metaterm_aux subn hyps body ts
@@ -1335,12 +1340,23 @@ let apply_arrow term args =
                | Sync lf, Sync af -> right_unify lf af
                | _ -> failwithf "Object sequent kind mismatch at argument %d" !argno
                end ;
-               right_unify left.right arg.right ;
-               right
-           | Arrow(left, right), Some arg ->
-               meta_right_unify left arg ; right
+               begin match try_right_unify_cpairs left.right arg.right with
+               | Some res ->
+                   obligations := Res.to_forms res @ !obligations ;
+                   right
+               | None ->
+                   raise Unify.(UnifyFailure (FailTrail (!argno, Generic)))
+               end
+           | Arrow(left, right), Some arg -> begin
+               match meta_right_unify left arg with
+               | Some res ->
+                   obligations := Res.to_forms res @ !obligations ;
+                   right
+               | None ->
+                   raise Unify.(UnifyFailure (FailTrail (!argno, Generic)))
+             end
            | Arrow(left, right), None ->
-               obligations := left::!obligations ;
+               obligations := left :: !obligations ;
                right
            | _ ->
                failwith "Too few implications in application"
@@ -1506,15 +1522,24 @@ let backchain_check_restrictions hr gr =
 let backchain_arrow term goal =
   let obligations, head = decompose_arrow term in
   backchain_check_restrictions (term_to_restriction head) (term_to_restriction goal) ;
-  begin match head, goal with
-  | Obj ({mode = Async ; _} as hobj, _), Obj ({mode = Async ; _} as gobj, _) ->
-      right_unify hobj.right gobj.right ;
-      Context.backchain_reconcile hobj.context gobj.context
-  | _, _ -> begin
-      try meta_right_unify head goal with
-      | Unify.UnifyFailure fl -> raise (Unify.UnifyFailure (Unify.FailTrail (1, fl)))
-    end
-  end ;
+  let obligations =
+    match head, goal with
+    | Obj ({mode = Async ; _} as hobj, _), Obj ({mode = Async ; _} as gobj, _) ->
+        begin match try_right_unify_cpairs hobj.right gobj.right with
+        | Some res ->
+            Context.backchain_reconcile hobj.context gobj.context ;
+            Res.to_forms res @ obligations
+        | None ->
+            raise Unify.(UnifyFailure (FailTrail (1, Generic)))
+        end
+    | _, _ -> begin
+        match meta_right_unify head goal with
+        | Some res ->
+            Res.to_forms res @ obligations
+        | None ->
+            raise Unify.(UnifyFailure (FailTrail (1, Generic)))
+      end
+  in
   let tms = term :: goal :: obligations in
   if metaterms_contain_tyvar tms then
     raise TypesNotFullyDetermined
