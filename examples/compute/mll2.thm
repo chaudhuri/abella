@@ -221,6 +221,18 @@ intros. case H2.
   apply perm2_trans to *H3 *H1. search.
   apply perm2_trans to *H3 *H1. search.
 
+Theorem mll2_perm_alt : forall J K, perm2 J K -> mll2 (mset2 J) -> mll2 (mset2 K).
+intros. assert mll2 (mset2 J) = mll2 (mset2 K).
+  % can't make progress from this:
+  %     Variables: J K
+  %     H1 : perm2 J K
+  %     H2 : mll2 (mset2 J)
+  %     H3 : mll2 (mset2 J) = mll2 (mset2 K)
+  %     ============================
+  %      mll2 (mset2 K)
+  % because (case H3) would just reduce it to (perm2 J K).
+  abort.
+
 Define dual : form -> form -> prop by
 ; dual (atm A) (natm A)
 ; dual (tens A B) (par Ad Bd) := dual A Ad /\ dual B Bd
