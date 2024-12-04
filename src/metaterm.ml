@@ -820,29 +820,33 @@ let make_nabla_alist tids body =
 
 open Unify
 
-let rec meta_right_unify t1 t2 =
+let rec meta_right_unify t1 t2 : Unify.Res.t option =
+  let open Option in
   match t1, t2 with
-  | True, True -> ()
-  | False, False -> ()
+  | True, True -> return Res.empty
+  | False, False -> return Res.empty
   | Eq(l1, r1), Eq(l2, r2) ->
-      right_unify l1 l2 ;
-      right_unify r1 r2
+      let* res1 = try_right_unify_cpairs l1 l2 in
+      let* res2 = try_right_unify_cpairs r1 r2 in
+      return @@ Res.join res1 res2
   | Obj (o1, _), Obj (o2, _)
-    when Context.equiv o1.context o2.context ->
-      right_unify o1.right o2.right ;
-      begin match o1.mode, o2.mode with
-      | Async, Async -> ()
+    when Context.equiv o1.context o2.context -> begin
+      let* res1 = try_right_unify_cpairs o1.right o2.right in
+      match o1.mode, o2.mode with
+      | Async, Async -> return res1
       | Sync f1, Sync f2 ->
-          right_unify f1 f2
-      | _ -> raise (UnifyFailure Generic)
+          let* res2 = try_right_unify_cpairs f1 f2 in
+          return @@ Res.join res1 res2
+      | _ -> fail
       end
   | Pred(t1, _), Pred(t2, _) ->
-      right_unify t1 t2
+      try_right_unify_cpairs t1 t2
   | And(l1, r1), And(l2, r2)
   | Or(l1, r1), Or(l2, r2)
   | Arrow(l1, r1), Arrow(l2, r2) ->
-      meta_right_unify l1 l2 ;
-      meta_right_unify r1 r2
+      let* res1 = meta_right_unify l1 l2 in
+      let* res2 = meta_right_unify r1 r2 in
+      return @@ Res.join res1 res2
   | Binding(b1, tids1, t1), Binding(b2, tids2, t2)
     when b1 = b2 &&
          List.length tids1 = List.length tids2 &&
@@ -858,7 +862,7 @@ let rec meta_right_unify t1 t2 =
       meta_right_unify
         (replace_metaterm_vars alist1 t1)
         (replace_metaterm_vars alist2 t2)
-  | _, _ -> raise (UnifyFailure Generic)
+  | _, _ -> fail
 
 and tids_unifyable tids1 tids2 =
   let tys1 = List.map snd tids1 in
@@ -873,33 +877,40 @@ and tids_unifyable tids1 tids2 =
       false
 
 let try_meta_right_unify t1 t2 =
-  try_with_state ~fail:false
-    (fun () ->
-       meta_right_unify t1 t2 ;
-       true)
+  try_with_state ~fail:None
+    (fun () -> meta_right_unify t1 t2)
 
 (* Try to unify t1 and t2 under permutations of nominal constants.
    For each successful unification, call sc.
    t1 may contain logic variables, t2 is ground                    *)
-let all_meta_right_permute_unify ~sc t1 t2 =
+let all_meta_right_permute_unify ~sc ~eqv t1 t2 =
   let support_t1 = metaterm_support t1 in
   let support_t2 = metaterm_support t2 in
-    if List.length support_t1 < List.length support_t2 then
-      (* Ground term cannot have more nominals than logic term *)
-      ()
-    else
-      let support_t2_names = List.map term_to_name support_t2 in
-        support_t1
-        |> List.permute (List.length support_t2)
-        |> List.find_all begin fun perm_support_t1 ->
-                         List.for_all2 (fun v1 v2 -> eq_ty (term_to_var v1).ty (term_to_var v2).ty)
-                                       perm_support_t1 support_t2
-                         end
-        |> List.iter
-            (unwind_state
-               (fun perm_support_t1 ->
-                  let alist = List.combine support_t2_names perm_support_t1 in
-                    if try_meta_right_unify t1 (replace_metaterm_vars alist t2) then sc ()))
+  if List.length support_t1 < List.length support_t2 then
+    (* Ground term cannot have more nominals than logic term *)
+    ()
+  else
+  let support_t2_names = List.map term_to_name support_t2 in
+  support_t1
+  |> List.permute (List.length support_t2)
+  |> List.find_all begin fun perm_support_t1 ->
+    List.for_all2 (fun v1 v2 -> eq_ty (term_to_var v1).ty (term_to_var v2).ty)
+      perm_support_t1 support_t2
+  end
+  |> List.iter @@ unwind_state begin fun perm_support_t1 ->
+    let alist = List.combine support_t2_names perm_support_t1 in
+    match try_meta_right_unify t1 (replace_metaterm_vars alist t2) with
+    | Some Res.{ cpairs = [] ; equivs } ->
+        let rec handle_equivs equivs k =
+          match equivs with
+          | [] -> k []
+          | f :: equivs ->
+              eqv f
+                ~sc:(fun w -> handle_equivs equivs (fun ws -> k (w :: ws)))
+        in
+        handle_equivs equivs sc
+    | _ -> ()
+  end ;;
 
 (* Check for derivability between objects under permutations. Need
    goal.right to unify with hyp.right and also hyp.context subcontext

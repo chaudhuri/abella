@@ -105,7 +105,7 @@ type compiled =
 
 type witness =
   | WTrue
-  | WHyp          of id
+  | WHyp          of id * witness list
   | WLeft         of witness
   | WRight        of witness
   | WSplit        of witness * witness
@@ -123,7 +123,10 @@ let witness_to_string =
 
   let rec aux = function
     | WTrue -> "true"
-    | WHyp id -> "apply " ^ id
+    | WHyp (id, []) -> "apply " ^ id
+    | WHyp (id, ws) ->
+        let ws = List.map aux ws in
+        Printf.sprintf "apply %s[%s]" id (String.concat ", " ws)
     | WLeft w -> "left " ^ aux w
     | WRight w -> "right " ^ aux w
     | WSplit(w1,w2) -> "split(" ^ aux w1 ^ ", " ^ aux w2 ^ ")"
