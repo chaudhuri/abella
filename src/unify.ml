@@ -863,7 +863,7 @@ module Res = struct
     { cpairs = res1.cpairs @ res2.cpairs; equivs = res1.equivs @ res2.equivs }
 end
 
-let[@ocaml.warning "-32-27-26-39"] try_left_unify_cpairs ~used t1 t2 =
+let[@ocaml.warning "-32-27-26-39"] _try_left_unify_cpairs ~used t1 t2 =
   let original_state = get_scoped_bind_state () in
   let module Params = struct
     let instantiatable = Eigen
@@ -878,7 +878,18 @@ let[@ocaml.warning "-32-27-26-39"] try_left_unify_cpairs ~used t1 t2 =
   let rec spin wait active =
     match active with
     | [] -> Some Res.{ cpairs = wait; equivs = !Params.equivs }
-    | (t1, t2) :: active -> failwith "left_unify unfinished"
+    | (t1, t2) :: active -> begin
+        let state = get_scoped_bind_state () in
+        let old_cpairs, old_equivs = !Params.cpairs, !Params.equivs in
+        try
+          Engine.pattern_unify ~used t1 t2 ;
+          spin !Params.cpairs @@ List.rev_append wait active
+        with UnifyError NotLLambda ->
+          set_scoped_bind_state state ;
+          Params.cpairs := old_cpairs ;
+          Params.equivs := old_equivs ;
+          spin ((t1, t2) :: wait) active
+      end
   in
   try spin [] [ (t1, t2) ]
   with exn ->
@@ -929,7 +940,7 @@ let try_left_unify ?(used = []) t1 t2 =
       left_unify ~used t1 t2;
       true)
 
-let _try_left_unify_cpairs ~used t1 t2 =
+let try_left_unify_cpairs ~used t1 t2 =
   let state = get_scoped_bind_state () in
   let cpairs = ref [] in
   let cpairs_handler x y = cpairs := (x, y) :: !cpairs in
