@@ -255,9 +255,9 @@ let getref = function
 let bind v t =
   let dv = getref (deref v) in
   let dt = deref t in
-    assert (match dt with Ptr r -> dv != r | _ -> true) ;
-    bind_state_var := (dv, !dv, dt) :: !bind_state_var ;
-    dv := T dt
+  assert (match dt with Ptr r -> dv != r | _ -> true) ;
+  bind_state_var := (dv, !dv, dt) :: !bind_state_var ;
+  dv := T dt
 
 (* Binding a type variable to a type, similar to binding of term variables *)
 
