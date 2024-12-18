@@ -979,7 +979,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
             | _ -> n - 1
           in
           if equivs <> [] then
-            bugf "clause_aux: missing handler for generated equivs" ;
+            [%bug] "clause_aux: missing handler for generated equivs" ;
           async_obj_aux_conj n (wrap body) r ts ~sc ~witnesses
     end
 
@@ -1070,10 +1070,10 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       end
 
   and metaterm_aux n hyps goal ts ~sc ~witness =
-    Output.trace ~v begin fun (module Trace) ->
-      Trace.printf ~kind "metaterm_aux[%d]: %s\n%!  -- %s\n%!" n
-        (witness_to_string witness) (metaterm_to_string goal) ;
-    end ;
+    [%trace] (fun _ -> ()) ;
+    [%tracef] "metaterm_aux[%d]: %s@\n-- %s" n
+      (witness_to_string witness)
+      (metaterm_to_string goal) ;
     let goal = normalize goal in
     let () =
       hyps |>

@@ -1173,7 +1173,7 @@ let ensure_no_renaming vars terms =
       (List.map fst (all_tids (List.flatten_map collect_terms terms)))
   in
   if conflicts <> [] then
-    bugf "Variable renaming required"
+    [%bug] "Variable renaming required"
 *)
 
 let split_theorem (tys, thm) =

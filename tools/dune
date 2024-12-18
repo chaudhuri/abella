@@ -1,0 +1,6 @@
+(library
+  (name ppx_abella)
+  (public_name abella.ppx)
+  (kind ppx_rewriter)
+  (libraries ppxlib)
+  (preprocess no_preprocessing))
