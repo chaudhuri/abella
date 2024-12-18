@@ -24,3 +24,5 @@ _build
 smoke/
 bad-examples/
 dev-examples/
+.vscode/settings.json
+.vscode/tasks.json
