@@ -80,12 +80,11 @@ let make_guard ~head ~test =
 (** [evaluate_guard guard t] returns true if the guard stops compute *)
 let evaluate_guard guard t =
   let format_term ff t = Term.format_term ff t in
-  let v, kind = 2, "evaluate_guard" in
-  Output.trace ~v begin fun (module Trace) ->
-    Trace.format ~kind "@[<v0>Testing @[%a@]@,against @[%a@]@]"
+  let kind = "evaluate_guard" in
+  [%trace 2 ~kind
+      "@[<v0>Testing @[%a@]@,against @[%a@]@]"
       format_term t
-      format_guard guard
-  end ;
+      format_guard guard] ;
   let state = Term.get_scoped_bind_state () in
   let result = try
       Unify.left_unify t guard.pattern ;
@@ -98,9 +97,7 @@ let evaluate_guard guard t =
     with _ -> false
   in
   Term.set_scoped_bind_state state ;
-  Output.trace ~v begin fun (module Trace) ->
-    Trace.printf ~kind "result: %b" result
-  end ;
+  [%trace 2 ~kind "result: %b" result] ;
   result
 
 let guards : (id, guard) Hashtbl.t = State.table ()
@@ -176,41 +173,33 @@ let branch_to_string branch =
   String.concat "."
 
 let compute ?name ?(gas = 1_000) hs wrt =
-  let v, kind = 2, "compute" in
+  let kind = "compute" in
   let total_gas = gas in
   let gas = ref total_gas in
   let consume_gas n =
     if !gas < n then raise Out_of_gas ;
     gas := !gas - n ;
-    Output.trace ~v begin fun (module Trace) ->
-      Trace.printf ~kind "Consumed %d gas (%d left)" n !gas
-    end ;
+    [%trace 2 ~kind "Consumed %d gas (%d left)" n !gas] ;
   in
   let fresh_compute_hyp =
     let count = ref @@ -1 in
     fun () -> incr count ; "<#" ^ string_of_int !count ^ ">"
   in
-  Output.trace ~v begin fun (module Trace) ->
-    Trace.printf ~kind
-      "compute wrt %s" (String.concat ", " wrt)
-  end ;
+  [%trace 2 ~kind
+      "compute wrt %s" (String.concat ", " wrt)] ;
   let subgoals = ref [] in
   let rec compute_all ~(branch : int list) ~chs ~wait ~todo =
-    Output.trace ~v begin fun (module Trace) ->
-      Trace.printf ~kind
+    [%trace 2 ~kind
         "BRANCH_ALL [%s] chs:[%s] wait:[%s] todo:[%s]"
         (branch_to_string branch)
         (List.map ch_to_string chs |> String.concat ",")
         (List.map cw_to_string wait |> String.concat ",")
-        (List.map ch_to_string todo |> String.concat ",")
-    end ;
+        (List.map ch_to_string todo |> String.concat ",")] ;
     match todo with
     | [] ->
         let sg =
           List.iter begin fun ch ->
-            Output.trace ~v begin fun (module Trace) ->
-              Trace.printf ~kind "Renaming: %s" (ch_to_string ch)
-            end ;
+            [%trace 2 ~kind "Renaming: %s" (ch_to_string ch)] ;
             let stmt = Prover.get_stmt_clearly ch.clr in
             Prover.add_hyp ?name stmt
           end chs ;
@@ -221,11 +210,9 @@ let compute ?name ?(gas = 1_000) hs wrt =
             Prover.set_sequent current_seq
         in
         subgoals := sg :: !subgoals ;
-        Output.trace ~v begin fun (module Trace) ->
-          Trace.printf ~kind
+        [%trace 2 ~kind
             "BRANCH_END [%s] with new subgoal"
-            (branch_to_string branch)
-        end
+            (branch_to_string branch)] ;
     | h :: todo ->
         compute_one ~branch ~chs ~wait ~todo h
   and compute_one ~branch ~chs ~wait ~todo (ch : compute_hyp) =
@@ -259,14 +246,12 @@ let compute ?name ?(gas = 1_000) hs wrt =
               | f, [] ->
                   consume_gas 1 ;
                   Prover.(replace_hyp (stmt_name ch.clr) f) ;
-                  Output.trace ~v begin fun (module Trace) ->
-                    let hn = Prover.stmt_name ch.clr in
-                    Trace.format ~kind "@[<v0>Did: %s : apply %s to *%s.@,  old: %a@,  new: %a@]"
+                  let hn = Prover.stmt_name ch.clr in
+                  [%trace 2  ~kind
+                      "@[<v0>Did: %s : apply %s to *%s.@,  old: %a@,  new: %a@]"
                       hn lem hn
                       format_metaterm ch.form
-                      format_metaterm f ;
-                    (* Trace.format ~kind "Resulting sequent: @[<v0>%t@]" Prover.format_sequent *)
-                  end ;
+                      format_metaterm f] ;
                   let todo = {ch with form = f} :: todo in
                   compute_all ~branch ~chs ~wait ~todo
               | _ | exception _ ->
@@ -284,9 +269,7 @@ let compute ?name ?(gas = 1_000) hs wrt =
   and compute_case ~branch ~chs ~wait ~todo (ch : compute_hyp) =
     consume_gas 1 ;
     let saved = Prover.copy_sequent () in
-    Output.trace ~v begin fun (module Trace) ->
-      Trace.format ~kind "compute_case: %a" format_ch ch ;
-    end ;
+    [%trace 2 ~kind "compute_case: %a" format_ch ch] ;
     match Prover.case_subgoals ch.clr with
     | exception _ ->
         Prover.set_sequent saved ;
@@ -294,43 +277,23 @@ let compute ?name ?(gas = 1_000) hs wrt =
     | cases ->
         let chs = List.filter (fun oldch -> oldch.clr <> ch.clr) chs in
         let saved = Prover.copy_sequent () in
-        Output.trace ~v begin fun (module Trace) ->
-          Trace.printf ~kind "compute_case: there were %d cases" (List.length cases) ;
-        end ;
+        [%trace 2 ~kind "compute_case: there were %d cases" (List.length cases)] ;
         List.iteri begin fun br (case : Tactics.case) ->
-          (* Output.trace ~v begin fun (module Trace) -> *)
-          (*   List.iter begin fun (v, t) -> *)
-          (*     Trace.printf ~kind "New var: %s : %s" v (term_to_string t) *)
-          (*   end case.new_vars ; *)
-          (*   List.iter begin fun t -> *)
-          (*     Trace.format ~kind "New hyp: %a" format_metaterm t *)
-          (*   end case.new_hyps ; *)
-          (* end ; *)
           Prover.set_sequent saved ;
           List.iter Prover.add_if_new_var case.Tactics.new_vars ;
-          (* Output.trace ~v begin fun (module Trace) -> *)
-          (*   List.iter begin fun h -> *)
-          (*     Trace.format ~kind "New hyp: %a" format_metaterm h *)
-          (*   end case.new_hyps ; *)
-          (* end ; *)
           let hs = List.rev_map (fun h -> Prover.unsafe_add_hyp (fresh_compute_hyp ()) h) case.new_hyps in
           Term.set_bind_state case.bind_state ;
           Prover.update_self_bound_vars () ;
-          Output.trace ~v begin fun (module Trace) ->
-            Trace.format ~kind "Case %a" format_ch ch ;
-            List.iter begin fun h ->
-              Trace.format ~kind "Adding: %s : %a" h.Prover.id format_metaterm h.term
-            end hs ;
-            (* Trace.format ~kind "Result: @[<v0>%t@]" Prover.format_sequent *)
-          end ;
+          [%trace 2 ~kind "Case %a" format_ch ch] ;
+          List.iter begin fun h ->
+            [%trace 2 ~kind "Adding: %s : %a" h.Prover.id format_metaterm h.term] ;
+          end hs ;
           let (wait, newly_active) = List.partition is_unchanged wait in
-          Output.trace ~v begin fun (module Trace) ->
-            List.iter begin fun w ->
-              Trace.format ~kind "Reactivated %s: %a cuz @[<hov0>%a@]"
+          List.iter begin fun w ->
+            [%trace 2 ~kind "Reactivated %s: %a cuz @[<hov0>%a@]"
                 (clearable_to_string w.chyp.clr) format_metaterm w.chyp.form
-                (Format.pp_print_list ~pp_sep:Format.pp_print_commaspace pp_print_wait_var) w.vars
-            end newly_active
-          end ;
+                (Format.pp_print_list ~pp_sep:Format.pp_print_commaspace pp_print_wait_var) w.vars]
+          end newly_active ;
           let new_chs = List.rev_map (fun h -> { clr = Remove (h.Prover.id, []) ; form = h.term }) hs in
           let chs = List.rev_append new_chs chs in
           let todo =
@@ -344,9 +307,7 @@ let compute ?name ?(gas = 1_000) hs wrt =
   | exception Out_of_gas ->
       failwithf "Compute ran out of gas (given %d) -- looping?" total_gas
   | _ ->
-      Output.trace ~v begin fun (module Trace) ->
-        Trace.printf ~kind "Computation used %d gas" (total_gas - !gas)
-      end ;
+      [%trace 2 ~kind "Computation used %d gas" (total_gas - !gas)] ;
       Prover.add_subgoals @@ List.rev !subgoals ;
       Prover.next_subgoal ()
 

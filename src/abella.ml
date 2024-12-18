@@ -332,9 +332,7 @@ and import_load modname withs =
       if not !Setup.recurse then
         failwithf "Recursive invocation of Abella prevented (--non-recursive)" ;
       let cmd = Printf.sprintf " %S -o %S" Thm.path Thm.out_path in
-      Output.trace ~v:1 begin fun (module Trace) ->
-        Trace.printf ~kind "Running: abella%s" cmd ;
-      end ;
+      [%trace 1 ~kind "Running: abella%s" cmd] ;
       if Sys.command (Sys.executable_name ^ cmd) <> 0 then
         failwithf "Could not create %S" Thm.thc_path
     in

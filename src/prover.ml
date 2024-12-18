@@ -1405,29 +1405,21 @@ let cut_from ?name h arg term =
 (* Seal *)
 
 let seal tyc eqv : unit =
-  let v, kind = 2, "seal" in
-  Output.trace ~v begin fun (module Trace) ->
-    Trace.printf ~kind "Looking up %s" eqv
-  end ;
+  let kind = "seal" in
+  [%trace 2 ~kind "Looking up %s" eqv] ;
   let (params, eqv_ty) = lookup_poly_const eqv in
-  Output.trace ~v begin fun (module Trace) ->
-    Trace.printf ~kind "Found %s : [%s] %s" eqv
-      (String.concat "," params) (ty_to_string eqv_ty)
-  end ;
+  [%trace 2 ~kind "Found %s : [%s] %s" eqv
+      (String.concat "," params) (ty_to_string eqv_ty)] ;
   match observe_ty eqv_ty with
   | Ty ([Ty ([], Tycons (tyc_carrier, _)) as ty_arg1 ; ty_arg2], targ) when
       eq_ty ty_arg1 ty_arg2 && targ = propaty -> begin
-      Output.trace ~v begin fun (module Trace) ->
-        Trace.printf ~kind "Carrier of %s : %s"
-          eqv tyc_carrier
-      end ;
+      [%trace 2 ~kind "Carrier of %s : %s" eqv tyc_carrier] ;
       let cons_targ_ty =
         tybase @@ Tycons (tyc, List.map (fun p -> tybase @@ Tygenvar p) params) in
       let cons_ty = tyarrow [ty_arg1] cons_targ_ty in
-      Output.trace ~v begin fun (module Trace) ->
-        Trace.printf ~kind "Constructor %s : [%s] %s" tyc
-          (String.concat "," params) (ty_to_string cons_ty)
-      end ;
+      [%trace 2 ~kind
+          "Constructor %s : [%s] %s" tyc
+          (String.concat "," params) (ty_to_string cons_ty)] ;
       let cons_kind = Knd (List.length params) in
       sign := add_types !sign [tyc] cons_kind ;
       sign := add_consts !sign [tyc, cons_ty] ;

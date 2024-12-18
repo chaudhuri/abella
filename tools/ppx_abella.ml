@@ -1,4 +1,6 @@
 let do_tracing = true
+let format = "Output.msg_format"
+let verbosity = "Output.trace_verbosity"
 
 open Ppxlib
 
@@ -8,44 +10,45 @@ let string_of_location ~loc =
     pos.pos_fname
     pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1)
 
+let rm_labelled lab alist =
+  let rec extract seen l =
+    match l with
+    | [] -> (None, List.rev seen)
+    | (Labelled x, a) :: l when x = lab -> (Some a, List.rev_append seen l)
+    | u :: l -> extract (u :: seen) l
+  in
+  extract [] alist
+
 let trace_expander =
   let name = "trace" in
   let context = Extension.Context.expression in
-  let extractor = Ast_pattern.(pstr nil) in
+  let extractor = Ast_pattern.(single_expr_payload (pexp_apply (eint __) (many __))) in
   let open Ast_builder.Default in
-  let printer ~loc =
-    if do_tracing then evar ~loc "Output.msg_format" else
-      eapply ~loc (evar ~loc "Stdlib.Format.ifprintf")
-        [ evar ~loc "Stdlib.Format.err_formatter" ] in
-  let expand ~ctxt =
+  let expand ~ctxt verb args =
     let loc = Expansion_context.Extension.extension_point_loc ctxt in
-    eapply ~loc (printer ~loc)
-      [ estring ~loc @@
-        "@[<hov2>TRACE[" ^ string_of_location ~loc ^ "]@ %t@]" ]
-  in
-  Extension.V3.declare name context extractor expand |>
-  Context_free.Rule.extension
-
-let tracef_expander =
-  let name = "tracef" in
-  let context = Extension.Context.expression in
-  let extractor = Ast_pattern.(pstr nil) in
-  let open Ast_builder.Default in
-  let printer ~loc =
-    if do_tracing then evar ~loc "Output.msg_format" else
-      eapply ~loc (evar ~loc "Stdlib.Format.ifprintf")
-        [ evar ~loc "Stdlib.Format.err_formatter" ] in
-  let expand ~ctxt =
-    let loc = Expansion_context.Extension.extension_point_loc ctxt in
-    pexp_fun ~loc Nolabel None
-      (ppat_var ~loc { loc ; txt = "fmt" }) @@
-    eapply ~loc (printer ~loc)
-      [ eapply ~loc (evar ~loc "Stdlib.^^")
-          [ eapply ~loc (evar ~loc "Stdlib.^^")
-              [ estring ~loc @@
-                "@[<hov2>TRACE[" ^ string_of_location ~loc ^ "]@ " ;
-                evar ~loc "fmt" ] ;
-            estring ~loc "@]" ] ]
+    let (kind, args) = rm_labelled "kind" args in
+    match List.map snd args with
+    | fmt :: args ->
+        let (kind_space, kind_arg) = match kind with
+          | None -> "", estring ~loc ""
+          | Some expr -> " ", expr
+        in
+        let ( ^^ ) f1 f2 = eapply ~loc (evar ~loc "Stdlib.^^") [f1 ; f2] in
+        let fmt =
+          estring ~loc ("@[<hv4>>>>" ^ kind_space ^ "%s [at %s]@ ")
+          ^^ fmt ^^
+          estring ~loc "@]" in
+        let pos_arg = estring ~loc (string_of_location ~loc) in
+        pexp_ifthenelse ~loc
+          (eapply ~loc (evar ~loc "Stdlib.&&")
+             [ ebool ~loc do_tracing ;
+               (eapply ~loc (evar ~loc "Stdlib.<=")
+                  [ eint ~loc verb ; eapply ~loc (evar ~loc "Stdlib.!") [evar ~loc verbosity] ]) ])
+          (eapply ~loc (evar ~loc format) (fmt :: kind_arg :: pos_arg :: args))
+          None
+    | _ ->
+        pexp_extension ~loc
+          (Location.error_extensionf ~loc "Missing format string")
   in
   Extension.V3.declare name context extractor expand |>
   Context_free.Rule.extension
@@ -84,6 +87,6 @@ let () =
   Driver.V2.register_transformation "ppx_abella"
     ~rules:[
       trace_expander ;
-      tracef_expander ;
+      (* tracef_expander ; *)
       bug_expander ;
     ]
