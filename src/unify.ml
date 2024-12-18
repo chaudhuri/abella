@@ -527,9 +527,9 @@ module Make (P : Param) = struct
                   app h' a1')
                 else app h2 a1'
               else make_non_llambda_subst lev hv1 a1 c
-          | Var _ -> bugf "logic variable on the left (1)"
+          | Var _ -> [%bug] "logic variable on the left (1)"
           | _ -> assert false)
-      | Var _ -> bugf "logic variable on the left (2)"
+      | Var _ -> [%bug] "logic variable on the left (2)"
       | _ -> assert false
     in
 
@@ -623,7 +623,7 @@ module Make (P : Param) = struct
         let a1 = lift_args [] (List.length idtys) in
         unify (List.rev_app idtys tyctx) (app cst a1) t2
     | Var v when not (variable v.tag || constant v.tag) ->
-        bugf "logic variable on the left (3)"
+        [%bug] "logic variable on the left (3)"
     | _ -> fail (ConstClash (cst, t2))
 
   (* Unify [App h1 a1 = t2].
@@ -648,7 +648,7 @@ module Make (P : Param) = struct
             let m = List.length a2 in
             bind h2 (makesubst tyctx h2 t1 a2 m)
         | Var v when not (variable v.tag || constant v.tag) ->
-            bugf "logic variable on the left (5)"
+            [%bug] "logic variable on the left (5)"
         | _ -> assert false)
     | DB n1, App (h2, a2) -> (
         match observe h2 with
@@ -658,12 +658,12 @@ module Make (P : Param) = struct
             bind h2 (makesubst tyctx h2 t1 a2 m)
         | Var v when constant v.tag -> fail (ConstClash (h1, h2))
         | Var v when not (variable v.tag || constant v.tag) ->
-            bugf "logic variable on the left (5)"
+            [%bug] "logic variable on the left (5)"
         | _ -> assert false)
     | Lam _, _ | _, Lam _ | Ptr _, _ | _, Ptr _ | Susp _, _ | _, Susp _ ->
         assert false
     | Var v, _ when not (variable v.tag || constant v.tag) ->
-        bugf "logic variable on the left (6)"
+        [%bug] "logic variable on the left (6)"
     | _ -> fail (ConstClash (h1, t2))
 
   (* Unify [v1 = t2].
@@ -765,7 +765,7 @@ module Make (P : Param) = struct
           | Var c1, _ when constant c1.tag -> unify_const_term tyctx t1 t2
           | _, Var c2 when constant c2.tag -> unify_const_term tyctx t2 t1
           | DB i1, DB i2 -> if i1 <> i2 then fail (ConstClash (t1, t2))
-          | _ -> bugf "logic variable on the left (7)"
+          | _ -> [%bug] "logic variable on the left (7)"
         with UnifyError NotLLambda ->
           let n = max (closing_depth t1) (closing_depth t2) in
           let tys = List.rev (List.take n tyctx) in
@@ -896,7 +896,7 @@ let[@ocaml.warning "-32-27-26-39"] _try_left_unify_cpairs ~used t1 t2 =
     set_scoped_bind_state original_state;
     let () =
       match exn with
-      | UnifyError NotLLambda -> bugf "left-unify raised NotLLambda"
+      | UnifyError NotLLambda -> [%bug] "left-unify raised NotLLambda"
       | _ -> ()
     in
     None
@@ -969,7 +969,7 @@ let try_left_unify_cpairs ~used t1 t2 =
       | InstGenericTyvar (v, ty) ->
           let msg = msg ^ Unifyty.inst_gen_tyvar_msg v ty in
           failwith msg
-      | InvalidSealing -> bugf "Sealed types error")
+      | InvalidSealing -> [%bug] "Sealed types error")
 
 let try_right_unify_cpairs t1 t2 =
   try_with_state ~fail:None (fun () ->

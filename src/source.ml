@@ -67,7 +67,7 @@ open struct
       let mtime = Unix.((stat cache_name).st_mtime) in
       let mtime_str = http_strftime mtime in
       Output.trace ~v:2 begin fun (module Trace) ->
-        Trace.format ~kind "@[<v2>Found cache of: %s@,at: %s@,last modified: %s@]"
+        Trace.printf ~kind "@[<v2>Found cache of: %s@,at: %s@,last modified: %s@]"
           url cache_name mtime_str ;
       end ;
       ["If-Modified-Since: " ^ mtime_str]
@@ -275,6 +275,6 @@ let read_thm ?thc source =
           Stdlib.close_out ch ;
           Sys.rename temp thc_path
       | None ->
-          bugf "Repeated close() of sink for: %s" path ;
+          [%bug] "Repeated close() of sink for: %s" path ;
   end in
   (module Thm : THM)

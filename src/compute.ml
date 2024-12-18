@@ -111,7 +111,7 @@ let is_guarded atm =
   let pred, _args =
     match Term.term_head atm with
     | Some pa -> pa
-    | None -> bugf "Invalid predicate: %s" (term_to_string atm)
+    | None -> [%bug] "Invalid predicate: %s" (term_to_string atm)
   in
   Term.term_to_name pred
   |> Hashtbl.find_all guards

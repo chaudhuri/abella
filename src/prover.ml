@@ -206,7 +206,7 @@ let register_definition = function
       sign := (basics, consts) ;
       add_defs typarams idtys flav clauses ;
       CDefine (flav, typarams, idtys, clauses)
-  | _ -> bugf "Not a definition!"
+  | _ -> [%bug] "Not a definition!"
 
 let k_member = "member"
 let member_def =
@@ -244,7 +244,7 @@ let clause_head_name cl =
   match cl.head with
   | Binding (Nabla, _, Pred (p, _)) | Pred (p, _) ->
       term_head_name p
-  | _ -> bugf "Clause head name for invalid clause: %s" (metaterm_to_string cl.head)
+  | _ -> [%bug] "Clause head name for invalid clause: %s" (metaterm_to_string cl.head)
 
 (* let rec app_ty tymap = function
  *   | Ty (args, res) ->
@@ -1171,7 +1171,7 @@ let ensure_no_renaming vars terms =
       (List.map fst (all_tids (List.flatten_map collect_terms terms)))
   in
   if conflicts <> [] then
-    bugf "Variable renaming required"
+    [%bug] "Variable renaming required"
 
 let split_theorem (tys, thm) =
   let foralls, nablas, body = decompose_forall_nabla thm in

@@ -301,8 +301,8 @@ module Replacement = struct
           ~what:"declared constant"
           ~mem:(fun id -> Itab.mem id repl.map) ;
         comp
-    | CSuspend _ -> bugf "Replacement for Suspend unimplemented"
-    | CSeal _ -> bugf "Replacement for Seal unimplemented"
+    | CSuspend _ -> [%bug] "Replacement for Suspend unimplemented"
+    | CSeal _ -> [%bug] "Replacement for Seal unimplemented"
     | CClose _ -> comp
 end
 
