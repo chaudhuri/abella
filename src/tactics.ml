@@ -1106,12 +1106,12 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
         | WMagic | WReflexive ->
             unwind_state begin fun () ->
               match try_right_unify_cpairs_fully_inferred ~msg:"equality-right" left right with
-              | None | Some { cpairs = [] ; equivs = [] } -> sc WReflexive
+              | Some { cpairs = [] ; equivs = [] } -> sc WReflexive
               | Some { cpairs = [] ; equivs } ->
                   let goal = List.map (fun q -> Pred (q, Irrelevant)) equivs
                              |> conjoin in
                   metaterm_aux n hyps goal ts ~sc:(fun w -> sc (WLeft w)) ~witness
-              | _ -> ()
+              | Some { cpairs = _ :: _ ; _ } | None -> ()
             end ()
         | _ -> bad_witness ()
       end
