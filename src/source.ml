@@ -74,13 +74,7 @@ end
 let read_thm ?thc source =
   let module Thm = struct
     include (val read source : SOURCE)
-    let base =
-      if not @@ Filename.check_suffix path ".thm" then
-        Base64.encode path
-        |> Result.get_ok
-        |> Filename.concat Xdg.cache_dir
-      else
-        Filename.chop_suffix path ".thm"
+    let base = Filename.chop_suffix path ".thm"
     let out_path = base ^ ".out"
     let thc_path = Option.value thc
         ~default:(base ^ ".thc")
