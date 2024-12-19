@@ -103,6 +103,7 @@ let lp_template root =
 
 (******************************************************************************)
 
+open Abella_lib
 open Extensions
 
 type conf = {
