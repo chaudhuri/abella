@@ -19,7 +19,6 @@ type message = {
   fields : (string * Json.t) list ;
 }
 
-
 let message ?(fields = []) kind =
   incr last_id ;
   { kind ; id = !last_id ; fields }
