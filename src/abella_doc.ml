@@ -7,6 +7,7 @@
 
 (* Generate documentation for a collection of Abella .thm files *)
 
+open Abella_lib
 open Extensions
 
 module Dist = Abella_doc_dist
@@ -102,6 +103,7 @@ let lp_template root =
 
 (******************************************************************************)
 
+open Abella_lib
 open Extensions
 
 type conf = {
