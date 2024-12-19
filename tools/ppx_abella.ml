@@ -1,51 +1,41 @@
 let do_tracing = true
-let format = "Output.msg_format"
-let verbosity = "Output.trace_verbosity"
 
 open Ppxlib
 
-let string_of_location ~loc =
-  let pos = loc.loc_start in
-  Stdlib.Printf.sprintf "%s:%d.%d"
-    pos.pos_fname
-    pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1)
-
-let rm_labelled lab alist =
-  let rec extract seen l =
-    match l with
-    | [] -> (None, List.rev seen)
-    | (Labelled x, a) :: l when x = lab -> (Some a, List.rev_append seen l)
-    | u :: l -> extract (u :: seen) l
-  in
-  extract [] alist
+let eposition ~loc =
+  let open Ast_builder.Default in
+  let start = loc.loc_start in
+  pexp_record ~loc [
+    (Located.lident ~loc "pos_fname",
+     estring ~loc start.pos_fname) ;
+    (Located.lident ~loc "pos_lnum",
+     eint ~loc start.pos_lnum) ;
+    (Located.lident ~loc "pos_cnum",
+     eint ~loc start.pos_cnum) ;
+    (Located.lident ~loc "pos_bol",
+     eint ~loc start.pos_bol) ;
+  ] None
 
 let trace_expander =
   let name = "trace" in
   let context = Extension.Context.expression in
-  let extractor = Ast_pattern.(single_expr_payload (pexp_apply (eint __) (many __))) in
+  let extractor = Ast_pattern.(single_expr_payload (pexp_apply (eint __) (many (no_label __)))) in
   let open Ast_builder.Default in
   let expand ~ctxt verb args =
     let loc = Expansion_context.Extension.extension_point_loc ctxt in
-    let (kind, args) = rm_labelled "kind" args in
-    match List.map snd args with
+    if not do_tracing then eunit ~loc else
+    match args with
     | fmt :: args ->
-        let (kind_space, kind_arg) = match kind with
-          | None -> "", estring ~loc ""
-          | Some expr -> " ", expr
-        in
         let ( ^^ ) f1 f2 = eapply ~loc (evar ~loc "Stdlib.^^") [f1 ; f2] in
         let fmt =
-          estring ~loc ("@[<hv4>>>>" ^ kind_space ^ "%s [at %s]@ ")
+          estring ~loc ("@[<v4>>>> [at %a]@,@[<b0>")
           ^^ fmt ^^
-          estring ~loc "@]" in
-        let pos_arg = estring ~loc (string_of_location ~loc) in
-        pexp_ifthenelse ~loc
-          (eapply ~loc (evar ~loc "Stdlib.&&")
-             [ ebool ~loc do_tracing ;
-               (eapply ~loc (evar ~loc "Stdlib.<=")
-                  [ eint ~loc verb ; eapply ~loc (evar ~loc "Stdlib.!") [evar ~loc verbosity] ]) ])
-          (eapply ~loc (evar ~loc format) (fmt :: kind_arg :: pos_arg :: args))
-          None
+          estring ~loc "@]@]" in
+        let pos_args =
+          [ evar ~loc "Ppx_abella_lib.pp_location" ;
+            eposition ~loc ] in
+        eapply ~loc (evar ~loc "Ppx_abella_lib.format")
+          (eint ~loc verb :: fmt :: pos_args @ args)
     | _ ->
         pexp_extension ~loc
           (Location.error_extensionf ~loc "Missing format string")
@@ -76,7 +66,9 @@ let bug_expander =
     esequence ~loc
       [ eapply ~loc (evar ~loc "Stdlib.Format.fprintf")
           [ erf ;
-            estring ~loc ("ABELLA BUG at " ^ string_of_location ~loc ^ "@.") ] ;
+            estring ~loc ("ABELLA BUG at %a@.") ;
+            evar ~loc "Ppx_abella_lib.pp_location" ;
+            eposition ~loc ] ;
         eapply ~loc (evar ~loc "Stdlib.Format.kfprintf")
           [ continuation ; erf  ] ]
   in

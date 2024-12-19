@@ -83,7 +83,11 @@ let msg_format ?post ?severity fmt =
 let msg_formatk k ?post ?severity fmt =
   Format.kasprintf (msg_printfk k ?post ?severity "%s") fmt
 
-let trace_verbosity = ref 0
+let () =
+  let module Printer : Ppx_abella_lib.PRINTER = struct
+    let format fmt = msg_format fmt
+  end in
+  Ppx_abella_lib.printer := (module Printer);;
 
 let link_message ~pos ~url =
   match !dest with

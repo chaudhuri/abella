@@ -30,7 +30,7 @@
 (library
  (name abella_lib)
  (modules :standard \ abella abella_dep abella_doc abella_doc_dist)
- (libraries unix re yojson base64 curl)
+ (libraries unix re yojson base64 curl ppx_abella_lib)
  (wrapped true)
  (preprocess (pps ppx_abella)))
 

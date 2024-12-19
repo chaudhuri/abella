@@ -1405,19 +1405,18 @@ let cut_from ?name h arg term =
 (* Seal *)
 
 let seal tyc eqv : unit =
-  let kind = "seal" in
-  [%trace 2 ~kind "Looking up %s" eqv] ;
+  [%trace 2 "Looking up %s" eqv] ;
   let (params, eqv_ty) = lookup_poly_const eqv in
-  [%trace 2 ~kind "Found %s : [%s] %s" eqv
+  [%trace 2 "Found %s : [%s] %s" eqv
       (String.concat "," params) (ty_to_string eqv_ty)] ;
   match observe_ty eqv_ty with
   | Ty ([Ty ([], Tycons (tyc_carrier, _)) as ty_arg1 ; ty_arg2], targ) when
       eq_ty ty_arg1 ty_arg2 && targ = propaty -> begin
-      [%trace 2 ~kind "Carrier of %s : %s" eqv tyc_carrier] ;
+      [%trace 2 "Carrier of %s : %s" eqv tyc_carrier] ;
       let cons_targ_ty =
         tybase @@ Tycons (tyc, List.map (fun p -> tybase @@ Tygenvar p) params) in
       let cons_ty = tyarrow [ty_arg1] cons_targ_ty in
-      [%trace 2 ~kind
+      [%trace 2
           "Constructor %s : [%s] %s" tyc
           (String.concat "," params) (ty_to_string cons_ty)] ;
       let cons_kind = Knd (List.length params) in

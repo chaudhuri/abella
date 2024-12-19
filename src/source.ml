@@ -60,13 +60,12 @@ open struct
       tm.tm_hour tm.tm_min tm.tm_sec
 
   let fetch_with_cache url =
-    let kind = "Source.fetch" in
     let cache_name = Filename.concat Xdg.cache_dir (Base64.encode_string url) in
     let ifnt =
       if not @@ Sys.file_exists cache_name then [] else
       let mtime = Unix.((stat cache_name).st_mtime) in
       let mtime_str = http_strftime mtime in
-      [%trace 2 ~kind
+      [%trace 2
           "@[<v2>Found cache of: %s@,at: %s@,last modified: %s@]"
           url cache_name mtime_str] ;
       ["If-Modified-Since: " ^ mtime_str]
@@ -99,13 +98,13 @@ open struct
             let ch = Stdlib.open_out_bin cache_name in
             Buffer.output_buffer ch response_body ;
             Stdlib.close_out ch ;
-            [%trace 2 ~kind
+            [%trace 2
                 "@[<v2>Cached: %s@,at: %s@,on: %s@]"
                 url cache_name
                 (http_strftime Unix.((stat cache_name).st_mtime))] ;
             Result.ok cache_name
           end else if code = 304 then begin
-            [%trace 2 ~kind "Cached version is newer (HTTP 304)"] ;
+            [%trace 2 "Cached version is newer (HTTP 304)"] ;
             Result.ok cache_name
           end else begin
             Result.error @@ Printf.sprintf "Unexpected HTTP %d" code
@@ -145,7 +144,7 @@ open struct
       match fetch_with_cache source with
       | Result.Ok file -> file
       | Result.Error msg ->
-          [%trace 2 ~kind:"Source.open_url" "CURL Failure: %s" msg] ;
+          [%trace 2 "CURL Failure: %s" msg] ;
           failwithf "Opening URL: %s" source
     in
     let* stat = wrap Unix.stat cache_file in
@@ -173,13 +172,12 @@ open struct
     return { cid = strs.(1) }
 
   let open_ipfs source =
-    let kind = "Source.open_ipfs" in
     let open Result in
     let* { cid } = ipfs_fields source in
     let cache_name = Filename.concat Xdg.cache_dir cid in
     let cmd = Printf.sprintf "ipfs get --timeout=10s --progress=false --output %s %s >/dev/null 2>&1"
         cache_name cid in
-    [%trace 2 ~kind "Running: %s" cmd] ;
+    [%trace 2 "Running: %s" cmd] ;
     if Sys.command cmd <> 0 then failwithf "Running ipfs" ;
     let* stat = wrap Unix.stat cache_name in
     let module Src = struct
@@ -199,16 +197,15 @@ end
 
 let read source =
   let rec spin ops =
-    let kind = "Source.read.spin" in
     match ops with
     | [] ->
-        [%trace 5 ~kind "No more openers"] ;
+        (* [%trace 5 "No more openers"] ; *)
         failwithf "Opening: %s" source
-    | (op_name, op_fn) :: ops ->
+    | (_op_name, op_fn) :: ops ->
         match op_fn source with
         | Ok s -> s
-        | Error exn ->
-            [%trace 10 ~kind "%s: %s" op_name (Printexc.to_string exn)] ;
+        | Error _exn ->
+            (* [%trace 10 "%s: %s" op_name (Printexc.to_string exn)] ; *)
             (spin[@tailrec]) ops
   in
   spin openers

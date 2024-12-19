@@ -1070,11 +1070,8 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       end
 
   and metaterm_aux n hyps goal ts ~sc ~witness =
-    let kind = "metaterm_aux" in
-    [%trace 2 ~kind
-        "n:%d@ witness:%s@ goal:%s" n
-        (witness_to_string witness)
-        (metaterm_to_string goal)] ;
+    [%trace 2 "n:%d@ witness:%s@ goal:%s"
+        n (witness_to_string witness) (metaterm_to_string goal)] ;
     let goal = normalize goal in
     let () =
       hyps |>
