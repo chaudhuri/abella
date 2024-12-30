@@ -38,7 +38,7 @@ exception UnifyFailure of unify_failure
 type unify_error =
   | NotLLambda
   | InstGenericTyvar of string * ty
-  | InvalidSealing
+  | InvalidCondition
 
 val explain_error : unify_error -> string
 
@@ -52,10 +52,14 @@ val try_with_state : fail:'a -> (unit -> 'a) -> 'a
 val try_right_unify : ?used:(id * term) list -> term -> term -> bool
 val try_left_unify : ?used:(id * term) list -> term -> term -> bool
 
+type condition =
+  | Sealeq of { eq : term ; left : term ; right : term }
+  | Funsym of { var : term ; rel : term }
+
 module Res : sig
   type t = {
     cpairs : (term * term) list ;
-    equivs : term list ;
+    conditions : condition list ;
   }
   val empty : t
   val join : t -> t -> t

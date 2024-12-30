@@ -70,7 +70,7 @@ let fail f = raise (UnifyFailure f)
 type unify_error =
   | NotLLambda
   | InstGenericTyvar of string * ty
-  | InvalidSealing
+  | InvalidCondition
 
 let explain_error = function
   | NotLLambda -> "Unification incompleteness (non-pattern unification problem)"
@@ -79,9 +79,13 @@ let explain_error = function
         "Unification incompleteness (generic type variable %s cannot be \
          instantiated, instead it is being instantiated to %s)"
         v (ty_to_string ty)
-  | InvalidSealing -> Printf.sprintf "Sealed types issue"
+  | InvalidCondition -> Printf.sprintf "Side condition issue"
 
 exception UnifyError of unify_error
+
+type condition =
+  | Sealeq of { eq : term ; left : term ; right : term }
+  | Funsym of { var : term ; rel : term }
 
 (* Explicit handlers is specified for how to deal with
    unresolvable unification problems *)
@@ -89,8 +93,7 @@ module type Param = sig
   val instantiatable : tag
   val constant_like : tag
   val handle_nonpattern : term -> term -> unit
-  val support_sealed_terms : bool
-  val handle_seal : term -> unit
+  val handle_condition : condition -> unit
 end
 
 module Make (P : Param) = struct
@@ -679,35 +682,36 @@ module Make (P : Param) = struct
     unify (List.rev_app tys1 tyctx) t1
       (hnorm (app (lift t2 n) (lift_args [] n)))
 
-  (** The main unification procedure. * Either succeeds and realizes the
-      unification substitutions as side effects * or raises an exception to
-      indicate nonunifiability or to signal * a case outside of the LLambda
-      subset. When an exception is raised, * it is necessary to catch this and
-      at least undo bindings for * variables made in the attempt to unify. This
-      has not been included * in the code at present. * * This procedure assumes
-      that the two terms it gets are in * head normal form and that there are no
-      iterated * lambdas or applications at the top level. Any necessary
-      adjustment * of binders through the eta rule is done on the fly. *)
+  (** The main unification procedure.
+   * Either succeeds and realizes the unification substitutions as side effects
+   * or raises an exception to indicate nonunifiability or to signal
+   * a case outside of the LLambda subset. When an exception is raised,
+   * it is necessary to catch this and at least undo bindings for
+   * variables made in the attempt to unify. This has not been included
+   * in the code at present.
+   *
+   * This procedure assumes that the two terms it gets are in
+   * head normal form and that there are no iterated
+   * lambdas or applications at the top level. Any necessary adjustment
+   * of binders through the eta rule is done on the fly. *)
   and unify tyctx t1 t2 =
     let[@ocaml.warning "-26"] v, kind = (2, "unify") in
     let ty1 = tc tyctx t1 in
-    match if support_sealed_terms then get_seal_opt ty1 else None with
+    match get_seal_opt ty1 with
     | Some (tyc_seal, ty_carrier, eqv) -> (
         match (observe (hnorm t1), observe (hnorm t2)) with
         | App (h1, [ t1 ]), App (h2, [ t2 ]) -> (
             match (observe (hnorm h1), observe (hnorm h2)) with
             | Var k1, Var k2
-              when constant k1.tag && constant k2.tag && k1.name = tyc_seal
-                   && k2.name = tyc_seal ->
+              when constant k1.tag && k1.name = tyc_seal &&
+                   constant k2.tag && k2.name = tyc_seal ->
                 let ty = tc tyctx t1 in
-                let seal_term =
-                  app (const eqv (tyarrow [ ty; ty ] propty)) [ t1; t2 ]
+                let condition =
+                  Sealeq { eq = const eqv (tyarrow [ty ; ty] propty) ;
+                           left = t1 ;
+                           right = t2 }
                 in
-                (* Output.trace ~v begin fun (module Trace) -> *)
-                (*   Trace.printf ~kind "Generated equivalence for %s: %s" *)
-                (*     tyc_seal (term_to_string ~cx:tyctx seal_term) *)
-                (* end ; *)
-                handle_seal seal_term
+                handle_condition condition
             | _ -> fail Generic)
         | Var vr, t2 ->
             if not @@ variable vr.tag then fail Generic;
@@ -715,14 +719,6 @@ module Make (P : Param) = struct
             let seal =
               app (const tyc_seal (tyarrow [ ty_carrier ] ty1)) [ nv ]
             in
-            (* Output.trace ~v begin fun (module Trace) -> *)
-            (*   Trace.printf ~kind "[ltr] %s : %s <- %s : %s" *)
-            (*     (term_to_string ~cx:tyctx t1) *)
-            (*     (ty_to_string (tc tyctx t1)) *)
-            (*     (term_to_string ~cx:tyctx seal) *)
-            (*     (ty_to_string (tc tyctx seal)) ; *)
-            (*   Trace.printf "other term: %s" (term_to_string ~cx:tyctx t2) ; *)
-            (* end ; *)
             bind t1 seal;
             unify tyctx seal t2
         | t1, Var vr ->
@@ -731,12 +727,6 @@ module Make (P : Param) = struct
             let seal =
               app (const tyc_seal (tyarrow [ ty_carrier ] ty1)) [ nv ]
             in
-            (* Output.trace ~v begin fun (module Trace) -> *)
-            (*   Trace.printf ~kind "[rtl] %s <- %s" *)
-            (*     (term_to_string ~cx:tyctx t2) *)
-            (*     (term_to_string ~cx:tyctx seal) ; *)
-            (*   Trace.printf "other term: %s" (term_to_string ~cx:tyctx t1) ; *)
-            (* end ; *)
             bind t2 seal;
             unify tyctx t1 seal
         | _ -> fail Generic)
@@ -855,69 +845,68 @@ module Make (P : Param) = struct
 end
 
 module Res = struct
-  type t = { cpairs : (term * term) list; equivs : term list }
+  type t = { cpairs : (term * term) list;
+             conditions : condition list }
 
-  let empty = { cpairs = []; equivs = [] }
+  let empty = { cpairs = []; conditions = [] }
 
   let join res1 res2 =
-    { cpairs = res1.cpairs @ res2.cpairs; equivs = res1.equivs @ res2.equivs }
+    { cpairs = res1.cpairs @ res2.cpairs ;
+      conditions = res1.conditions @ res2.conditions }
 end
 
-let[@ocaml.warning "-32-27-26-39"] _try_left_unify_cpairs ~used t1 t2 =
+let try_left_unify_cpairs ~used t1 t2 =
   let original_state = get_scoped_bind_state () in
   let module Params = struct
     let instantiatable = Eigen
     let constant_like = Logic
     let cpairs : (term * term) list ref = ref []
     let handle_nonpattern t1 t2 = cpairs := (t1, t2) :: !cpairs
-    let equivs : term list ref = ref []
-    let handle_seal eqv = equivs := eqv :: !equivs
-    let support_sealed_terms = true
+    let conditions : condition list ref = ref []
+    let handle_condition con = conditions := con :: !conditions
   end in
   let module Engine = Make (Params) in
   let rec spin wait active =
     match active with
-    | [] -> Some Res.{ cpairs = wait; equivs = !Params.equivs }
+    | [] -> Some Res.{ cpairs = wait; conditions = !Params.conditions }
     | (t1, t2) :: active -> begin
         let state = get_scoped_bind_state () in
-        let old_cpairs, old_equivs = !Params.cpairs, !Params.equivs in
+        let old_cpairs, old_conditions = !Params.cpairs, !Params.conditions in
         try
           Engine.pattern_unify ~used t1 t2 ;
           spin !Params.cpairs @@ List.rev_append wait active
         with UnifyError NotLLambda ->
           set_scoped_bind_state state ;
           Params.cpairs := old_cpairs ;
-          Params.equivs := old_equivs ;
+          Params.conditions := old_conditions ;
           spin ((t1, t2) :: wait) active
       end
   in
-  try spin [] [ (t1, t2) ]
-  with exn ->
-    set_scoped_bind_state original_state;
-    let () =
-      match exn with
-      | UnifyError NotLLambda -> [%bug] "left-unify raised NotLLambda"
-      | _ -> ()
-    in
-    None
+  try spin [] [ (t1, t2) ] with
+  | UnifyError NotLLambda ->
+      [%trace 3 "left_unify failure:@ %s@ %s"
+          (term_to_string t1)
+          (term_to_string t2)] ;
+      [%bug] "left-unify raised NotLLambda"
+  | _ ->
+      set_scoped_bind_state original_state;
+      None
 
 let handle_nonpattern_std _t1 _t2 = raise (UnifyError NotLLambda)
-let handle_seal_std _t = raise (UnifyError InvalidSealing)
+let handle_condition_std _t = raise (UnifyError InvalidCondition)
 
 module Right = Make (struct
   let instantiatable = Logic
   let constant_like = Eigen
   let handle_nonpattern = handle_nonpattern_std
-  let support_sealed_terms = false
-  let handle_seal = handle_seal_std
+  let handle_condition = handle_condition_std
 end)
 
 module Left = Make (struct
   let instantiatable = Eigen
   let constant_like = Logic
   let handle_nonpattern = handle_nonpattern_std
-  let support_sealed_terms = false
-  let handle_seal = handle_seal_std
+  let handle_condition = handle_condition_std
 end)
 
 let right_unify ?(used = []) t1 t2 = Right.pattern_unify ~used t1 t2
@@ -940,22 +929,21 @@ let try_left_unify ?(used = []) t1 t2 =
       left_unify ~used t1 t2;
       true)
 
-let try_left_unify_cpairs ~used t1 t2 =
+let _try_left_unify_cpairs ~used t1 t2 =
   let state = get_scoped_bind_state () in
   let cpairs = ref [] in
   let cpairs_handler x y = cpairs := (x, y) :: !cpairs in
-  let eqvs = ref [] in
-  let seal_handler eqv = eqvs := eqv :: !eqvs in
+  let conditions = ref [] in
+  let condition_handler cond = conditions := cond :: !conditions in
   let module LeftCpairs = Make (struct
     let instantiatable = Eigen
     let constant_like = Logic
     let handle_nonpattern = cpairs_handler
-    let support_sealed_terms = true
-    let handle_seal = seal_handler
+    let handle_condition = condition_handler
   end) in
   try
     LeftCpairs.pattern_unify ~used t1 t2;
-    Some Res.{ cpairs = !cpairs; equivs = !eqvs }
+    Some Res.{ cpairs = !cpairs; conditions = !conditions }
   with
   | UnifyFailure _ ->
       set_scoped_bind_state state;
@@ -969,22 +957,21 @@ let try_left_unify_cpairs ~used t1 t2 =
       | InstGenericTyvar (v, ty) ->
           let msg = msg ^ Unifyty.inst_gen_tyvar_msg v ty in
           failwith msg
-      | InvalidSealing -> [%bug] "Sealed types error")
+      | InvalidCondition -> [%bug] "Sealed types error")
 
 let try_right_unify_cpairs t1 t2 =
   try_with_state ~fail:None (fun () ->
       let cpairs = ref [] in
       let cpairs_handler x y = cpairs := (x, y) :: !cpairs in
-      let eqvs = ref [] in
-      let seal_handler eqv = eqvs := eqv :: !eqvs in
+      let conditions = ref [] in
+      let condition_handler cond = conditions := cond :: !conditions in
       let module RightCpairs = Make (struct
         let instantiatable = Logic
         let constant_like = Eigen
         let handle_nonpattern = cpairs_handler
-        let support_sealed_terms = true
-        let handle_seal = seal_handler
+        let handle_condition = condition_handler
       end) in
       RightCpairs.pattern_unify ~used:[] t1 t2;
-      Some Res.{ cpairs = !cpairs; equivs = !eqvs })
+      Some Res.{ cpairs = !cpairs; conditions = !conditions })
 
 let left_flexible_heads = Left.flexible_heads

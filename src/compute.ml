@@ -209,15 +209,6 @@ let compute ?name ?(gas = 1_000) hs wrt =
     | h :: todo ->
         compute_one ~branch ~chs ~wait ~todo h
   and compute_one ~branch ~chs ~wait ~todo (ch : compute_hyp) =
-    (* Output.trace ~v begin fun (module Trace) -> *)
-    (*   Trace.printf ~kind *)
-    (*     "BRANCH_START [%s] chs:[%s] wait:[%s] todo:[%s] %s" *)
-    (*     (branch_to_string branch) *)
-    (*     (List.map ch_to_string chs |> String.concat ",") *)
-    (*     (List.map cw_to_string wait |> String.concat ",") *)
-    (*     (List.map ch_to_string todo |> String.concat ",") *)
-    (*     (ch_to_string ch) *)
-    (* end ; *)
     let suspend () = compute_all ~branch ~chs ~wait:(get_wait ch.clr ch.form :: wait) ~todo in
     let doit () = compute_case ~branch ~chs ~wait ~todo ch in
     match ch.form with

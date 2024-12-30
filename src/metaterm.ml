@@ -597,75 +597,45 @@ let get_metaterm_used_nominals t =
 let replace_metaterm_vars alist t =
   let term_aux alist = replace_term_vars alist in
   (* Compute (possibly) free variables at the top-level *)
-  let top_free_vars = List.unique ~cmp:eq_idterm (get_metaterm_used t
-                                   @ get_metaterm_used_nominals t
-                                   @ find_free_constants t)
+  let top_free_vars = List.unique ~cmp:eq_idterm
+      (get_metaterm_used t
+       @ get_metaterm_used_nominals t
+       @ find_free_constants t)
   in
   (* Get the (possiblely) free variables that are not substituted for *)
   let top_free_unchanged_vars =
     List.remove_assocs (List.map fst alist) top_free_vars in
   let rec aux fuvars alist t =
     match t with
-      | True | False -> t
-      | Eq(a, b) -> Eq(term_aux alist a, term_aux alist b)
-      | Obj(obj, r) -> Obj(map_obj (term_aux alist) obj, r)
-      | Arrow(a, b) -> Arrow(aux fuvars alist a, aux fuvars alist b)
-      | Binding(binder, bindings, body) ->
-         let (fuvars, alist, rev_bindings) =
-           List.fold_left
-             begin fun (fuvars, alist, rev_bnds) (id,ty) ->
-             (* Remove the binding variable from the lists for free variables *)
-             let alist = List.remove_assocs [id] alist in
-             let fuvars = List.remove_assocs [id] fuvars in
-             (* Check if the binding variable captures some free variable introduced by substitution *)
-             let new_fvars = get_used (List.map snd alist) in
-             if List.mem_assoc id new_fvars then begin
-                 (* If so, rename the current binding to avoid capturing free variables *)
-                 let all_fvars = fuvars @ new_fvars in
-                 let (bv, _) = fresh_wrt ~ts:0 Constant id ty all_fvars in
-                 (fuvars, (id, bv)::alist, (term_to_name bv, ty)::rev_bnds)
-               end
-             else
-               (* If not, keep the binding unchanged *)
-               ((term_to_pair (var Constant id 0 ty))::fuvars, alist, (id,ty)::rev_bnds)
-             end (fuvars, alist, []) bindings
-         in
-         Binding(binder, (List.rev rev_bindings),
-                 (aux fuvars alist body))
-      | Or(a, b) -> Or(aux fuvars alist a, aux fuvars alist b)
-      | And(a, b) -> And(aux fuvars alist a, aux fuvars alist b)
-      | Pred(p, r) -> Pred(term_aux alist p, r)
+    | True | False -> t
+    | Eq(a, b) -> Eq(term_aux alist a, term_aux alist b)
+    | Obj(obj, r) -> Obj(map_obj (term_aux alist) obj, r)
+    | Arrow(a, b) -> Arrow(aux fuvars alist a, aux fuvars alist b)
+    | Binding(binder, bindings, body) ->
+        let (fuvars, alist, rev_bindings) =
+          List.fold_left begin fun (fuvars, alist, rev_bnds) (id,ty) ->
+            (* Remove the binding variable from the lists for free variables *)
+            let alist = List.remove_assocs [id] alist in
+            let fuvars = List.remove_assocs [id] fuvars in
+            (* Check if the binding variable captures some free variable introduced by substitution *)
+            let new_fvars = get_used (List.map snd alist) in
+            if List.mem_assoc id new_fvars then begin
+              (* If so, rename the current binding to avoid capturing free variables *)
+              let all_fvars = fuvars @ new_fvars in
+              let (bv, _) = fresh_wrt ~ts:0 Constant id ty all_fvars in
+              (fuvars, (id, bv)::alist, (term_to_name bv, ty)::rev_bnds)
+            end else
+              (* If not, keep the binding unchanged *)
+              ((term_to_pair (var Constant id 0 ty))::fuvars, alist, (id,ty)::rev_bnds)
+          end (fuvars, alist, []) bindings
+        in
+        Binding(binder, (List.rev rev_bindings),
+                (aux fuvars alist body))
+    | Or(a, b) -> Or(aux fuvars alist a, aux fuvars alist b)
+    | And(a, b) -> And(aux fuvars alist a, aux fuvars alist b)
+    | Pred(p, r) -> Pred(term_aux alist p, r)
   in
-    aux top_free_unchanged_vars alist t
-
-(* let rec replace_metaterm_vars alist t = *)
-(*   let top_used = get_metaterm_used t *)
-(*                  @ get_metaterm_used_nominals t *)
-(*                  @ find_free_constants t *)
-(*   in *)
-(*   let term_aux alist = replace_term_vars alist in *)
-(*   let rec aux alist t = *)
-(*     match t with *)
-(*       | True | False -> t *)
-(*       | Eq(a, b) -> Eq(term_aux alist a, term_aux alist b) *)
-(*       | Obj(obj, r) -> Obj(map_obj (term_aux alist) obj, r) *)
-(*       | Arrow(a, b) -> Arrow(aux alist a, aux alist b) *)
-(*       | Binding(binder, bindings, body) -> *)
-(*           let alist = List.remove_assocs (List.map fst bindings) alist in *)
-(*           let used = (get_used (List.map snd alist)) @ top_used in *)
-(*           let bindings_alist = fresh_alist ~tag:Constant ~used bindings in *)
-(*           let bindings' = *)
-(*             List.map (fun (_, t) -> let v = term_to_var t in (v.name, v.ty)) *)
-(*               bindings_alist *)
-(*           in *)
-(*             Binding(binder, *)
-(*                     bindings', *)
-(*                     aux (alist @ bindings_alist) body) *)
-(*       | Or(a, b) -> Or(aux alist a, aux alist b) *)
-(*       | And(a, b) -> And(aux alist a, aux alist b) *)
-(*       | Pred(p, r) -> Pred(term_aux alist p, r) *)
-(*   in *)
-(*     aux alist t *)
+  aux top_free_unchanged_vars alist t
 
 let map_term_list f t = List.map f (collect_terms t)
 
@@ -883,7 +853,7 @@ let try_meta_right_unify t1 t2 =
 (* Try to unify t1 and t2 under permutations of nominal constants.
    For each successful unification, call sc.
    t1 may contain logic variables, t2 is ground                    *)
-let all_meta_right_permute_unify ~sc ~eqv t1 t2 =
+let all_meta_right_permute_unify ~sc ~condc t1 t2 =
   let support_t1 = metaterm_support t1 in
   let support_t2 = metaterm_support t2 in
   if List.length support_t1 < List.length support_t2 then
@@ -900,15 +870,15 @@ let all_meta_right_permute_unify ~sc ~eqv t1 t2 =
   |> List.iter @@ unwind_state begin fun perm_support_t1 ->
     let alist = List.combine support_t2_names perm_support_t1 in
     match try_meta_right_unify t1 (replace_metaterm_vars alist t2) with
-    | Some Res.{ cpairs = [] ; equivs } ->
-        let rec handle_equivs equivs k =
-          match equivs with
+    | Some Res.{ cpairs = [] ; conditions } ->
+        let rec handle_conditions conditions k =
+          match conditions with
           | [] -> k []
-          | f :: equivs ->
-              eqv f
-                ~sc:(fun w -> handle_equivs equivs (fun ws -> k (w :: ws)))
+          | cond :: conditions ->
+              condc cond
+                ~sc:(fun w -> handle_conditions conditions (fun ws -> k (w :: ws)))
         in
-        handle_equivs equivs sc
+        handle_conditions conditions sc
     | _ -> ()
   end ;;
 
