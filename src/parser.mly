@@ -129,6 +129,7 @@
 %token SPLIT SPLITSTAR UNFOLD ALL KEEP CLEAR SPECIFICATION SEMICOLON
 %token THEOREM DEFINE PLUS CODEFINE SET ABBREV UNABBREV QUERY SHOW SUSPEND
 %token PERMUTE BACKCHAIN COMPUTE QUIT UNDERSCORE AS SSPLIT RENAME
+%token LJEQ
 %token BACK RESET SATURATE
 %token COLON RARROW FORALL NABLA EXISTS WITNESS STAR AT HASH OR AND CARET
 %token LBRACE RBRACE LBRACK RBRACK
@@ -514,6 +515,8 @@ pure_command:
     { Types.Search(`witness wit) }
   | ht=hhint; SATURATE; depth=maybe_depth; lemmas=option(hyp_list); DOT
     { Types.Saturate { depth ; lemmas ; hint = ht } }
+  | LJEQ; oracle=QSTRING; DOT
+    { Types.Ljeq oracle }
   | SPLIT; DOT
     { Types.Split }
   | SPLITSTAR; DOT

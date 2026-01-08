@@ -655,6 +655,7 @@ and process_proof1 proc =
         Prover.search ?depth ~witness ~handle_witness:handle_search_witness ()
       end
     | Saturate sat           -> Prover.saturate ?use:sat.lemmas ?name:sat.hint ?depth:sat.depth ()
+    | Ljeq s                 -> Prover.ljeq s 0
     | Permute(ids, h)        -> Prover.permute_nominals ids h
     | Split                  -> Prover.split false
     | SplitStar              -> Prover.split true

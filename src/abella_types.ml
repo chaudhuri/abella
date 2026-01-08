@@ -175,6 +175,7 @@ type command =
   | Rename       of id * id
   | Permute      of id list * id option
   | Search       of [`nobounds | `depth of depth_bound | `witness of witness]
+  | Ljeq         of string
   | Split
   | SplitStar
   | Left
@@ -396,6 +397,8 @@ let command_to_string c =
     | SearchCut(h, hn) ->
         sprintf "%s cut %s" (hn_to_string hn)
           (clearable_to_string h)
+    | Ljeq s ->
+        sprintf "ljeq %S" s
     | Inst(h, ws, hn) ->
         sprintf "%s inst %s with %s" (hn_to_string hn)
           (clearable_to_string h)

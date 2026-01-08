@@ -64,6 +64,7 @@
     "keep",          KEEP ;
     "kind",          KIND ;
     "left",          LEFT ;
+    "ljeq",          LJEQ ;
     "module",        MODULE ;
     "monotone",      MONOTONE ;
     "nabla",         NABLA ;

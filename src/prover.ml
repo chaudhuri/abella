@@ -1596,3 +1596,8 @@ let clear_duplicates () =
   in
   List.iter scan sequent.hyps ;
   sequent.hyps <- List.rev !new_hyps
+
+(* Ljeq *)
+
+let ljeq _oracle _pos =
+  [%bug] "ljeq not implemented"
