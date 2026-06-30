@@ -32,6 +32,7 @@ Bugfixes
   Miller @thatdalemiller)  
   ***SOUNDNESS BUG***
 * `Import ... with` performs the replacements simultaneously. (#153)
+* Abella now compiles with OCaml 5.5 (#166)
 
 
 Changes in 2.0.8 from 2.0.7
