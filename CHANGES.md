@@ -33,6 +33,8 @@ Bugfixes
   ***SOUNDNESS BUG***
 * `Import ... with` performs the replacements simultaneously. (#153)
 * Abella now compiles with OCaml 5.5 (#166)
+* Bound variable clash should be a unification error instead of failure
+  (#168, identified and fixed by Matteo Manighetti @manmatteo)
 
 
 Changes in 2.0.8 from 2.0.7
