@@ -1,8 +1,6 @@
 /* @import "@fancyapps/ui/dist/fancybox/fancybox.css"; */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 #logobox {
     @apply w-11/12 mx-auto mb-2;
