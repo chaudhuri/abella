@@ -71,6 +71,7 @@ sig
   val instantiatable : tag
   val constant_like  : tag
   val handler : term -> term -> unit
+  val label : string
 end
 
 module Make (P:Param) =
@@ -792,8 +793,32 @@ and unify tyctx t1 t2 =
           handler (lambda tys t1) (lambda tys t2)
 
 let pattern_unify ~used t1 t2 =
-  local_used := used ;
-  unify [] (hnorm t1) (hnorm t2)
+  if not log_unifications then begin
+    local_used := used ;
+    unify [] (hnorm t1) (hnorm t2)
+  end else begin
+    let prob_left  = term_to_string t1 in
+    let prob_right = term_to_string t2 in
+    let used_strs =
+      List.map (fun (id, t) -> Unilog.{ name = id ; term = term_to_string t }) used in
+    let before = get_scoped_bind_state () in
+    let emit outcome =
+      Unilog.add Unilog.{ kind = label ; left = prob_left ; right = prob_right ;
+                          used = used_strs ; outcome }
+    in
+    local_used := used ;
+    try
+      unify [] (hnorm t1) (hnorm t2) ;
+      let sol = List.map (fun (v, b) ->
+          Unilog.{ name = term_to_string v ; term = term_to_string b })
+          (get_bindings_since before) in
+      emit (Unilog.Success sol)
+    with
+    | UnifyFailure fl -> emit (Unilog.Failure (explain_failure fl)) ;
+                         raise (UnifyFailure fl)
+    | UnifyError er   -> emit (Unilog.Failure (explain_error er)) ;
+                         raise (UnifyError er)
+  end
 
 (* Given Lam(tys1, App(h1, a1)) and Lam(tys2, App(h2, a2))
    where h1 is flexible, h2 is rigid, and len(tys1) <= len(tys2),
@@ -879,6 +904,7 @@ module Right =
           let instantiatable = Logic
           let constant_like = Eigen
           let handler = standard_handler
+          let label = "right"
         end)
 
 module Left =
@@ -886,6 +912,7 @@ module Left =
           let instantiatable = Eigen
           let constant_like = Logic
           let handler = standard_handler
+          let label = "left"
         end)
 
 let right_unify ?used:(used=[]) t1 t2 =
@@ -922,6 +949,7 @@ let try_left_unify_cpairs ~used t1 t2 =
             let instantiatable = Eigen
             let constant_like = Logic
             let handler = cpairs_handler
+            let label = "left-cpairs"
           end)
   in
     try
@@ -948,6 +976,7 @@ let try_right_unify_cpairs t1 t2 =
                  let instantiatable = Logic
                  let constant_like = Eigen
                  let handler = cpairs_handler
+                 let label = "right-cpairs"
                end)
        in
          RightCpairs.pattern_unify ~used:[] t1 t2 ;

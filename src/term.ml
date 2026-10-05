@@ -24,6 +24,9 @@ let show_tag = false
 let show_ty  = false
 let show_ts  = false
 
+(* Compile-time switch: recompile after changing. *)
+let log_unifications = false
+
 open Extensions
 
 type id = string
@@ -333,6 +336,15 @@ let unwind_state f x =
   let result = f x in
   set_scoped_bind_state state ;
   result
+
+(* Pairs of (variable, bound term), newest first. *)
+let get_bindings_since (nvar, _) =
+  let k = List.length !bind_state_var - nvar in
+  List.take k !bind_state_var
+  |> List.map (fun (_, old, bound) ->
+       match old with
+       | V v -> (Var v, bound)
+       | T t -> (t, bound))
 
 (* Recursively raise dB indices and abstract over variables
  * selected by [test]. Indices unprotected by abstractions
