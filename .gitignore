@@ -22,5 +22,6 @@ abella
 _build
 /abella.install
 smoke/
+bad/
 bad-examples/
 dev-examples/
