@@ -1,6 +1,10 @@
 open Extensions
 
+module Cbor = CBOR.Simple
+
 module Immut = struct
+  exception CborError of string
+
   type ty = Ty of ty list * aty
 
   and aty =
@@ -31,6 +35,14 @@ module Immut = struct
   let of_tyctx (ctx : Term.tyctx) : tyctx =
     List.map (fun (id, ty) -> (id, of_ty ty)) ctx
 
+  let rec to_ty (Ty (args, aty)) : Term.ty =
+    Term.Ty (List.map to_ty args, to_aty aty)
+
+  and to_aty (aty : aty) : Term.aty =
+    match aty with
+    | Tyvar v -> Term.Tygenvar v
+    | Tycons (c, args) -> Term.Tycons (c, List.map to_ty args)
+
   let rec of_tm (tm : Term.term) : tm =
     match Term.observe (Term.hnorm tm) with
     | Term.Var v -> Var v
@@ -46,44 +58,118 @@ module Immut = struct
     | Term.Logic -> "logic"
     | Term.Nominal -> "nominal"
 
-  let rec ty_to_yojson (Ty (args, aty)) : Json.t =
-    `Assoc [
-      "args", `List (List.map ty_to_yojson args) ;
-      "head", aty_to_yojson aty ;
+  let rec ty_to_cbor (Ty (args, aty)) : Cbor.t =
+    `Map [
+      `Text "args", `Array (List.map ty_to_cbor args) ;
+      `Text "head", aty_to_cbor aty ;
     ]
 
-  and aty_to_yojson (aty : aty) : Json.t =
+  and aty_to_cbor (aty : aty) : Cbor.t =
     match aty with
-    | Tyvar v -> `Assoc [ "tyvar", `String v ]
+    | Tyvar v -> `Map [ `Text "tyvar", `Text v ]
     | Tycons (c, args) ->
-        `Assoc [
-          "tycons", `String c ;
-          "args", `List (List.map ty_to_yojson args) ;
+        `Map [
+          `Text "tycons", `Text c ;
+          `Text "args", `Array (List.map ty_to_cbor args) ;
         ]
 
-  let tyctx_to_yojson (ctx : tyctx) : Json.t =
-    `List (List.map (fun (name, ty) ->
-        `Assoc [ "name", `String name ; "ty", ty_to_yojson ty ]) ctx)
+  let tyctx_to_cbor (ctx : tyctx) : Cbor.t =
+    `Array (List.map (fun (name, ty) ->
+        `Map [ `Text "name", `Text name ; `Text "ty", ty_to_cbor ty ]) ctx)
 
-  let rec tm_to_yojson (tm : tm) : Json.t =
+  let rec tm_to_cbor (tm : tm) : Cbor.t =
     match tm with
     | Var v ->
-        `Assoc [ "var", `String v.name ; "tag", `String (tag_to_string v.tag) ]
-    | DB i -> `Assoc [ "db", `Int i ]
+        `Map [
+          `Text "var", `Text v.name ;
+          `Text "tag", `Text (tag_to_string v.tag) ;
+          `Text "ts", `Int v.ts ;
+          `Text "ty", ty_to_cbor (of_ty v.ty) ;
+        ]
+    | DB i -> `Map [ `Text "db", `Int i ]
     | Lam (ctx, body) ->
-        `Assoc [
-          "lam", `Assoc [
-            "ctx", tyctx_to_yojson ctx ;
-            "body", tm_to_yojson body ;
+        `Map [
+          `Text "lam", `Map [
+            `Text "ctx", tyctx_to_cbor ctx ;
+            `Text "body", tm_to_cbor body ;
           ] ;
         ]
     | App (head, args) ->
-        `Assoc [
-          "app", `Assoc [
-            "head", tm_to_yojson head ;
-            "args", `List (List.map tm_to_yojson args) ;
+        `Map [
+          `Text "app", `Map [
+            `Text "head", tm_to_cbor head ;
+            `Text "args", `Array (List.map tm_to_cbor args) ;
           ] ;
         ]
+
+  let cbor_error fmt =
+    Printf.ksprintf (fun msg -> raise (CborError msg)) fmt
+
+  let get_field key = function
+    | `Map fields -> begin
+        match List.assoc_opt (`Text key) fields with
+        | Some cbor -> cbor
+        | None -> cbor_error "missing field %S" key
+      end
+    | _ -> cbor_error "expected a map to read field %S from" key
+
+  let string_of_cbor = function
+    | `Text s -> s
+    | _ -> cbor_error "expected a string"
+
+  let int_of_cbor = function
+    | `Int i -> i
+    | _ -> cbor_error "expected an integer"
+
+  let list_of_cbor f = function
+    | `Array cs -> List.map f cs
+    | _ -> cbor_error "expected an array"
+
+  let tag_of_string = function
+    | "eigen" -> Term.Eigen
+    | "constant" -> Term.Constant
+    | "logic" -> Term.Logic
+    | "nominal" -> Term.Nominal
+    | s -> cbor_error "unknown variable tag %S" s
+
+  let rec ty_of_cbor (cbor : Cbor.t) : ty =
+    Ty (list_of_cbor ty_of_cbor (get_field "args" cbor),
+        aty_of_cbor (get_field "head" cbor))
+
+  and aty_of_cbor (cbor : Cbor.t) : aty =
+    match cbor with
+    | `Map fields when List.mem_assoc (`Text "tyvar") fields ->
+        Tyvar (string_of_cbor (List.assoc (`Text "tyvar") fields))
+    | `Map _ ->
+        Tycons (string_of_cbor (get_field "tycons" cbor),
+                list_of_cbor ty_of_cbor (get_field "args" cbor))
+    | _ -> cbor_error "expected a map for a type"
+
+  let tyctx_of_cbor (cbor : Cbor.t) : tyctx =
+    list_of_cbor (fun entry ->
+        (string_of_cbor (get_field "name" entry), ty_of_cbor (get_field "ty" entry)))
+      cbor
+
+  let rec tm_of_cbor (cbor : Cbor.t) : tm =
+    match cbor with
+    | `Map fields when List.mem_assoc (`Text "var") fields ->
+        let name = string_of_cbor (List.assoc (`Text "var") fields) in
+        let tag = tag_of_string (string_of_cbor (List.assoc (`Text "tag") fields)) in
+        let ts = int_of_cbor (get_field "ts" cbor) in
+        let ty = to_ty (ty_of_cbor (get_field "ty" cbor)) in
+        Var (Term.term_to_var (Term.var tag name ts ty))
+    | `Map fields when List.mem_assoc (`Text "db") fields ->
+        DB (int_of_cbor (List.assoc (`Text "db") fields))
+    | `Map fields when List.mem_assoc (`Text "lam") fields ->
+        let lam = List.assoc (`Text "lam") fields in
+        Lam (tyctx_of_cbor (get_field "ctx" lam),
+             tm_of_cbor (get_field "body" lam))
+    | `Map fields when List.mem_assoc (`Text "app") fields ->
+        let app = List.assoc (`Text "app") fields in
+        App (tm_of_cbor (get_field "head" app),
+             list_of_cbor tm_of_cbor (get_field "args" app))
+    | `Map _ -> cbor_error "unknown term constructor"
+    | _ -> cbor_error "expected a map for a term"
 end
 
 type named_term = { name : string ; term : Immut.tm }
@@ -107,35 +193,36 @@ let set_output filename = outfile := Some filename
 
 let add r = records := r :: !records
 
-let json_of_named_term ~key t =
-  `Assoc [ key, `String t.name ; "term", Immut.tm_to_yojson t.term ]
+let cbor_of_named_term ~key t =
+  `Map [ `Text key, `Text t.name ; `Text "term", Immut.tm_to_cbor t.term ]
 
-let json_of_record r =
+let cbor_of_record r =
   let base = [
-    "kind", `String r.kind ;
-    "problem", `Assoc [
-      "left", Immut.tm_to_yojson r.left ;
-      "right", Immut.tm_to_yojson r.right ;
+    `Text "kind", `Text r.kind ;
+    `Text "problem", `Map [
+      `Text "left", Immut.tm_to_cbor r.left ;
+      `Text "right", Immut.tm_to_cbor r.right ;
     ] ;
-    "used", `List (List.map (json_of_named_term ~key:"name") r.used) ;
+    `Text "used", `Array (List.map (cbor_of_named_term ~key:"name") r.used) ;
   ] in
   let outcome = match r.outcome with
     | Success sol ->
-        [ "result", `String "success" ;
-          "solution", `List (List.map (json_of_named_term ~key:"var") sol) ]
+        [ `Text "result", `Text "success" ;
+          `Text "solution", `Array (List.map (cbor_of_named_term ~key:"var") sol) ]
     | Failure msg ->
-        [ "result", `String "failure" ;
-          "failure", `String msg ;
-          "solution", `List [] ]
+        [ `Text "result", `Text "failure" ;
+          `Text "failure", `Text msg ;
+          `Text "solution", `Array [] ]
   in
-  `Assoc (base @ outcome)
+  `Map (base @ outcome)
 
 let write () =
   match !outfile with
   | None -> ()
   | Some f ->
       let oc = open_out_bin f in
-      Json.to_channel oc (`List (List.rev_map json_of_record !records)) ;
+      let cbor = `Array (List.rev_map cbor_of_record !records) in
+      output_string oc (Cbor.encode cbor) ;
       close_out oc
 
 let () = if Term.log_unifications then at_exit write

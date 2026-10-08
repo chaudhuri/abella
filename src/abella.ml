@@ -815,7 +815,7 @@ let abella_main flags switch output compiled annotate norec _em verb infile =
         Setup.input := Filename.concat (Option.value Thm.dir ~default:"") "<dummy>.thm" ;
         if Term.log_unifications && !Setup.mode = `batch then
           Unilog.set_output
-            (Filename.remove_extension file ^ "_unifications.json")
+            (Filename.remove_extension file ^ "_unifications.cbor")
       end
     | None -> () end ;
     if !Setup.mode = `interactive then
