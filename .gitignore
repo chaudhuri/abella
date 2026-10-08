@@ -25,3 +25,4 @@ smoke/
 bad/
 bad-examples/
 dev-examples/
+examples/**/*.cbor
