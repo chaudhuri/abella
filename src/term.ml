@@ -25,7 +25,7 @@ let show_ty  = false
 let show_ts  = false
 
 (* Compile-time switch: recompile after changing. *)
-let log_unifications = true
+let log_unifications = false
 
 open Extensions
 
