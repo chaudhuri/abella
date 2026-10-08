@@ -797,8 +797,8 @@ let pattern_unify ~used t1 t2 =
     local_used := used ;
     unify [] (hnorm t1) (hnorm t2)
   end else begin
-    let prob_left  = term_to_string t1 in
-    let prob_right = term_to_string t2 in
+    let prob_left  = Unilog.Immut.of_tm t1 in
+    let prob_right = Unilog.Immut.of_tm t2 in
     let used_strs =
       List.map (fun (id, t) -> Unilog.{ name = id ; term = Unilog.Immut.of_tm t }) used in
     let before = get_scoped_bind_state () in
