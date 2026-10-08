@@ -800,7 +800,7 @@ let pattern_unify ~used t1 t2 =
     let prob_left  = term_to_string t1 in
     let prob_right = term_to_string t2 in
     let used_strs =
-      List.map (fun (id, t) -> Unilog.{ name = id ; term = term_to_string t }) used in
+      List.map (fun (id, t) -> Unilog.{ name = id ; term = Unilog.Immut.of_tm t }) used in
     let before = get_scoped_bind_state () in
     let emit outcome =
       Unilog.add Unilog.{ kind = label ; left = prob_left ; right = prob_right ;
@@ -810,7 +810,7 @@ let pattern_unify ~used t1 t2 =
     try
       unify [] (hnorm t1) (hnorm t2) ;
       let sol = List.map (fun (v, b) ->
-          Unilog.{ name = term_to_string v ; term = term_to_string b })
+          Unilog.{ name = term_to_string v ; term = Unilog.Immut.of_tm b })
           (get_bindings_since before) in
       emit (Unilog.Success sol)
     with
