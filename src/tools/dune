@@ -11,3 +11,8 @@
   (modules ppx_abella)
   (libraries ppx_abella_lib ppxlib)
   (preprocess no_preprocessing))
+
+(executable
+  (name cbor_merge)
+  (modules cbor_merge)
+  (libraries cbor))
