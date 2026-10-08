@@ -1,6 +1,44 @@
+(*
+ * Author: Kaustuv Chaudhuri <kaustuv.chaudhuri@inria.fr>
+ * Copyright (C) 2026  Inria (Institut National de Recherche
+ *                     en Informatique et en Automatique)
+ * See LICENSE for licensing details.
+ *)
+
 open Extensions
 
 module Cbor = CBOR.Simple
+
+module Magic = struct
+  let args = 0
+  let head = 1
+  let tyvar = 2
+  let tycons = 3
+  let name = 4
+  let ty = 5
+  let var = 6
+  let tag = 7
+  let ts = 8
+  let db = 9
+  let lam = 10
+  let ctx = 11
+  let body = 12
+  let app = 13
+  let eigen = 14
+  let constant = 15
+  let logic = 16
+  let nominal = 17
+  let kind = 18
+  let problem = 19
+  let left = 20
+  let right = 21
+  let used = 22
+  let result = 23
+  let success = 24
+  let failure = 25
+  let solution = 26
+  let term = 27
+end
 
 module Immut = struct
   exception CborError of string
@@ -52,53 +90,53 @@ module Immut = struct
     | Term.Susp _ -> assert false
     | Term.Ptr _ -> assert false
 
-  let tag_to_string = function
-    | Term.Eigen -> "eigen"
-    | Term.Constant -> "constant"
-    | Term.Logic -> "logic"
-    | Term.Nominal -> "nominal"
+  let tag_to_magic = function
+    | Term.Eigen -> Magic.eigen
+    | Term.Constant -> Magic.constant
+    | Term.Logic -> Magic.logic
+    | Term.Nominal -> Magic.nominal
 
   let rec ty_to_cbor (Ty (args, aty)) : Cbor.t =
     `Map [
-      `Text "args", `Array (List.map ty_to_cbor args) ;
-      `Text "head", aty_to_cbor aty ;
+      `Int Magic.args, `Array (List.map ty_to_cbor args) ;
+      `Int Magic.head, aty_to_cbor aty ;
     ]
 
   and aty_to_cbor (aty : aty) : Cbor.t =
     match aty with
-    | Tyvar v -> `Map [ `Text "tyvar", `Text v ]
+    | Tyvar v -> `Map [ `Int Magic.tyvar, `Text v ]
     | Tycons (c, args) ->
         `Map [
-          `Text "tycons", `Text c ;
-          `Text "args", `Array (List.map ty_to_cbor args) ;
+          `Int Magic.tycons, `Text c ;
+          `Int Magic.args, `Array (List.map ty_to_cbor args) ;
         ]
 
   let tyctx_to_cbor (ctx : tyctx) : Cbor.t =
     `Array (List.map (fun (name, ty) ->
-        `Map [ `Text "name", `Text name ; `Text "ty", ty_to_cbor ty ]) ctx)
+        `Map [ `Int Magic.name, `Text name ; `Int Magic.ty, ty_to_cbor ty ]) ctx)
 
   let rec tm_to_cbor (tm : tm) : Cbor.t =
     match tm with
     | Var v ->
         `Map [
-          `Text "var", `Text v.name ;
-          `Text "tag", `Text (tag_to_string v.tag) ;
-          `Text "ts", `Int v.ts ;
-          `Text "ty", ty_to_cbor (of_ty v.ty) ;
+          `Int Magic.var, `Text v.name ;
+          `Int Magic.tag, `Int (tag_to_magic v.tag) ;
+          `Int Magic.ts, `Int v.ts ;
+          `Int Magic.ty, ty_to_cbor (of_ty v.ty) ;
         ]
-    | DB i -> `Map [ `Text "db", `Int i ]
+    | DB i -> `Map [ `Int Magic.db, `Int i ]
     | Lam (ctx, body) ->
         `Map [
-          `Text "lam", `Map [
-            `Text "ctx", tyctx_to_cbor ctx ;
-            `Text "body", tm_to_cbor body ;
+          `Int Magic.lam, `Map [
+            `Int Magic.ctx, tyctx_to_cbor ctx ;
+            `Int Magic.body, tm_to_cbor body ;
           ] ;
         ]
     | App (head, args) ->
         `Map [
-          `Text "app", `Map [
-            `Text "head", tm_to_cbor head ;
-            `Text "args", `Array (List.map tm_to_cbor args) ;
+          `Int Magic.app, `Map [
+            `Int Magic.head, tm_to_cbor head ;
+            `Int Magic.args, `Array (List.map tm_to_cbor args) ;
           ] ;
         ]
 
@@ -107,11 +145,11 @@ module Immut = struct
 
   let get_field key = function
     | `Map fields -> begin
-        match List.assoc_opt (`Text key) fields with
+        match List.assoc_opt (`Int key) fields with
         | Some cbor -> cbor
-        | None -> cbor_error "missing field %S" key
+        | None -> cbor_error "missing field %d" key
       end
-    | _ -> cbor_error "expected a map to read field %S from" key
+    | _ -> cbor_error "expected a map to read field %d from" key
 
   let string_of_cbor = function
     | `Text s -> s
@@ -125,49 +163,50 @@ module Immut = struct
     | `Array cs -> List.map f cs
     | _ -> cbor_error "expected an array"
 
-  let tag_of_string = function
-    | "eigen" -> Term.Eigen
-    | "constant" -> Term.Constant
-    | "logic" -> Term.Logic
-    | "nominal" -> Term.Nominal
-    | s -> cbor_error "unknown variable tag %S" s
+  let tag_of_magic = function
+    | n when n = Magic.eigen -> Term.Eigen
+    | n when n = Magic.constant -> Term.Constant
+    | n when n = Magic.logic -> Term.Logic
+    | n when n = Magic.nominal -> Term.Nominal
+    | n -> cbor_error "unknown variable tag %d" n
 
   let rec ty_of_cbor (cbor : Cbor.t) : ty =
-    Ty (list_of_cbor ty_of_cbor (get_field "args" cbor),
-        aty_of_cbor (get_field "head" cbor))
+    Ty (list_of_cbor ty_of_cbor (get_field Magic.args cbor),
+        aty_of_cbor (get_field Magic.head cbor))
 
   and aty_of_cbor (cbor : Cbor.t) : aty =
     match cbor with
-    | `Map fields when List.mem_assoc (`Text "tyvar") fields ->
-        Tyvar (string_of_cbor (List.assoc (`Text "tyvar") fields))
+    | `Map fields when List.mem_assoc (`Int Magic.tyvar) fields ->
+        Tyvar (string_of_cbor (List.assoc (`Int Magic.tyvar) fields))
     | `Map _ ->
-        Tycons (string_of_cbor (get_field "tycons" cbor),
-                list_of_cbor ty_of_cbor (get_field "args" cbor))
+        Tycons (string_of_cbor (get_field Magic.tycons cbor),
+                list_of_cbor ty_of_cbor (get_field Magic.args cbor))
     | _ -> cbor_error "expected a map for a type"
 
   let tyctx_of_cbor (cbor : Cbor.t) : tyctx =
     list_of_cbor (fun entry ->
-        (string_of_cbor (get_field "name" entry), ty_of_cbor (get_field "ty" entry)))
+        (string_of_cbor (get_field Magic.name entry),
+         ty_of_cbor (get_field Magic.ty entry)))
       cbor
 
   let rec tm_of_cbor (cbor : Cbor.t) : tm =
     match cbor with
-    | `Map fields when List.mem_assoc (`Text "var") fields ->
-        let name = string_of_cbor (List.assoc (`Text "var") fields) in
-        let tag = tag_of_string (string_of_cbor (List.assoc (`Text "tag") fields)) in
-        let ts = int_of_cbor (get_field "ts" cbor) in
-        let ty = to_ty (ty_of_cbor (get_field "ty" cbor)) in
+    | `Map fields when List.mem_assoc (`Int Magic.var) fields ->
+        let name = string_of_cbor (List.assoc (`Int Magic.var) fields) in
+        let tag = tag_of_magic (int_of_cbor (List.assoc (`Int Magic.tag) fields)) in
+        let ts = int_of_cbor (get_field Magic.ts cbor) in
+        let ty = to_ty (ty_of_cbor (get_field Magic.ty cbor)) in
         Var (Term.term_to_var (Term.var tag name ts ty))
-    | `Map fields when List.mem_assoc (`Text "db") fields ->
-        DB (int_of_cbor (List.assoc (`Text "db") fields))
-    | `Map fields when List.mem_assoc (`Text "lam") fields ->
-        let lam = List.assoc (`Text "lam") fields in
-        Lam (tyctx_of_cbor (get_field "ctx" lam),
-             tm_of_cbor (get_field "body" lam))
-    | `Map fields when List.mem_assoc (`Text "app") fields ->
-        let app = List.assoc (`Text "app") fields in
-        App (tm_of_cbor (get_field "head" app),
-             list_of_cbor tm_of_cbor (get_field "args" app))
+    | `Map fields when List.mem_assoc (`Int Magic.db) fields ->
+        DB (int_of_cbor (List.assoc (`Int Magic.db) fields))
+    | `Map fields when List.mem_assoc (`Int Magic.lam) fields ->
+        let lam = List.assoc (`Int Magic.lam) fields in
+        Lam (tyctx_of_cbor (get_field Magic.ctx lam),
+             tm_of_cbor (get_field Magic.body lam))
+    | `Map fields when List.mem_assoc (`Int Magic.app) fields ->
+        let app = List.assoc (`Int Magic.app) fields in
+        App (tm_of_cbor (get_field Magic.head app),
+             list_of_cbor tm_of_cbor (get_field Magic.args app))
     | `Map _ -> cbor_error "unknown term constructor"
     | _ -> cbor_error "expected a map for a term"
 end
@@ -194,25 +233,25 @@ let set_output filename = outfile := Some filename
 let add r = records := r :: !records
 
 let cbor_of_named_term ~key t =
-  `Map [ `Text key, `Text t.name ; `Text "term", Immut.tm_to_cbor t.term ]
+  `Map [ `Int key, `Text t.name ; `Int Magic.term, Immut.tm_to_cbor t.term ]
 
 let cbor_of_record r =
   let base = [
-    `Text "kind", `Text r.kind ;
-    `Text "problem", `Map [
-      `Text "left", Immut.tm_to_cbor r.left ;
-      `Text "right", Immut.tm_to_cbor r.right ;
+    `Int Magic.kind, `Text r.kind ;
+    `Int Magic.problem, `Map [
+      `Int Magic.left, Immut.tm_to_cbor r.left ;
+      `Int Magic.right, Immut.tm_to_cbor r.right ;
     ] ;
-    `Text "used", `Array (List.map (cbor_of_named_term ~key:"name") r.used) ;
+    `Int Magic.used, `Array (List.map (cbor_of_named_term ~key:Magic.name) r.used) ;
   ] in
   let outcome = match r.outcome with
     | Success sol ->
-        [ `Text "result", `Text "success" ;
-          `Text "solution", `Array (List.map (cbor_of_named_term ~key:"var") sol) ]
+        [ `Int Magic.result, `Int Magic.success ;
+          `Int Magic.solution, `Array (List.map (cbor_of_named_term ~key:Magic.var) sol) ]
     | Failure msg ->
-        [ `Text "result", `Text "failure" ;
-          `Text "failure", `Text msg ;
-          `Text "solution", `Array [] ]
+        [ `Int Magic.result, `Int Magic.failure ;
+          `Int Magic.failure, `Text msg ;
+          `Int Magic.solution, `Array [] ]
   in
   `Map (base @ outcome)
 
