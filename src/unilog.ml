@@ -94,8 +94,8 @@ type outcome =
 
 type record = {
   kind    : string ;
-  left    : string ;
-  right   : string ;
+  left    : Immut.tm ;
+  right   : Immut.tm ;
   used    : named_term list ;
   outcome : outcome ;
 }
@@ -113,7 +113,10 @@ let json_of_named_term ~key t =
 let json_of_record r =
   let base = [
     "kind", `String r.kind ;
-    "problem", `Assoc [ "left", `String r.left ; "right", `String r.right ] ;
+    "problem", `Assoc [
+      "left", Immut.tm_to_yojson r.left ;
+      "right", Immut.tm_to_yojson r.right ;
+    ] ;
     "used", `List (List.map (json_of_named_term ~key:"name") r.used) ;
   ] in
   let outcome = match r.outcome with
