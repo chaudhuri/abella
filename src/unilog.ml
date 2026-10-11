@@ -56,10 +56,16 @@ module Immut = struct
     | Term.Ptr _ -> assert false
 end
 
+type outcome =
+  | Success
+  | Failure
+  | Incomplete
+
 type record = {
-  kind  : string ;
-  left  : Immut.tm ;
-  right : Immut.tm ;
+  kind    : string ;
+  left    : Immut.tm ;
+  right   : Immut.tm ;
+  outcome : outcome ;
 }
 
 let records : record list ref = ref []
@@ -301,8 +307,13 @@ let render_record r =
     used_binders = [] ;
   } in
   let cmd = if r.kind = "right" then "right-unify" else "left-unify" in
-  Printf.sprintf "%s %s = %s."
-    cmd (render rctx r.left) (render rctx r.right)
+  let sep = match r.outcome with
+    | Success -> "=="
+    | Failure -> "!="
+    | Incomplete -> "="
+  in
+  Printf.sprintf "%s %s %s %s."
+    cmd (render rctx r.left) sep (render rctx r.right)
 
 let collect records =
   let consts = ref Term.Iset.empty in

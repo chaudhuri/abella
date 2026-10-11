@@ -794,12 +794,17 @@ and unify tyctx t1 t2 =
           handler (lambda tys t1) (lambda tys t2)
 
 let pattern_unify ~used t1 t2 =
-  Unilog.add Unilog.{
-    kind = label ;
-    left = Unilog.Immut.of_tm t1 ;
-    right = Unilog.Immut.of_tm t2 } ;
+  let left = Unilog.Immut.of_tm t1 in
+  let right = Unilog.Immut.of_tm t2 in
   local_used := used ;
-  unify [] (hnorm t1) (hnorm t2)
+  let record outcome =
+    Unilog.add Unilog.{ kind = label ; left ; right ; outcome } in
+  try
+    unify [] (hnorm t1) (hnorm t2) ;
+    record Unilog.Success
+  with
+  | UnifyFailure fl -> record Unilog.Failure ; raise (UnifyFailure fl)
+  | UnifyError er   -> record Unilog.Incomplete ; raise (UnifyError er)
 
 (* Given Lam(tys1, App(h1, a1)) and Lam(tys2, App(h2, a2))
    where h1 is flexible, h2 is rigid, and len(tys1) <= len(tys2),
