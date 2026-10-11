@@ -833,7 +833,7 @@ let abella_main flags switch output compiled annotate norec _em verb infile =
         Setup.input := Filename.concat (Option.value Thm.dir ~default:"") "<dummy>.thm" ;
         if !Setup.mode = `batch then begin
           Unilog.set_output ~origin:file
-            (Filename.remove_extension file ^ "_unifications.rbl") ;
+            (Filename.remove_extension file ^ ".rbl") ;
           Unilog.set_lookup
             ~tycon:(fun c ->
                 match List.assoc_opt c (fst !sign) with

@@ -25,4 +25,4 @@ smoke/
 bad/
 bad-examples/
 dev-examples/
-examples/**/*_unifications.rbl
+examples/**/*.rbl
