@@ -779,7 +779,8 @@ and process_top1 () =
 
 (* Command line and startup *)
 
-let welcome_msg = sprintf "Welcome to Abella %s.\n" Version.version
+let welcome_msg =
+  sprintf "Welcome to Abella %s (%s).\n" Version.version Version.branch
 
 let set_output filename =
   Output.dest := Channel (open_out_bin filename)
