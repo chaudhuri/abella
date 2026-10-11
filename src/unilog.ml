@@ -17,7 +17,7 @@ module Immut = struct
   type tyctx = (Term.id * ty) list
 
   type tm =
-    | Var of Term.var
+    | Var of Term.var * ty
     | DB of int
     | Lam of tyctx * tm
     | App of tm * tm list
@@ -48,7 +48,7 @@ module Immut = struct
 
   let rec of_tm (tm : Term.term) : tm =
     match Term.observe (Term.hnorm tm) with
-    | Term.Var v -> Var v
+    | Term.Var v -> Var (v, of_ty v.Term.ty)
     | Term.DB i -> DB i
     | Term.Lam (ctx, body) -> Lam (of_tyctx ctx, of_tm body)
     | Term.App (head, args) -> App (of_tm head, List.map of_tm args)
@@ -202,6 +202,8 @@ type rctx = {
   nominals      : (string, int) Hashtbl.t ;
   mutable next_nominal : int ;
   mutable used_binders : string list ;
+  mutable ctx_entries : (string * Immut.ty) list ;
+  ctx_seen            : (string, unit) Hashtbl.t ;
 }
 
 let tag_key tag name =
@@ -247,16 +249,22 @@ let fresh_binder rctx =
 
 let rec render rctx (tm : Immut.tm) : string =
   match tm with
-  | Immut.Var v -> render_var rctx v
+  | Immut.Var (v, ty) -> render_var rctx v ty
   | Immut.DB i -> render_db rctx i
   | Immut.Lam (ctx, body) -> render_lam rctx ctx body
   | Immut.App (head, args) -> render_app rctx head args
 
-and render_var rctx v =
+and render_var rctx v ty =
   match v.Term.tag with
   | Term.Constant -> const_name v.Term.name
-  | Term.Logic -> "?" ^ var_base rctx Term.Logic v.Term.name
-  | Term.Eigen -> "_" ^ var_base rctx Term.Eigen v.Term.name
+  | Term.Logic ->
+      let s = "?" ^ var_base rctx Term.Logic v.Term.name in
+      record_ctx rctx s ty ;
+      s
+  | Term.Eigen ->
+      let s = "_" ^ var_base rctx Term.Eigen v.Term.name in
+      record_ctx rctx s ty ;
+      s
   | Term.Nominal ->
       let n = match Hashtbl.find_opt rctx.nominals v.Term.name with
         | Some n -> n
@@ -266,7 +274,15 @@ and render_var rctx v =
             Hashtbl.add rctx.nominals v.Term.name n ;
             n
       in
-      "#" ^ string_of_int n
+      let s = "#" ^ string_of_int n in
+      record_ctx rctx s ty ;
+      s
+
+and record_ctx rctx name ty =
+  if not (Hashtbl.mem rctx.ctx_seen name) then begin
+    Hashtbl.add rctx.ctx_seen name () ;
+    rctx.ctx_entries <- (name, ty) :: rctx.ctx_entries
+  end
 
 and render_db rctx i =
   match List.nth_opt rctx.binders (i - 1) with
@@ -305,15 +321,25 @@ let render_record r =
     nominals = Hashtbl.create 8 ;
     next_nominal = 0 ;
     used_binders = [] ;
+    ctx_entries = [] ;
+    ctx_seen = Hashtbl.create 8 ;
   } in
+  let left = render rctx r.left in
+  let right = render rctx r.right in
+  let ctx = match List.rev rctx.ctx_entries with
+    | [] -> ""
+    | bindings ->
+        String.concat ", "
+          (List.map (fun (n, ty) -> n ^ " : " ^ render_ty ty) bindings)
+        ^ " |- "
+  in
   let cmd = if r.kind = "right" then "right-unify" else "left-unify" in
   let sep = match r.outcome with
     | Success -> "=="
     | Failure -> "!="
     | Incomplete -> "="
   in
-  Printf.sprintf "%s %s %s %s."
-    cmd (render rctx r.left) sep (render rctx r.right)
+  Printf.sprintf "%s %s%s %s %s." cmd ctx left sep right
 
 let collect records =
   let consts = ref Term.Iset.empty in
@@ -322,13 +348,13 @@ let collect records =
   let arities = Hashtbl.create 32 in
   let const_types = Hashtbl.create 32 in
   let rec walk_tm = function
-    | Immut.Var v ->
+    | Immut.Var (v, ty) ->
         if v.Term.tag = Term.Constant then begin
           consts := Term.Iset.add v.Term.name !consts ;
           if not (Hashtbl.mem const_types v.Term.name) then
-            Hashtbl.add const_types v.Term.name (Immut.of_ty v.Term.ty)
+            Hashtbl.add const_types v.Term.name ty
         end ;
-        walk_ty (Immut.of_ty v.Term.ty)
+        walk_ty ty
     | Immut.DB _ -> ()
     | Immut.Lam (ctx, body) ->
         List.iter (fun (_, ty) -> walk_ty ty) ctx ;
@@ -368,52 +394,57 @@ let const_decl_ty const_types c =
        | Some ty -> ty
        | None -> Immut.Ty ([], Immut.Tycons ("o", [])))
 
+let render_script () =
+  let all = List.rev !records in
+  let records =
+    List.filter (fun r -> r.kind = "right" || r.kind = "left") all in
+  let consts, tycons, tyvars, arities, const_types = collect records in
+  install
+    (build_map ~legal:is_legal_lower ~sanitize:sanitize_lower
+       (Term.Iset.elements consts))
+    const_map ;
+  install
+    (build_map ~legal:is_legal_lower ~sanitize:sanitize_lower
+       (Term.Iset.elements tycons))
+    tycon_map ;
+  install
+    (build_map ~legal:is_legal_upper ~sanitize:sanitize_upper
+       (Term.Iset.elements tyvars))
+    tyvar_map ;
+  Hashtbl.reset const_surface ;
+  Hashtbl.iter (fun _ v -> Hashtbl.replace const_surface v ()) const_map ;
+  let buf = Buffer.create 4096 in
+  Buffer.add_string buf (Printf.sprintf "%% Generated from %s.\n" !origin) ;
+  if records = [] then
+    Buffer.add_string buf "% No unification problems were generated.\n"
+  else begin
+    Buffer.add_string buf
+      (Printf.sprintf "%% %d unification problem(s).\n" (List.length records)) ;
+    List.iter begin fun c ->
+      let arity = tycon_arity arities c in
+      let kind = String.concat " -> " (List.init (arity + 1) (fun _ -> "type")) in
+      Buffer.add_string buf
+        (Printf.sprintf "basic %s : %s.\n" (tycon_name c) kind)
+    end (Term.Iset.elements tycons) ;
+    Buffer.add_char buf '\n' ;
+    List.iter begin fun c ->
+      Buffer.add_string buf
+        (Printf.sprintf "const %s : %s.\n"
+           (const_name c) (render_ty (const_decl_ty const_types c)))
+    end (Term.Iset.elements consts) ;
+    Buffer.add_char buf '\n' ;
+    List.iter (fun r -> Buffer.add_string buf (render_record r ^ "\n")) records
+  end ;
+  Buffer.contents buf
+
 let write () =
   match !outfile with
   | None -> ()
   | Some f ->
-      let all = List.rev !records in
-      let records =
-        List.filter (fun r -> r.kind = "right" || r.kind = "left") all in
-      let consts, tycons, tyvars, arities, const_types = collect records in
-      install
-        (build_map ~legal:is_legal_lower ~sanitize:sanitize_lower
-           (Term.Iset.elements consts))
-        const_map ;
-      install
-        (build_map ~legal:is_legal_lower ~sanitize:sanitize_lower
-           (Term.Iset.elements tycons))
-        tycon_map ;
-      install
-        (build_map ~legal:is_legal_upper ~sanitize:sanitize_upper
-           (Term.Iset.elements tyvars))
-        tyvar_map ;
-      Hashtbl.reset const_surface ;
-      Hashtbl.iter (fun _ v -> Hashtbl.replace const_surface v ()) const_map ;
-      let buf = Buffer.create 4096 in
-      Buffer.add_string buf (Printf.sprintf "%% Generated from %s.\n" !origin) ;
-      if records = [] then
-        Buffer.add_string buf "% No unification problems were generated.\n"
-      else begin
-        Buffer.add_string buf
-          (Printf.sprintf "%% %d unification problem(s).\n" (List.length records)) ;
-        List.iter begin fun c ->
-          let arity = tycon_arity arities c in
-          let kind = String.concat " -> " (List.init (arity + 1) (fun _ -> "type")) in
-          Buffer.add_string buf
-            (Printf.sprintf "basic %s : %s.\n" (tycon_name c) kind)
-        end (Term.Iset.elements tycons) ;
-        Buffer.add_char buf '\n' ;
-        List.iter begin fun c ->
-          Buffer.add_string buf
-            (Printf.sprintf "const %s : %s.\n"
-               (const_name c) (render_ty (const_decl_ty const_types c)))
-        end (Term.Iset.elements consts) ;
-        Buffer.add_char buf '\n' ;
-        List.iter (fun r -> Buffer.add_string buf (render_record r ^ "\n")) records
-      end ;
       let oc = open_out_bin f in
-      output_string oc (Buffer.contents buf) ;
+      output_string oc (render_script ()) ;
       close_out oc
+
+let reset () = records := []
 
 let () = at_exit write
