@@ -4,6 +4,7 @@ open Test_helper
 let tests = "Abella" >:::
   [
     Test_unify.tests ;
+    Test_unilog.tests ;
     Test_term.tests ;
     Test_context.tests ;
     Test_graph.tests ;
