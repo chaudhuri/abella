@@ -813,9 +813,19 @@ let abella_main flags switch output compiled annotate norec _em verb infile =
         Setup.mode := if switch then `switch else `batch ;
         Setup.lexbuf := Thm.lex true ;
         Setup.input := Filename.concat (Option.value Thm.dir ~default:"") "<dummy>.thm" ;
-        if Term.log_unifications && !Setup.mode = `batch then
-          Unilog.set_output
-            (Filename.remove_extension file ^ "_unifications.cbor")
+        if Term.log_unifications && !Setup.mode = `batch then begin
+          Unilog.set_output ~origin:file
+            (Filename.remove_extension file ^ "_unifications.rbl") ;
+          Unilog.set_lookup
+            ~tycon:(fun c ->
+                match List.assoc_opt c (fst !sign) with
+                | Some knd -> Some (karity knd)
+                | None -> None)
+            ~const:(fun c ->
+                match List.assoc_opt c (snd !sign) with
+                | Some (Poly (_, ty)) -> Some (Unilog.Immut.of_ty ty)
+                | None -> None)
+        end
       end
     | None -> () end ;
     if !Setup.mode = `interactive then
