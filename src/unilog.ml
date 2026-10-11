@@ -405,4 +405,4 @@ let write () =
       output_string oc (Buffer.contents buf) ;
       close_out oc
 
-let () = if Term.log_unifications then at_exit write
+let () = at_exit write

@@ -794,17 +794,12 @@ and unify tyctx t1 t2 =
           handler (lambda tys t1) (lambda tys t2)
 
 let pattern_unify ~used t1 t2 =
-  if not log_unifications then begin
-    local_used := used ;
-    unify [] (hnorm t1) (hnorm t2)
-  end else begin
-    Unilog.add Unilog.{
-      kind = label ;
-      left = Unilog.Immut.of_tm t1 ;
-      right = Unilog.Immut.of_tm t2 } ;
-    local_used := used ;
-    unify [] (hnorm t1) (hnorm t2)
-  end
+  Unilog.add Unilog.{
+    kind = label ;
+    left = Unilog.Immut.of_tm t1 ;
+    right = Unilog.Immut.of_tm t2 } ;
+  local_used := used ;
+  unify [] (hnorm t1) (hnorm t2)
 
 (* Given Lam(tys1, App(h1, a1)) and Lam(tys2, App(h2, a2))
    where h1 is flexible, h2 is rigid, and len(tys1) <= len(tys2),

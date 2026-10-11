@@ -141,9 +141,6 @@ val unwind_state : ('a -> 'b) -> ('a -> 'b)
 
 val get_bindings_since : scoped_bind_state -> (term * term) list
 
-(* Compile-time switch: recompile after changing. *)
-val log_unifications : bool
-
 (* Raise the substitution *)
 val add_dummies : env -> int -> int -> env
 
