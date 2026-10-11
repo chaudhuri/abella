@@ -51,10 +51,6 @@ clean:
 test:
 	$(DUNE) runtest --release
 
-.PHONY: unify-experiments
-unify-experiments:
-	sh test/unify_experiments.sh
-
 .PHONY: publish-doc
 publish-doc: examples/make.stamp
 	rsync -aviz \
