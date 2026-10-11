@@ -80,6 +80,19 @@ let position_range (p1, p2) =
   else
     sprintf ": file %s, line %d, characters %d-%d" file line char1 char2
 
+let one_line s =
+  String.map (fun c -> match c with '\n' | '\r' | '\t' -> ' ' | c -> c) s
+
+let provenance_of (p1, _p2) text =
+  let loc =
+    if p1.Lexing.pos_fname = "" then ""
+    else
+      sprintf "%s:%d"
+        (Filename.basename p1.Lexing.pos_fname) p1.Lexing.pos_lnum
+  in
+  let cmd = one_line text in
+  if loc = "" then cmd else sprintf "%s: %s" loc cmd
+
 let type_inference_error (pos, ct) exp act =
   Output.msg_printf "Typing error%s." (position_range pos) ;
   match ct with
@@ -607,6 +620,7 @@ and process_proof1 proc =
     Output.non_annot "%s < " proc.thm ;
   let input = Parser.command_start Lexer.token !Setup.lexbuf in
   let cmd_string = command_to_string input.el in
+  let prov = provenance_of input.pos cmd_string in
   if !Setup.mode <> `interactive then
     Output.non_annot "%s.\n" cmd_string ;
   let annot =
@@ -621,6 +635,7 @@ and process_proof1 proc =
     end |> Option.some
   in
   let perform () =
+    Unilog.with_provenance prov @@ fun () ->
     begin match input.el with
     | Induction(args, hn)           -> Prover.induction ?name:hn args
     | CoInduction hn                -> Prover.coinduction ?name:hn ()
@@ -692,6 +707,7 @@ and process_top1 () =
   if !Setup.mode = `interactive then Output.non_annot "Abella < " ;
   let input = Parser.top_command_start Lexer.token !Setup.lexbuf in
   let cmd_string = top_command_to_string input.el in
+  let prov = provenance_of input.pos cmd_string in
   if !Setup.mode <> `interactive then Output.non_annot "%s.\n%!" cmd_string ;
   let thm_id =
     if not !Setup.annotate then -1 else
@@ -703,6 +719,7 @@ and process_top1 () =
     Output.commit_message annot ;
     annot.id
   in
+  Unilog.with_provenance prov @@ fun () ->
   begin match input.el with
   | Theorem(name, tys, thm) -> begin
       let st = get_bind_state () in

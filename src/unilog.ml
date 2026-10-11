@@ -68,15 +68,22 @@ type record = {
   outcome : outcome ;
 }
 
-let records : record list ref = ref []
+let records : (string option * record) list ref = ref []
 let outfile : string option ref = ref None
 let origin : string ref = ref ""
+
+let provenance : string option ref = ref None
+
+let with_provenance p f =
+  let saved = !provenance in
+  provenance := Some p ;
+  Fun.protect ~finally:(fun () -> provenance := saved) f
 
 let set_output ~origin:o filename =
   outfile := Some filename ;
   origin := o
 
-let add r = records := r :: !records
+let add r = records := (!provenance, r) :: !records
 
 (* The live Abella signature is supplied by the driver (abella.ml) to
    avoid a module dependency cycle through [Typing].  Each callback
@@ -397,8 +404,9 @@ let const_decl_ty const_types c =
 let render_script () =
   let all = List.rev !records in
   let records =
-    List.filter (fun r -> r.kind = "right" || r.kind = "left") all in
-  let consts, tycons, tyvars, arities, const_types = collect records in
+    List.filter (fun (_, r) -> r.kind = "right" || r.kind = "left") all in
+  let consts, tycons, tyvars, arities, const_types =
+    collect (List.map snd records) in
   install
     (build_map ~legal:is_legal_lower ~sanitize:sanitize_lower
        (Term.Iset.elements consts))
@@ -433,7 +441,12 @@ let render_script () =
            (const_name c) (render_ty (const_decl_ty const_types c)))
     end (Term.Iset.elements consts) ;
     Buffer.add_char buf '\n' ;
-    List.iter (fun r -> Buffer.add_string buf (render_record r ^ "\n")) records
+    List.iter begin fun (prov, r) ->
+      Option.iter
+        (fun p -> Buffer.add_string buf (Printf.sprintf "%% %s\n" p))
+        prov ;
+      Buffer.add_string buf (render_record r ^ "\n")
+    end records
   end ;
   Buffer.contents buf
 

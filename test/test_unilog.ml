@@ -23,6 +23,15 @@ let only_command script =
       assert_failure
         (Printf.sprintf "Expected one command, found %d" (List.length lines))
 
+let contains haystack needle =
+  let n = String.length needle in
+  let rec go i =
+    if i + n > String.length haystack then false
+    else if String.sub haystack i n = needle then true
+    else go (i + 1)
+  in
+  go 0
+
 (* [with_one_unification f] runs the unification [f], renders the trace, and
    returns the single emitted command.  [records] is global, so each case
    resets it before and after. *)
@@ -78,6 +87,19 @@ let test_failed_unification_keeps_context () =
   assert_string_equal
     "right-unify #0 : i |- f #0 != g #0." line
 
+let test_provenance_comment () =
+  Unilog.reset () ;
+  let f = const ~ts:1 "f" iity in
+  let n = nominal_var "n0" ity in
+  Unilog.with_provenance "foo.thm:12: apply H" (fun () ->
+    Unify.right_unify (f ^^ [n]) (f ^^ [n])) ;
+  let script = Unilog.render_script () in
+  Unilog.reset () ;
+  assert_bool "provenance comment is emitted"
+    (contains script "% foo.thm:12: apply H\n") ;
+  assert_bool "problem follows its comment"
+    (contains script "% foo.thm:12: apply H\nright-unify")
+
 let tests =
   "Unilog" >:::
     [
@@ -91,4 +113,6 @@ let tests =
         test_left_unify ;
       "a failed unification keeps its context" >::
         test_failed_unification_keeps_context ;
+      "a problem carries its provenance" >::
+        test_provenance_comment ;
     ]
