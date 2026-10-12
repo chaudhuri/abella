@@ -209,7 +209,7 @@ type rctx = {
   nominals      : (string, int) Hashtbl.t ;
   mutable next_nominal : int ;
   mutable used_binders : string list ;
-  mutable ctx_entries : (string * Immut.ty) list ;
+  mutable ctx_entries : (int * string * Immut.ty) list ;
   ctx_seen            : (string, unit) Hashtbl.t ;
 }
 
@@ -266,11 +266,11 @@ and render_var rctx v ty =
   | Term.Constant -> const_name v.Term.name
   | Term.Logic ->
       let s = "?" ^ var_base rctx Term.Logic v.Term.name in
-      record_ctx rctx s ty ;
+      record_ctx rctx s v.Term.ts ty ;
       s
   | Term.Eigen ->
       let s = "_" ^ var_base rctx Term.Eigen v.Term.name in
-      record_ctx rctx s ty ;
+      record_ctx rctx s v.Term.ts ty ;
       s
   | Term.Nominal ->
       let n = match Hashtbl.find_opt rctx.nominals v.Term.name with
@@ -282,13 +282,13 @@ and render_var rctx v ty =
             n
       in
       let s = "#" ^ string_of_int n in
-      record_ctx rctx s ty ;
+      record_ctx rctx s v.Term.ts ty ;
       s
 
-and record_ctx rctx name ty =
+and record_ctx rctx name ts ty =
   if not (Hashtbl.mem rctx.ctx_seen name) then begin
     Hashtbl.add rctx.ctx_seen name () ;
-    rctx.ctx_entries <- (name, ty) :: rctx.ctx_entries
+    rctx.ctx_entries <- (ts, name, ty) :: rctx.ctx_entries
   end
 
 and render_db rctx i =
@@ -333,11 +333,16 @@ let render_record r =
   } in
   let left = render rctx r.left in
   let right = render rctx r.right in
-  let ctx = match List.rev rctx.ctx_entries with
+  let ctx = match rctx.ctx_entries with
     | [] -> ""
-    | bindings ->
+    | entries ->
+        let bindings =
+          List.rev entries
+          |> List.stable_sort
+               (fun (ts1, _, _) (ts2, _, _) -> compare ts1 ts2)
+        in
         String.concat ", "
-          (List.map (fun (n, ty) -> n ^ " : " ^ render_ty ty) bindings)
+          (List.map (fun (_, n, ty) -> n ^ " : " ^ render_ty ty) bindings)
         ^ " |- "
   in
   let cmd =

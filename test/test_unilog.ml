@@ -51,8 +51,17 @@ let test_context_logic_eigen_nominal () =
   let line = with_one_unification (fun () ->
     Unify.right_unify (h ^^ [x; y; n]) (h ^^ [c; y; n])) in
   assert_string_equal
-    "right-unify ?X : i, _Y : i, #0 : i |- h ?X _Y #0 == h c _Y #0."
+    "right-unify _Y : i, ?X : i, #0 : i |- h ?X _Y #0 == h c _Y #0."
     line
+
+let test_context_ordered_by_timestamp () =
+  let f = const ~ts:1 "f" iiity in
+  let x = var Logic "X" 5 iity in
+  let y = var Eigen "Y" 2 ity in
+  let line = with_one_unification (fun () ->
+    Unify.right_unify (f ^^ [x; y]) (f ^^ [x; y])) in
+  assert_string_equal
+    "right-unify _Y : i, ?X : i -> i |- f ?X _Y == f ?X _Y." line
 
 let test_empty_context () =
   let f = const ~ts:1 "f" iity in
@@ -154,6 +163,8 @@ let tests =
     [
       "context lists logic, eigen, and nominal" >::
         test_context_logic_eigen_nominal ;
+      "context is ordered by timestamp" >::
+        test_context_ordered_by_timestamp ;
       "empty context omits the turnstile" >::
         test_empty_context ;
       "a repeated variable is bound once" >::
