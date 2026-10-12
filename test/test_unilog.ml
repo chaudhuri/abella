@@ -100,6 +100,41 @@ let test_provenance_comment () =
   assert_bool "problem follows its comment"
     (contains script "% foo.thm:12: apply H\nright-unify")
 
+let only_prefix prefix script =
+  List.filter (starts_with prefix) (String.split_on_char '\n' script)
+
+let test_right_cpairs_comment () =
+  Unilog.reset () ;
+  let p = const ~ts:0 "p" iity in
+  let x = var Logic "X" 0 iity in
+  let y = var Logic "Y" 0 ity in
+  let z = var Logic "Z" 0 iity in
+  let w = var Logic "W" 0 ity in
+  (match Unify.try_right_unify_cpairs
+           (p ^^ [x ^^ [y]]) (p ^^ [z ^^ [w]]) with
+   | Some _ -> ()
+   | None -> assert_failure "Unification failed") ;
+  let script = Unilog.render_script () in
+  Unilog.reset () ;
+  assert_equal
+    [ "% right-cpairs ?X : i -> i, ?Y : i, ?Z : i -> i, ?W : i \
+       |- p (?X ?Y) == p (?Z ?W)." ]
+    (only_prefix "% right-cpairs" script)
+
+let test_left_cpairs_comment () =
+  Unilog.reset () ;
+  let x = var Eigen "X" 0 iity in
+  let y = var Eigen "Y" 0 ity in
+  (match Unify.try_left_unify_cpairs ~used:[]
+           (x ^^ [y]) (x ^^ [y]) with
+   | Some _ -> ()
+   | None -> assert_failure "Unification failed") ;
+  let script = Unilog.render_script () in
+  Unilog.reset () ;
+  assert_equal
+    [ "% left-cpairs _X : i -> i, _Y : i |- _X _Y == _X _Y." ]
+    (only_prefix "% left-cpairs" script)
+
 let tests =
   "Unilog" >:::
     [
@@ -115,4 +150,8 @@ let tests =
         test_failed_unification_keeps_context ;
       "a problem carries its provenance" >::
         test_provenance_comment ;
+      "right-cpairs is emitted as a comment" >::
+        test_right_cpairs_comment ;
+      "left-cpairs is emitted as a comment" >::
+        test_left_cpairs_comment ;
     ]

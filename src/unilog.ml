@@ -340,13 +340,23 @@ let render_record r =
           (List.map (fun (n, ty) -> n ^ " : " ^ render_ty ty) bindings)
         ^ " |- "
   in
-  let cmd = if r.kind = "right" then "right-unify" else "left-unify" in
+  let cmd =
+    match r.kind with
+    | "right" -> "right-unify"
+    | "left" -> "left-unify"
+    | "right-cpairs" -> "right-cpairs"
+    | "left-cpairs" -> "left-cpairs"
+    | k -> k
+  in
   let sep = match r.outcome with
     | Success -> "=="
     | Failure -> "!="
     | Incomplete -> "="
   in
-  Printf.sprintf "%s %s%s %s %s." cmd ctx left sep right
+  let line = Printf.sprintf "%s %s%s %s %s." cmd ctx left sep right in
+  if r.kind = "right-cpairs" || r.kind = "left-cpairs"
+  then "% " ^ line
+  else line
 
 let collect records =
   let consts = ref Term.Iset.empty in
@@ -404,7 +414,12 @@ let const_decl_ty const_types c =
 let render_script () =
   let all = List.rev !records in
   let records =
-    List.filter (fun (_, r) -> r.kind = "right" || r.kind = "left") all in
+    List.filter
+      (fun (_, r) ->
+         match r.kind with
+         | "right" | "left" | "right-cpairs" | "left-cpairs" -> true
+         | _ -> false)
+      all in
   let consts, tycons, tyvars, arities, const_types =
     collect (List.map snd records) in
   install
