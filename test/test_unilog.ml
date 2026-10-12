@@ -158,6 +158,24 @@ let test_left_cpairs_no_residual_is_plain () =
     ignore (Unify.try_left_unify_cpairs ~used:[] (x ^^ [n]) (x ^^ [n]))) in
   assert_string_equal "left-unify _X : i -> i, #0 : i |- _X #0 == _X #0." line
 
+let test_context_right_rigid_before_flex () =
+  let f = const ~ts:1 "f" iity in
+  let x = var Logic "X" 0 ity in
+  let y = var Eigen "Y" 0 ity in
+  let line = with_one_unification (fun () ->
+    Unify.right_unify (f ^^ [x]) (f ^^ [y])) in
+  assert_string_equal
+    "right-unify _Y : i, ?X : i |- f ?X == f _Y." line
+
+let test_context_left_rigid_before_flex () =
+  let f = const ~ts:1 "f" iity in
+  let x = var Eigen "X" 0 ity in
+  let y = var Logic "Y" 0 ity in
+  let line = with_one_unification (fun () ->
+    Unify.left_unify (f ^^ [x]) (f ^^ [y])) in
+  assert_string_equal
+    "left-unify ?Y : i, _X : i |- f _X == f ?Y." line
+
 let tests =
   "Unilog" >:::
     [
@@ -165,6 +183,10 @@ let tests =
         test_context_logic_eigen_nominal ;
       "context is ordered by timestamp" >::
         test_context_ordered_by_timestamp ;
+      "right-unify puts rigid eigen before flex logic" >::
+        test_context_right_rigid_before_flex ;
+      "left-unify puts rigid logic before flex eigen" >::
+        test_context_left_rigid_before_flex ;
       "empty context omits the turnstile" >::
         test_empty_context ;
       "a repeated variable is bound once" >::

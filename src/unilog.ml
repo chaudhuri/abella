@@ -209,7 +209,7 @@ type rctx = {
   nominals      : (string, int) Hashtbl.t ;
   mutable next_nominal : int ;
   mutable used_binders : string list ;
-  mutable ctx_entries : (int * string * Immut.ty) list ;
+  mutable ctx_entries : (int * Term.tag * string * Immut.ty) list ;
   ctx_seen            : (string, unit) Hashtbl.t ;
 }
 
@@ -266,11 +266,11 @@ and render_var rctx v ty =
   | Term.Constant -> const_name v.Term.name
   | Term.Logic ->
       let s = "?" ^ var_base rctx Term.Logic v.Term.name in
-      record_ctx rctx s v.Term.ts ty ;
+      record_ctx rctx Term.Logic s v.Term.ts ty ;
       s
   | Term.Eigen ->
       let s = "_" ^ var_base rctx Term.Eigen v.Term.name in
-      record_ctx rctx s v.Term.ts ty ;
+      record_ctx rctx Term.Eigen s v.Term.ts ty ;
       s
   | Term.Nominal ->
       let n = match Hashtbl.find_opt rctx.nominals v.Term.name with
@@ -282,13 +282,13 @@ and render_var rctx v ty =
             n
       in
       let s = "#" ^ string_of_int n in
-      record_ctx rctx s v.Term.ts ty ;
+      record_ctx rctx Term.Nominal s v.Term.ts ty ;
       s
 
-and record_ctx rctx name ts ty =
+and record_ctx rctx tag name ts ty =
   if not (Hashtbl.mem rctx.ctx_seen name) then begin
     Hashtbl.add rctx.ctx_seen name () ;
-    rctx.ctx_entries <- (ts, name, ty) :: rctx.ctx_entries
+    rctx.ctx_entries <- (ts, tag, name, ty) :: rctx.ctx_entries
   end
 
 and render_db rctx i =
@@ -336,13 +336,20 @@ let render_record r =
   let ctx = match rctx.ctx_entries with
     | [] -> ""
     | entries ->
+        let rigid =
+          match r.kind with
+          | "right" | "right-cpairs" -> Term.Eigen
+          | _ -> Term.Logic
+        in
+        let rank tag = if tag = rigid then 0 else 1 in
         let bindings =
           List.rev entries
           |> List.stable_sort
-               (fun (ts1, _, _) (ts2, _, _) -> compare ts1 ts2)
+               (fun (ts1, tag1, _, _) (ts2, tag2, _, _) ->
+                  compare (ts1, rank tag1) (ts2, rank tag2))
         in
         String.concat ", "
-          (List.map (fun (_, n, ty) -> n ^ " : " ^ render_ty ty) bindings)
+          (List.map (fun (_, _, n, ty) -> n ^ " : " ^ render_ty ty) bindings)
         ^ " |- "
   in
   let cmd =
