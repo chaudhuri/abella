@@ -71,7 +71,7 @@ sig
   val instantiatable : tag
   val constant_like  : tag
   val handler : term -> term -> unit
-  val label : string
+  val label : unit -> string
 end
 
 module Make (P:Param) =
@@ -798,7 +798,7 @@ let pattern_unify ~used t1 t2 =
   let right = Unilog.Immut.of_tm t2 in
   local_used := used ;
   let record outcome =
-    Unilog.add Unilog.{ kind = label ; left ; right ; outcome } in
+    Unilog.add Unilog.{ kind = label () ; left ; right ; outcome } in
   try
     unify [] (hnorm t1) (hnorm t2) ;
     record Unilog.Success
@@ -890,7 +890,7 @@ module Right =
           let instantiatable = Logic
           let constant_like = Eigen
           let handler = standard_handler
-          let label = "right"
+          let label () = "right"
         end)
 
 module Left =
@@ -898,7 +898,7 @@ module Left =
           let instantiatable = Eigen
           let constant_like = Constant
           let handler = standard_handler
-          let label = "left"
+          let label () = "left"
         end)
 
 let right_unify ?used:(used=[]) t1 t2 =
@@ -935,7 +935,7 @@ let try_left_unify_cpairs ~used t1 t2 =
             let instantiatable = Eigen
             let constant_like = Constant
             let handler = cpairs_handler
-            let label = "left-cpairs"
+            let label () = if !cpairs = [] then "left" else "left-cpairs"
           end)
   in
     try
@@ -962,7 +962,8 @@ let try_right_unify_cpairs t1 t2 =
                  let instantiatable = Logic
                  let constant_like = Eigen
                  let handler = cpairs_handler
-                 let label = "right-cpairs"
+                 let label () =
+                   if !cpairs = [] then "right" else "right-cpairs"
                end)
        in
          RightCpairs.pattern_unify ~used:[] t1 t2 ;

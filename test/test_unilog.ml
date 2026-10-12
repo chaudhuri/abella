@@ -135,6 +135,20 @@ let test_left_cpairs_comment () =
     [ "% left-cpairs _X : i -> i, _Y : i |- _X _Y == _X _Y." ]
     (only_prefix "% left-cpairs" script)
 
+let test_right_cpairs_no_residual_is_plain () =
+  let f = const ~ts:1 "f" iity in
+  let n = nominal_var "n0" ity in
+  let line = with_one_unification (fun () ->
+    ignore (Unify.try_right_unify_cpairs (f ^^ [n]) (f ^^ [n]))) in
+  assert_string_equal "right-unify #0 : i |- f #0 == f #0." line
+
+let test_left_cpairs_no_residual_is_plain () =
+  let x = var Eigen "X" 1 iity in
+  let n = nominal_var "n0" ity in
+  let line = with_one_unification (fun () ->
+    ignore (Unify.try_left_unify_cpairs ~used:[] (x ^^ [n]) (x ^^ [n]))) in
+  assert_string_equal "left-unify _X : i -> i, #0 : i |- _X #0 == _X #0." line
+
 let tests =
   "Unilog" >:::
     [
@@ -150,8 +164,12 @@ let tests =
         test_failed_unification_keeps_context ;
       "a problem carries its provenance" >::
         test_provenance_comment ;
-      "right-cpairs is emitted as a comment" >::
+      "right-cpairs with residual is a comment" >::
         test_right_cpairs_comment ;
-      "left-cpairs is emitted as a comment" >::
+      "left-cpairs with residual is a comment" >::
         test_left_cpairs_comment ;
+      "right-cpairs with no residual is a plain command" >::
+        test_right_cpairs_no_residual_is_plain ;
+      "left-cpairs with no residual is a plain command" >::
+        test_left_cpairs_no_residual_is_plain ;
     ]
