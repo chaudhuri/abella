@@ -850,12 +850,7 @@ let rec meta_right_unify t1 t2 =
       when b1 = b2 &&
            List.length tids1 = List.length tids2 &&
            tids_unifyable tids1 tids2 ->
-        (* Replace bound variables with constants with "infinite"
-           timestamp. This prevents illegal variable capture.
-           We use max_int-1 since max_int is for nominal constants. *)
-        let new_bindings =
-          List.map (fun (_, ty) -> fresh ~tag:Constant (max_int-1) ty) tids1
-        in
+        let new_bindings = fresh_nominals (List.map snd tids1) (And (t1, t2)) in
         let alist1 = List.combine (List.map fst tids1) new_bindings in
         let alist2 = List.combine (List.map fst tids2) new_bindings in
         meta_right_unify
