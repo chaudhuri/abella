@@ -1,10 +1,10 @@
 # Sidequest: proof feedback and checking controls
 
-**Status:** agreed — implementation pending.
+**Status:** done (2026-10-23).
 
-**Scope:** an independent UX sidequest for Abella Web. It does not change
-`plans/abella-web/v4.md` while it is being designed. If implemented, the
-main plan will get a short note in a later version.
+**Scope:** an independent UX sidequest for Abella Web. It did not change
+`plans/abella-web/v4.md` while it was being designed; the main plan now
+carries a short note in v5.
 
 ## 1. Observations
 
@@ -482,6 +482,24 @@ Settled:
   outcome.
 
 There are no open design questions.
+
+## 9. Implementation record
+
+Implemented on 2026-10-22:
+
+- Goal pane shows the last obligation plus Abella's verbatim outcome
+  message and a separate `Theorem <name>` label.
+- The Messages pane was removed. A collapsed Output disclosure in the
+  Goal pane holds warnings, errors, import/spec progress, `Show`, and
+  `Query`; it auto-opens for errors, warnings, and `Show`/`Query`.
+- Ctrl-Enter advances with `command.from < cursor` and rewinds at a
+  command boundary when the cursor is in the checked region.
+- Ctrl-Shift-Enter and the blocking session API were removed.
+- `Ctrl-]`/`Ctrl-[` step forward/backward with the agreed cursor rules.
+- `Ctrl-.` moves to the checked tip and scrolls it into view.
+- `npm run web:test` now has 21 tests covering these cases; the headless
+  Chromium smoke test checks the new goal/output layout, both Ctrl-Enter
+  directions, the stepping keys, and `Ctrl-.` scrolling.
 
 ## 9. Exit criteria
 
