@@ -1,6 +1,6 @@
 # Abella Web plan
 
-**Latest version:** [v5](v5.md) — 2026-10-22
+**Latest version:** [v6](v6.md) — 2026-10-23
 
 This directory contains the versioned design plan for Abella Web, the
 browser interface for Abella.
@@ -37,3 +37,4 @@ To publish a new version:
 | [v3](v3.md) | 2026-10-22 | Phase 1 complete: native OUnit coverage for virtual sources, output collection, generated/native `.thc` comparison, `.thc` fast path, nested imports, cycles, and missing files; documents the prover reset contract and canonical import progress names. |
 | [v4](v4.md) | 2026-10-22 | Phase 2 complete: CodeMirror 6 UI, project sidebar, worker driver, command scanner and session tests, `abella_bundle` with eight curated examples, zip import/export, localStorage persistence, and goal/message panels; headless Chromium smoke test passes the full exit criterion. |
 | [v5](v5.md) | 2026-10-22 | Checking/feedback sidequest: proof outcomes and theorem labels in the Goal pane, Messages pane replaced by a collapsed Output disclosure, two-way Ctrl-Enter, `Ctrl-]`/`Ctrl-[` stepping, `Ctrl-.` jump to tip, and removal of blocking mode. |
+| [v6](v6.md) | 2026-10-23 | Phase 3 UX complete: file add/rename/delete and root selection, worker Stop, destructive-action/save warnings, accessibility pass, responsive goal scrolling, resizable sidebar, and Howe replacing CCS in the curated examples. |
