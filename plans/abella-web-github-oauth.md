@@ -1,7 +1,6 @@
 # Plan: GitHub OAuth for Abella Web
 
-**Status:** Phases 0-5 deployment complete (2026-10-23);
-private-repository OAuth opt-in test pending.
+**Status:** Phases 0-5 complete (2026-10-23).
 
 **Scope:** a sidequest to `plans/abella-web/v10.md`. It changes only how a
 GitHub token is obtained. The GitHub workspace, Octokit client, read path,
@@ -1261,8 +1260,10 @@ Implementation notes (2026-10-23):
 - The rollback check passed: with the production client ID removed,
   `/github/config` returned 503 and the UI hid OAuth with the PAT path
   open; restoring the client ID returned 200 and OAuth again.
-- The private-repository OAuth opt-in has not yet been exercised with a
-  real private test repository.
+- The private-repository OAuth opt-in was verified with
+  `chaudhuri/rg_python`. Its Abella Web test commit `437d800` and the
+  preceding test-`.thm` commit `4e8d255` were removed, and `master` was
+  reset to `d5916db`.
 - The full v11 document is published and `plans/abella-web/README.md`
   points to it.
 
