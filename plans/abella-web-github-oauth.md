@@ -1,6 +1,6 @@
 # Plan: GitHub OAuth for Abella Web
 
-**Status:** in progress; Phases 0-1 complete (2026-10-23).
+**Status:** in progress; Phases 0-2 complete (2026-10-23).
 
 **Scope:** a sidequest to `plans/abella-web/v10.md`. It changes only how a
 GitHub token is obtained. The GitHub workspace, Octokit client, read path,
@@ -1056,6 +1056,17 @@ Exit criteria:
 - The callback bundle stays under its gzip budget.
 - A manual test with the dev app shows the popup posting `code` and
   `state` to the opener and closing.
+
+Implementation notes (2026-10-23):
+
+- The callback relay was exercised in Chromium: the opener received
+  `{type, code, state}`, the query string was removed from the popup
+  URL, and the popup closed. The real GitHub redirect path was verified
+  in Phases 0 and 1; the full dialog flow follows in Phase 3.
+- The callback bundle is 0.5 KiB gzip, below the 4 KiB budget.
+- `web:js:dev` defines the loopback Worker URL; the production default
+  is used when the define is absent.
+- GitHub's `iss` parameter is ignored by the parser.
 
 ### Phase 3: Dialog and workspace integration
 
