@@ -7,6 +7,9 @@ Additions
   computation on hypotheses. Detailed examples can be found
   in the `examples/compute/` subdirectory.
 
+* Abella Web can open a local directory in Chromium-based browsers,
+  save changed files, and save all changes.
+
 Changes
 
 * Abella now compiles with Dune version 3.7 or later.  
