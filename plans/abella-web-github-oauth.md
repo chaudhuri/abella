@@ -1,6 +1,6 @@
 # Plan: GitHub OAuth for Abella Web
 
-**Status:** in progress; Phases 0-2 complete (2026-10-23).
+**Status:** in progress; Phases 0-3 complete (2026-10-23).
 
 **Scope:** a sidequest to `plans/abella-web/v10.md`. It changes only how a
 GitHub token is obtained. The GitHub workspace, Octokit client, read path,
@@ -640,6 +640,9 @@ Dialog states:
 
 - **Checking Worker config:** OAuth button disabled, short status.
 - **OAuth available:** OAuth button enabled; PAT section collapsed.
+- **Signed in:** the primary action is `Load repository` (or
+  `Authorize commit`); the OAuth action reads `Reconnect with GitHub`.
+  The PAT section remains collapsed.
 - **OAuth unavailable:** OAuth button hidden; PAT section expanded with an
   explanation.
 - **Starting popup:** OAuth button disabled; status "Waiting for GitHub...".
@@ -676,14 +679,17 @@ Both the PAT form and the OAuth success handler call it.
 
 Connect intent:
 
-1. Before starting OAuth, validate the repository input and run the
-   existing dirty-project confirmation. Do not send the user to GitHub
+1. If a repository input is present, validate it and run the existing
+   dirty-project confirmation before starting OAuth. A user may also
+   sign in without a repository; after sign-in the dialog keeps a
+   `Load repository` action available. Do not send the user to GitHub
    only to make them cancel after returning.
 2. Save the token and validate it with `/user`.
-3. Close the dialog.
-4. Call the existing `loadGitHubRepository(input, token)` path with the
-   repository input stored in the pending flow.
-5. If the repository is private and the token lacks `repo`, show the
+3. If a repository input is present, close the dialog and call the
+   existing `loadGitHubRepository(input, token)` path with the
+   repository input stored in the pending flow. Otherwise keep the
+   dialog open and prompt for a repository.
+4. If the repository is private and the token lacks `repo`, show the
    targeted "Reconnect with private repository access" action.
 
 Commit intent:
@@ -1097,6 +1103,26 @@ Exit criteria:
 - Cancelling, closing the popup, blocking the popup, and a state mismatch
   all leave the app usable and the PAT path available.
 - No token appears in the main page URL or history.
+
+Implementation notes (2026-10-23):
+
+- The dialog fetches `/github/config` lazily on first open. If config
+  fails, the OAuth section is hidden, the PAT disclosure is opened, and
+  the note explains the fallback.
+- The OAuth button opens a blank popup synchronously and navigates it
+  after PKCE generation, preserving the user gesture.
+- Chromium checks covered the blocked popup, closed popup, state
+  mismatch, rejected exchange, token restoration, disconnect, and the
+  private-repository 404 path. The connect and commit success paths were
+  exercised with a mocked Worker token and a mocked GitHub API.
+- The real-account connect and commit round trip succeeded against the
+  development app. Its test commit was removed from the `try-merge`
+  branch of `chaudhuri/abella`.
+- Signing in no longer requires a repository input. After sign-in the
+  dialog keeps a primary `Load repository` action (or
+  `Authorize commit`); the OAuth action reads `Reconnect with GitHub`.
+- A 401 from a later GitHub request clears the stored token and reopens
+  the commit dialog; 403 errors leave the token in place.
 
 ### Phase 4: Verification and documentation
 
