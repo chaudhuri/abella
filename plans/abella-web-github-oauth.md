@@ -1,6 +1,6 @@
 # Plan: GitHub OAuth for Abella Web
 
-**Status:** proposed, not implemented (2026-10-23).
+**Status:** in progress; Phase 0 complete (2026-10-23).
 
 **Scope:** a sidequest to `plans/abella-web/v10.md`. It changes only how a
 GitHub token is obtained. The GitHub workspace, Octokit client, read path,
@@ -963,6 +963,23 @@ Exit criteria:
   `state` in the popup URL.
 - No production hostname, DNS record, or production secret has been
   touched.
+
+Implementation notes (2026-10-23):
+
+- The public development client ID is recorded under `env.dev.vars` in
+  `support/oauth-worker/wrangler.jsonc`. The client secret lives only in
+  the gitignored `.dev.vars`.
+- Wrangler named environments load secrets from `.dev.vars.<env>`, while
+  a plain `.dev.vars` is for the top-level environment. Phase 1 must
+  either keep the development Worker at the top level or use
+  `.dev.vars.dev`; the secret stays local either way.
+- GitHub's callback now includes an `iss` query parameter in addition to
+  `code` and `state`. The callback parser must ignore unknown parameters.
+- An unknown client ID receives a JSON 404 from the token endpoint. A
+  real development app returns `bad_verification_code` for a probe code,
+  which is the useful connectivity and credential check.
+- The Phase 0 authorization test reached the callback with a matching
+  `state`; the code was not exchanged.
 
 ### Phase 1: Worker
 
