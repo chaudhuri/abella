@@ -42,6 +42,13 @@ web-bundle:
 	$(DUNE) exec src/abella_bundle.exe -- \
 	  -m support/web-examples.json -o web/examples/bundle.json
 
+.PHONY: publish-web
+publish-web: web
+	rsync -aviz \
+	  --exclude '.test/' \
+	  --exclude '*.map' \
+	  web/ abellaweb@abella-prover.org:abella-prover.org/web/
+
 support/.stamp: support/ts/abella_doc.ts support/css/abella_doc.css
 	( cd support && \
 	  npm install --no-save && \
