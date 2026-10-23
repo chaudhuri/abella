@@ -1,7 +1,7 @@
 # Plan: GitHub OAuth for Abella Web
 
-**Status:** in progress; Phases 0-4 complete (2026-10-23); Phase 5
-production deployment pending.
+**Status:** Phases 0-5 deployment complete (2026-10-23);
+private-repository OAuth opt-in test pending.
 
 **Scope:** a sidequest to `plans/abella-web/v10.md`. It changes only how a
 GitHub token is obtained. The GitHub workspace, Octokit client, read path,
@@ -591,8 +591,10 @@ CORS:
 
 Rate limiting:
 
-- Configure a Cloudflare rate-limit rule for `POST /github/token`, for
-  example 30 requests per minute per IP, action block for 60 seconds.
+- Configure a Cloudflare rate-limit rule for `POST /github/token`. On
+  the free plan use Path `/github/token`, 5 requests per 10 seconds per
+  IP, block for 10 seconds (about 30/minute); paid plans can use
+  30 requests per minute with a 60-second block.
 - The Worker itself does not need a distributed counter. PKCE already
   makes stolen codes hard to use; rate limiting is for abuse and cost
   control.
@@ -1230,6 +1232,39 @@ Exit criteria:
 - The rollback path hides OAuth and leaves the PAT path usable.
 - The v11 plan note is published and `plans/abella-web/README.md` points
   to it.
+
+Implementation notes (2026-10-23):
+
+- The Cloudflare zone is active. Apex and `www` are proxied;
+  `mail`, `ftp`, and `lists` remain DNS-only; MX, SPF, DKIM, and
+  autodiscover records are preserved. SSL mode is Full (strict).
+- The production Worker is deployed at `oauth.abella-prover.org`. The
+  config route, exact-origin CORS, preflight, and fake-code exchange
+  checks pass.
+- The free-plan rate limit is configured as Path `/github/token`,
+  5 requests per 10 seconds, block 10 seconds. Requests 6 and 7 returned
+  429 and the block cleared after 10 seconds.
+- Main `/web/` headers are COOP `same-origin-allow-popups`, `nosniff`,
+  `X-Frame-Options: DENY`, strict referrer policy, and an enforced CSP.
+  The callback path has its stricter headers and CSP. The report-only CSP
+  showed no violations; the enforced CSP was then checked with an example
+  run and a public GitHub read with no violations or exceptions.
+- Cloudflare proxying hides the origin IP from the apex, so SSH
+  publishing uses a DNS-only `origin.abella-prover.org` record and the
+  Makefile `WEB_ORIGIN` override while keeping the existing SSH identity.
+- The static site is published. The production callback page posts only
+  code and state, removes the query string, and closes; the OAuth popup
+  opens GitHub's authorize page with the production client ID and PKCE,
+  and popup cancellation recovers to the PAT path.
+- A real production public-scope OAuth connect and commit succeeded.
+  The test commit `bc60512` was removed from `try-merge`.
+- The rollback check passed: with the production client ID removed,
+  `/github/config` returned 503 and the UI hid OAuth with the PAT path
+  open; restoring the client ID returned 200 and OAuth again.
+- The private-repository OAuth opt-in has not yet been exercised with a
+  real private test repository.
+- The full v11 document is published and `plans/abella-web/README.md`
+  points to it.
 
 ### Deliverables summary
 
