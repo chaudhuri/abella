@@ -1,6 +1,7 @@
 # Plan: GitHub OAuth for Abella Web
 
-**Status:** in progress; Phases 0-3 complete (2026-10-23).
+**Status:** in progress; Phases 0-4 complete (2026-10-23); Phase 5
+production deployment pending.
 
 **Scope:** a sidequest to `plans/abella-web/v10.md`. It changes only how a
 GitHub token is obtained. The GitHub workspace, Octokit client, read path,
@@ -1152,6 +1153,27 @@ Exit criteria:
   deployment.
 - A maintainer other than the author can follow the documentation to run
   the local flow and prepare the production deployment.
+
+Implementation notes (2026-10-23):
+
+- `npm run check`, `npm run web:test` (76 tests), `npm run web:size`,
+  `make web` with the wasm backend, and `make oauth-worker-check`
+  (27 tests) pass.
+- Headless Chromium loaded the "Type uniqueness" example and
+  `Process full` completed 60 commands with status `ok`.
+- A headless Chromium public-read check loaded
+  `abella-prover/abella@master:examples/lambda-calculus/type-uniq`
+  without a token.
+- A Firefox headless page load rendered the interface. The full OAuth
+  matrix was exercised in Chromium; Firefox and WebKit OAuth round
+  trips remain production smoke items.
+- A production-build smoke against the undeployed production Worker
+  hostname showed the expected PAT-only fallback with no console errors.
+- `README_Web.md` covers build, OAuth local and production setup,
+  CSP/COOP, callback headers, and security. The Worker README covers
+  deployment, rate limiting, and rotation.
+- `plans/abella-web/v11.md` is a draft delta note and is not indexed in
+  `plans/abella-web/README.md`; publish it only after Phase 5.
 
 ### Phase 5: Production deployment
 
