@@ -1,6 +1,6 @@
 # Plan: GitHub OAuth for Abella Web
 
-**Status:** in progress; Phase 0 complete (2026-10-23).
+**Status:** in progress; Phases 0-1 complete (2026-10-23).
 
 **Scope:** a sidequest to `plans/abella-web/v10.md`. It changes only how a
 GitHub token is obtained. The GitHub workspace, Octokit client, read path,
@@ -549,7 +549,8 @@ All error bodies use the `{error, message}` shape above.
   client_id=...&client_secret=...&code=...&redirect_uri=...&code_verifier=...
   ```
 - Use a 10-second timeout (`AbortSignal.timeout(10_000)`) and
-  `redirect: "error"`.
+  `redirect: "manual"`; reject any 3xx response. Workerd rejects
+  `redirect: "error"`, and manual redirects preserve the no-follow rule.
 - Handle GitHub's HTTP 200 JSON error responses (for example
   `bad_verification_code`, `access_denied`), not only non-2xx statuses.
 - Return only `token` and `scope`. Drop `refresh_token`, `token_type`, and
@@ -969,10 +970,10 @@ Implementation notes (2026-10-23):
 - The public development client ID is recorded under `env.dev.vars` in
   `support/oauth-worker/wrangler.jsonc`. The client secret lives only in
   the gitignored `.dev.vars`.
-- Wrangler named environments load secrets from `.dev.vars.<env>`, while
-  a plain `.dev.vars` is for the top-level environment. Phase 1 must
-  either keep the development Worker at the top level or use
-  `.dev.vars.dev`; the secret stays local either way.
+- Wrangler 4.152.0 loads the plain `.dev.vars` file with
+  `wrangler dev --env dev`; environment-specific `.dev.vars.<env>`
+  files remain optional overrides. The development Worker keeps
+  `.dev.vars`, which stays local.
 - GitHub's callback now includes an `iss` query parameter in addition to
   `code` and `state`. The callback parser must ignore unknown parameters.
 - An unknown client ID receives a JSON 404 from the token endpoint. A
@@ -1010,6 +1011,23 @@ Exit criteria:
   returns only `token` and `scope`.
 - The secret never appears in the response, logs, or bundle.
 - Preflight and error cases are covered by tests.
+
+Implementation notes (2026-10-23):
+
+- Workerd rejects `redirect: "error"` for upstream `fetch`. The Worker
+  uses `redirect: "manual"` and maps any 3xx response to 502, which
+  preserves the no-follow rule.
+- `wrangler dev --env dev` loads the plain `.dev.vars` file in
+  Wrangler 4.152.0, so the development setup keeps the Phase 0 file
+  name.
+- A probe exchange through the local Worker reaches GitHub and maps
+  `bad_verification_code` to a 400 with `invalid_code`, confirming
+  upstream connectivity and credential handling without exposing a
+  token.
+- A real development code with PKCE exchanged successfully through the
+  local Worker (HTTP 200); replaying the same code returned 400,
+  confirming single-use behavior. The token was not written to the
+  repository or logs.
 
 ### Phase 2: Frontend OAuth client and callback
 
