@@ -1,6 +1,6 @@
 # Abella Web plan
 
-**Latest version:** [v8](v8.md) — 2026-10-23
+**Latest version:** [v9](v9.md) — 2026-10-23
 
 This directory contains the versioned design plan for Abella Web, the
 browser interface for Abella.
@@ -40,3 +40,4 @@ To publish a new version:
 | [v6](v6.md) | 2026-10-23 | Phase 3 UX complete: file add/rename/delete and root selection, worker Stop, destructive-action/save warnings, accessibility pass, responsive goal scrolling, resizable sidebar, and Howe replacing CCS in the curated examples. |
 | [v7](v7.md) | 2026-10-23 | Phase 3b complete: best-effort Chromium local-directory backend with feature-detected Open folder, recursive project read, dirty markers, Save/Save all, permission and external-modification handling; IndexedDB reopen deferred and structural file actions disabled in folder mode. |
 | [v8](v8.md) | 2026-10-23 | Phase 4 repository hardening: bounded 64 MiB `.thc` cache, lazy-loaded Markdown chunk, asset-size budgets, web CI workflow, build/deploy docs, and cross-browser Chromium/Firefox/WebKit smoke coverage; real-origin deployment and external link update remain. |
+| [v9](v9.md) | 2026-10-23 | Phase 5 complete: `Workspace` interface with capabilities and typed errors, `WorkspaceSession`, virtual/directory/read-only-memory backends, IndexedDB folder reattach with detached-copy fallback, topbar workspace control, and directory structural actions left disabled. |
