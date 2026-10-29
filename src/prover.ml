@@ -90,6 +90,38 @@ let add_global_consts cs =
   sr := List.fold_left Subordination.update !sr (List.map snd cs) ;
   sign := add_consts !sign cs
 
+let axiom_var_of_aty aty =
+  match observe_ty (tybase aty) with
+  | Ty (_, Tycons (name, _)) -> String.capitalize_ascii name
+  | Ty (_, Tygenvar name) -> String.capitalize_ascii name
+  | Ty (_, Typtr _) -> "A"
+
+let vacuity_axiom a b =
+  let result = axiom_var_of_aty b in
+  let fn = result ^ "f" in
+  let a_ty = tybase a and b_ty = tybase b in
+  let fn_ty = tyarrow [a_ty] b_ty in
+  Metaterm.forall [fn, fn_ty]
+    (Metaterm.exists [result, b_ty]
+       (Metaterm.Eq (const fn fn_ty,
+                     abstract "x" a_ty (const result b_ty))))
+
+let trace_close_axioms atys =
+  let show_types = !Metaterm.show_types in
+  Metaterm.show_types := true ;
+  Fun.protect
+    ~finally:(fun () -> Metaterm.show_types := show_types)
+    (fun () ->
+       List.iter
+         (fun a ->
+            List.iter
+              (fun b ->
+                 if not (List.mem a (Subordination.subordinates !sr b)) then
+                   [%trace 2 "Assuming: %a"]
+                     Metaterm.format_metaterm (vacuity_axiom a b))
+              atys)
+         atys)
+
 let close_types sign clauses atys =
   List.iter (kind_check sign) (List.map tybase atys);
   let tys = List.map tybase atys in
@@ -99,7 +131,8 @@ let close_types sign clauses atys =
             (String.concat ", " (List.map ty_to_string xs))
   end ;
   sr := Subordination.close !sr atys;
-  List.iter (Typing.term_ensure_subordination !sr) (List.map snd clauses)
+  List.iter (Typing.term_ensure_subordination !sr) (List.map snd clauses) ;
+  trace_close_axioms atys
 
 let add_subgoals ?(mainline) new_subgoals =
   let extend_name i =
