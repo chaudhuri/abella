@@ -793,6 +793,30 @@ let remove_globals names =
   clauses := List.filter (fun (_, clause) ->
       not (List.mem (term_head_name clause) names)) !clauses
 
+(* Scoped shadowing for modules processed with unprefixed names. A
+   snapshot captures everything a module scope may shadow; restoring
+   it drops the scope's installations and recovers what they hid. *)
+type saved_globals =
+  (string, string list * metaterm) H.t *
+  (string, fin) H.t *
+  defs_table *
+  clause list
+
+let save_globals () =
+  (Hashtbl.copy lemmas, Hashtbl.copy lemma_tags,
+   Hashtbl.copy defs_table, !clauses)
+
+let restore_globals (lem, tags, defs, cls) =
+  Hashtbl.clear lemmas ; Hashtbl.iter (Hashtbl.add lemmas) lem ;
+  Hashtbl.clear lemma_tags ; Hashtbl.iter (Hashtbl.add lemma_tags) tags ;
+  Hashtbl.clear defs_table ; Hashtbl.iter (Hashtbl.add defs_table) defs ;
+  clauses := cls
+
+let remove_defs names =
+  List.iter (Hashtbl.remove defs_table) names ;
+  clauses := List.filter (fun (_, clause) ->
+      not (List.mem (term_head_name clause) names)) !clauses
+
 let get_hyp name =
   let hyp = List.find (fun h -> h.id = name) sequent.hyps in
   hyp.term
@@ -930,7 +954,7 @@ let next_subgoal () =
 
 let print_theorem name (tys, thm) fmt =
   Format.fprintf fmt "@[<hv2>Theorem %s%s :@ %a@].@."
-    (!display_name name) (gen_to_string tys) format_metaterm thm
+    name (gen_to_string tys) format_metaterm thm
 
 let show name fmt =
   print_theorem name (get_generic_lemma name) fmt

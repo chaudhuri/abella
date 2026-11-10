@@ -85,12 +85,76 @@ let initial_env = {
 let env = State.rref initial_env
 let frames : Subordination.sr list ref = State.rref []
 
-let identity_display name = name
+(* Scoped shadowing for unprefixed module contents. Inline (.thm)
+   modules keep names unprefixed while they are processed, exactly
+   like the top level of a .thmod file; a frame snapshots everything
+   such contents may shadow. Closing the scope restores the snapshot,
+   which drops the scope's installations and recovers what they hid.
+   Lemma overwrites need no preparation (Hashtbl.replace already
+   shadows); sign entries, defs and clauses, which reject duplicates,
+   are cleared up front by [shadow_ids]. *)
+type shadow_frame = {
+  sh_path : string list ;
+  sh_sign : Typing.sign ;
+  sh_prover : Prover.saved_globals ;
+  sh_axioms : int ;
+  sh_unfinished : int ;
+}
+
+let shadows : shadow_frame list ref = State.rref []
+
+let full_scope_path () =
+  List.map (fun sc -> sc.sc_name) (List.rev !env.en_stack)
+
+let framed () =
+  match !shadows with
+  | fr :: _ -> fr.sh_path = full_scope_path ()
+  | [] -> false
+
+let push_shadow path =
+  shadows := {
+    sh_path = path ;
+    sh_sign = !sign ;
+    sh_prover = Prover.save_globals () ;
+    sh_axioms = List.length !Setup.axioms ;
+    sh_unfinished = List.length !Setup.unfinished ;
+  } :: !shadows
+
+let shadow_ids ids =
+  if framed () && ids <> [] then begin
+    let (ktable, ctable) = !sign in
+    sign :=
+      (List.filter (fun (id, _) -> not (List.mem id ids)) ktable,
+       List.filter (fun (id, _) -> not (List.mem id ids)) ctable) ;
+    Prover.remove_defs ids
+  end
+
+let qualify_added len full xs =
+  let n = List.length xs - len in
+  if n <= 0 then xs
+  else
+    let qualify x =
+      if String.contains x '.' then x
+      else String.concat "." (full @ [x])
+    in
+    List.map qualify (List.take n xs) @ List.drop n xs
+
+let restore_shadow full =
+  match !shadows with
+  | fr :: rest when fr.sh_path = full ->
+      shadows := rest ;
+      sign := fr.sh_sign ;
+      Prover.restore_globals fr.sh_prover ;
+      Setup.axioms :=
+        qualify_added fr.sh_axioms full !Setup.axioms ;
+      Setup.unfinished :=
+        qualify_added fr.sh_unfinished full !Setup.unfinished
+  | _ -> ()
 
 let reset () =
   env := initial_env ;
   frames := [] ;
-  Term.display_name := identity_display
+  shadows := []
 
 let starts_with prefix s =
   let n = String.length prefix in
@@ -99,26 +163,6 @@ let starts_with prefix s =
 let strip_prefix prefix name =
   String.sub name (String.length prefix + 1)
     (String.length name - String.length prefix - 1)
-
-let rec display_name_for prefixes name =
-  match prefixes with
-  | [] -> name
-  | path :: rest ->
-      let prefix = String.concat "." path in
-      if prefix = "" then name
-      else if starts_with (prefix ^ ".") name then
-        strip_prefix prefix name
-      else
-        display_name_for rest name
-
-let update_display () =
-  match !env.en_stack with
-  | [] -> Term.display_name := identity_display
-  | sc :: rest ->
-      let prefixes =
-        List.map (fun sc -> sc.sc_path) (sc :: rest)
-      in
-      Term.display_name := fun name -> display_name_for prefixes name
 
 let current_scope () =
   match !env.en_stack with
@@ -604,8 +648,7 @@ let add_compiled ?(imported=false) citem =
       let sc = { sc with
                  sc_items = sc.sc_items @ new_items ;
                  sc_content = citem :: sc.sc_content } in
-      env := { !env with en_stack = sc :: rest } ;
-      update_display ()
+      env := { !env with en_stack = sc :: rest }
 
 let add_imported_compiled citem = add_compiled ~imported:true citem
 
@@ -617,7 +660,7 @@ let check_param_shadowing params =
       failwithf "Module parameter %s shadows an enclosing parameter" param
   end params
 
-let enter_module ?(top_path=[]) name params =
+let enter_module name params =
   let state = !env in
   if state.en_complete then
     failwith "Module after End is not allowed in a .thmod" ;
@@ -629,19 +672,23 @@ let enter_module ?(top_path=[]) name params =
       let sc = { sc_name = name ;
                  sc_root = name ;
                  sc_source = "inline:" ^ name ;
-                 sc_path = top_path ;
+                 sc_path = [] ;
                  sc_params = params ;
                  sc_items = [] ;
                  sc_children = [] ;
                  sc_instances = [] ;
                  sc_content = [] } in
-      env := { state with en_stack = [sc] } ;
-      update_display ()
+      if !Setup.file_kind = `thm then push_shadow [name] ;
+      env := { state with en_stack = [sc] }
   | parent :: _ ->
       if List.exists (fun ch -> ch.sc_name = name) parent.sc_children then
         failwithf "Module %s is already declared in this module" name ;
       if List.mem_assoc name parent.sc_instances then
         failwithf "Module %s is already imported in this module" name ;
+      let full =
+        List.map (fun sc -> sc.sc_name) (List.rev state.en_stack) @ [name]
+      in
+      push_shadow full ;
       let sc = { sc_name = name ;
                  sc_root = parent.sc_root ;
                  sc_source = parent.sc_source ^ "." ^ name ;
@@ -651,8 +698,7 @@ let enter_module ?(top_path=[]) name params =
                  sc_children = [] ;
                  sc_instances = [] ;
                  sc_content = [] } in
-      env := { state with en_stack = sc :: state.en_stack } ;
-      update_display ()
+      env := { state with en_stack = sc :: state.en_stack }
 
 let leave_module ?(retain_top=false) name =
   match !env.en_stack with
@@ -674,7 +720,8 @@ let leave_module ?(retain_top=false) name =
           in
           env := { !env with en_stack = parent :: parents }
       end ;
-      update_display () ;
+      restore_shadow
+        (List.map (fun s -> s.sc_name) (List.rev rest) @ [sc.sc_name]) ;
       (sc, rest = [])
 
 let check_complete () =
@@ -862,23 +909,13 @@ let check_structure cmd =
   | `thmod ->
       check_thmod_structure cmd
 
-let remove_scope_declarations sc =
-  let names =
-    List.map (fun item -> item.item_name) sc.sc_items
-  in
-  let (ktable, ctable) = !sign in
-  sign :=
-    (List.filter (fun (id, _) -> not (List.mem id names)) ktable,
-     List.filter (fun (id, _) -> not (List.mem id names)) ctable) ;
-  Prover.remove_globals names
-
 let process_module name params =
   match !Setup.file_kind with
   | `thm ->
       if current_name () = None && find_instance name <> None then
         failwithf "Module name %s is already imported" name ;
       push_frame !sr ;
-      enter_module ~top_path:[name] name params
+      enter_module name params
   | `thmod ->
       let is_top = current_name () = None in
       if is_top then begin
@@ -894,8 +931,7 @@ let process_module name params =
 
 let process_end name =
   let retain_top = !Setup.file_kind = `thm in
-  let closed, is_top = leave_module ~retain_top name in
-  if retain_top || not is_top then remove_scope_declarations closed ;
+  ignore (leave_module ~retain_top name) ;
   sr := pop_frame ()
 
 (* Import Module and Show Module orchestration, plus the pure

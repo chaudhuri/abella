@@ -565,10 +565,11 @@ and process_top1_body () =
         Setup.axioms :=
           name :: List.map fst gen_thms @ !Setup.axioms ;
       Process_top
-  | Define _ ->
+  | Define (_, idtys, _) ->
       let strat_errors =
         Thmod.in_module () || !stratification_warnings_are_errors
       in
+      Thmod.shadow_ids (List.map fst idtys) ;
       compile (Prover.register_definition ~strat_errors
                  ~bound_tyvars:(bound_params ()) input.el) ;
       Process_top
@@ -634,11 +635,13 @@ and process_top1_body () =
       Process_top
   | Query(q) -> query q ; Process_top
   | Kind(ids,knd) ->
+      Thmod.shadow_ids ids ;
       check_noredef ids;
       Prover.add_global_types ids knd;
       compile (CKind (ids,knd)) ;
       Process_top
   | Type(ids, ty) ->
+      Thmod.shadow_ids ids ;
       check_noredef ids ;
       let is_declared_predicate =
         match observe_ty ty with

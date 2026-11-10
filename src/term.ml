@@ -474,8 +474,6 @@ let abs_name = "x"
 let arrow_op = Pretty.FMT " ->@ "
 let space_op = Pretty.FMT " "
 
-let display_name : (string -> string) ref = State.rref (fun s -> s)
-
 let rec pretty_ty (Ty (args, targ)) =
   let open Pretty in
   let args = List.map pretty_ty args in
@@ -493,7 +491,7 @@ and pretty_aty aty =
      Atom (STR v)
   | Typtr {contents=TT _} -> [%bug] "pretty_aty: unexpected bound type pointer"
   | Tycons (c,args) ->
-     let cty = Atom (STR (!display_name c)) in
+     let cty = Atom (STR c) in
      let cargs = List.map pretty_ty args in
      List.fold_left begin fun aty arg ->
        Opapp (1, Infix (LEFT, aty, space_op, arg))
@@ -516,7 +514,7 @@ let ty_to_string ty =
 let var_to_string v =
   let (bef, aft) = if show_tag || show_ts || show_ty then ("$(", ")") else ("", "") in
   bef ^ begin
-    (!display_name v.name)
+    v.name
     ^ (if show_tag then "!" ^ tag2str v.tag else "")
     ^ (if show_ts then "/" ^ string_of_int v.ts else "")
     ^ (if show_ty then ":" ^ ty_to_string v.ty else "")
