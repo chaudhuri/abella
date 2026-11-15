@@ -19,7 +19,8 @@ let search ?depth () =
 let assert_search_fails () =
   let outcome =
     try search () ; `found
-    with Failure msg when msg = "Search failed" -> `failed
+    with Failure msg when String.starts_with ~prefix:"Search failed" msg ->
+      `failed
   in
   match outcome with
   | `failed -> ()

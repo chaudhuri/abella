@@ -1009,7 +1009,15 @@ let remove_coinductive_hypotheses hyps =
 
 let search_depth = State.rref 5
 
-let search_goal_witness ?depth goal witness =
+let msg_search_depth_exceeded =
+  "Search depth exceeded; try increasing the search depth"
+
+let msg_search_failed_depth =
+  "Search failed. Search depth exceeded; \
+   try increasing the search depth."
+
+let search_goal_witness ?depth
+    ?(depth_exceeded : bool ref option = None) goal witness =
   let hyps = sequent.hyps
              |> remove_inductive_hypotheses
              |> remove_coinductive_hypotheses
@@ -1024,17 +1032,27 @@ let search_goal_witness ?depth goal witness =
     ~sr:!sr
     ~retype
     ~witness
+    ~depth_exceeded
     goal
 
-let search_goal ?depth goal =
-  try Option.is_some (search_goal_witness ?depth goal WMagic)
+let search_goal ?depth
+    ?(depth_exceeded : bool ref option = None) goal =
+  try
+    Option.is_some
+      (search_goal_witness ?depth ~depth_exceeded goal WMagic)
   with Failure _ -> false
 
 let search ?depth ~witness ~handle_witness () =
   warn_witness witness ;
-  let search_result = search_goal_witness ?depth sequent.goal witness in
+  let exceeded = ref false in
+  let search_result =
+    search_goal_witness ?depth
+      ~depth_exceeded:(Some exceeded) sequent.goal witness
+  in
   match search_result with
-  | None -> failwith "Search failed"
+  | None ->
+      if !exceeded then failwith msg_search_failed_depth
+      else failwith "Search failed"
   | Some w -> handle_witness w ; next_subgoal ()
 
 (* Search cut *)
@@ -1043,8 +1061,18 @@ let search_cut ?hint h =
   warn_clearable h ;
   match get_stmt_clearly h with
   | Obj(obj, _) ->
-      add_hyp_with_hint (alt_for_subgoal hint 0)
-        (Obj(Tactics.search_cut ~search_goal obj, Irrelevant))
+      let exceeded = ref false in
+      let tracking_search_goal goal =
+        search_goal ~depth_exceeded:(Some exceeded) goal
+      in
+      let res =
+        Obj(Tactics.search_cut
+              ~search_goal:tracking_search_goal obj, Irrelevant)
+      in
+      if !exceeded then
+        Output.msg_printf "Note: %s."
+          msg_search_depth_exceeded ;
+      add_hyp_with_hint (alt_for_subgoal hint 0) res
   | _ ->
       failwith "Cut can only be used on hypotheses of the form {... |- ...}"
 
@@ -1115,12 +1143,22 @@ let type_apply_withs stmt ws =
        | Not_found -> failwithf "Unknown variable %s" id)
     ws
 
-let partition_obligations ?depth obligations =
+let partition_obligations ?depth
+    ?(depth_exceeded : bool ref option = None) obligations =
   List.partition_map begin fun g ->
     (* Format.eprintf "before search:@.%a@." *)
     (*   format_sequent_with_goal g ; *)
-    let wit = search_goal_witness ?depth g WMagic in
-    ensure_no_logic_variable g ;
+    let local_exceeded = ref false in
+    let wit =
+      search_goal_witness ?depth
+        ~depth_exceeded:(Some local_exceeded) g WMagic
+    in
+    if !local_exceeded then
+      Option.iter (fun r -> r := true) depth_exceeded ;
+    (try ensure_no_logic_variable g
+     with Failure msg when !local_exceeded ->
+       failwith (msg ^ "\nNote: " ^ msg_search_depth_exceeded ^ ".")
+    ) ;
     match wit with
     | None ->
         (* Format.eprintf "after search/failure:@.%a@." *)
@@ -1144,7 +1182,19 @@ let apply ?depth ?hint ?(term_witness=ignore) h args ws =
       ~used:(List.filter is_uninstantiated sequent.vars)
   in
   let remaining_obligations, term_witnesses =
-    partition_obligations ?depth obligations
+    let exceeded = ref false in
+    let res =
+      partition_obligations ?depth
+        ~depth_exceeded:(Some exceeded) obligations
+    in
+    if !exceeded then
+      begin match res with
+      | remaining, _ when remaining <> [] ->
+          Output.msg_printf "Note: %s."
+            msg_search_depth_exceeded
+      | _ -> ()
+      end ;
+    res
   in
   let () = ensure_no_logic_variable result in
   let () = List.iter term_witness term_witnesses in
@@ -1194,7 +1244,19 @@ let backchain ?depth ?(term_witness=ignore) h ws =
   let ws = type_backchain_withs stmt ws in
   let obligations = Tactics.backchain_with ~sr:!sr stmt ws sequent.goal in
   let remaining_obligations, term_witnesses =
-    partition_obligations ?depth obligations
+    let exceeded = ref false in
+    let res =
+      partition_obligations ?depth
+        ~depth_exceeded:(Some exceeded) obligations
+    in
+    if !exceeded then
+      begin match res with
+      | remaining, _ when remaining <> [] ->
+          Output.msg_printf "Note: %s."
+            msg_search_depth_exceeded
+      | _ -> ()
+      end ;
+    res
   in
   let () = List.iter term_witness term_witnesses in
   let obligation_subgoals = List.map goal_to_subgoal remaining_obligations in
@@ -1342,19 +1404,29 @@ let coinduction ?hint () =
 (* Assert *)
 
 let delay_mainline ?hint ?depth new_hyp detour_goal =
-  if depth <> Some 0 && search_goal ?depth detour_goal then
-    add_hyp_with_hint (alt_for_subgoal hint 0) new_hyp
-  else
-  let mainline =
-    case_to_subgoal ?alt:(alt_for_subgoal hint 1)
-      { bind_state = get_bind_state () ;
-        new_vars = [] ;
-        new_hyps = [new_hyp] }
+  let exceeded = ref false in
+  let proved =
+    depth <> Some 0 &&
+    search_goal ?depth
+      ~depth_exceeded:(Some exceeded) detour_goal
   in
-  let detour = goal_to_subgoal detour_goal in
-  (* Using add_subgoals to take care of annotations *)
-  add_subgoals ~mainline [detour] ;
-  next_subgoal ()
+  if proved then
+    add_hyp_with_hint (alt_for_subgoal hint 0) new_hyp
+  else begin
+    if !exceeded then
+      Output.msg_printf "Note: %s."
+        msg_search_depth_exceeded ;
+    let mainline =
+      case_to_subgoal ?alt:(alt_for_subgoal hint 1)
+        { bind_state = get_bind_state () ;
+          new_vars = [] ;
+          new_hyps = [new_hyp] }
+    in
+    let detour = goal_to_subgoal detour_goal in
+    (* Using add_subgoals to take care of annotations *)
+    add_subgoals ~mainline [detour] ;
+    next_subgoal ()
+  end
 
 let assert_hyp ?hint ?depth term =
   let term = type_umetaterm ~sr:!sr ~sign:!sign ~ctx:sequent.vars term in

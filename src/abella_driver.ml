@@ -165,6 +165,7 @@ let query q =
       let support = metaterm_support q in
       let ctx = Tactics.fresh_nameless_alist ~sr:!sr ~support ~ts:0 ~tag:Logic fv in
       let q = replace_metaterm_vars ctx q in
+      let exceeded = ref false in
       let _ = Tactics.search q
           ~depth:!Prover.search_depth
           ~hyps:[]
@@ -172,6 +173,7 @@ let query q =
           ~def_unfold:Prover.def_unfold
           ~retype:Prover.retype
           ~sr:!sr
+          ~depth_exceeded:(Some exceeded)
           ~sc:(fun _w ->
               Output.msg_printf "Found solution:" ;
               List.iter
@@ -180,7 +182,11 @@ let query q =
                 ctx ;
               Output.blank_line ())
       in
-      Output.msg_printf "No more solutions."
+      Output.msg_printf "No more solutions." ;
+      if !exceeded then
+        Output.msg_printf
+          "Note: Search depth exceeded; there may be more solutions \
+           with a higher search depth."
   | _ -> [%bug] "query: expected an existential binding"
 
 let on_or_off = {|"on" or "off"|}

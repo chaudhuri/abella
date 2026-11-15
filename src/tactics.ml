@@ -934,9 +934,29 @@ let satisfies r1 r2 =
 
 let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
     ?(witness=WMagic)
-    ?(sc=fun w -> raise (SearchSuccess w)) goal =
+    ?(sc=fun w -> raise (SearchSuccess w))
+    ?(depth_exceeded : bool ref option = None) goal =
 
   let bad_witness () = failwithf "Bad search witness: %s" (witness_to_string witness) in
+
+  let mark_exceeded () =
+    match depth_exceeded with Some r -> r := true | None -> ()
+  in
+
+  let head_name_opt t =
+    try Some (term_head_name t) with _ -> None
+  in
+
+  let has_matching_prog_clause foci p =
+    try
+      foci |>
+      List.map (fun (_, cl) -> cl) |>
+      List.find_all (fun cls -> not (tc [] cls = olistty)) |>
+      List.map clausify |>
+      List.concat |>
+      List.exists (fun (_, h, _) -> head_name_opt h = Some p)
+    with _ -> false
+  in
 
   let temporary_hyp_name =
     let count = ref 0 in
@@ -1011,8 +1031,20 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       | Smaller _ | Equal _ -> ()
       | _ ->
           (* Backchain *)
-         let gctx = List.map (fun t -> ([],t)) goal.context in
-          if n > 0 then clause_aux n goal.context (gctx @ clauses) goal.right r ts ~sc ~witness ;
+          let gctx = List.map (fun t -> ([],t)) goal.context in
+          if n > 0 then
+            clause_aux n goal.context (gctx @ clauses)
+              goal.right r ts ~sc ~witness
+          else begin
+            match witness with
+            | WMagic | WUnfold _ ->
+                (match head_name_opt goal.right with
+                 | Some p ->
+                     if has_matching_prog_clause (gctx @ clauses) p then
+                       mark_exceeded ()
+                 | None -> ())
+            | _ -> ()
+          end ;
           (* Also backchain the goal G in '{.. L ..|- G}' on clauses F
              occurring in hypotheses of the form 'member F L' *)
           let ctxs = List.find_all (fun cls -> tc [] cls = olistty) goal.context in
@@ -1063,6 +1095,15 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
             match witness with
             | WMagic | WUnfold _ -> clause_aux n goal.context [([],focus)] goal.right r ts ~sc ~witness
             | _ -> bad_witness ()
+          end else begin
+            match witness with
+            | WMagic | WUnfold _ ->
+                (match head_name_opt goal.right with
+                 | Some p ->
+                     if has_matching_prog_clause [([],focus)] p then
+                       mark_exceeded ()
+                 | None -> ())
+            | _ -> ()
           end
     end
 
@@ -1248,7 +1289,36 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
         | Sync _ -> sync_obj_aux n hyps obj r ts ~sc ~witness
       end
     | Pred(_, Smaller _) | Pred(_, Equal _) -> ()
-    | Pred(p, r)  -> if n > 0 then def_aux n hyps p r ts ~sc ~witness
+    | Pred(p, r) ->
+        if n > 0 then def_aux n hyps p r ts ~sc ~witness
+        else begin
+          match witness with
+          | WMagic ->
+              let exists =
+                try
+                  let st = get_scoped_bind_state () in
+                  let res =
+                    try let (_, cls) = def_unfold (Pred (p, r)) in
+                      cls <> []
+                    with Failure _ -> false in
+                  set_scoped_bind_state st ;
+                  res
+                with _ -> false in
+              if exists then mark_exceeded ()
+          | WUnfold (wp, _, _) when head_name_opt p = Some wp ->
+              let exists =
+                try
+                  let st = get_scoped_bind_state () in
+                  let res =
+                    try let (_, cls) = def_unfold (Pred (p, r)) in
+                      cls <> []
+                    with Failure _ -> false in
+                  set_scoped_bind_state st ;
+                  res
+                with _ -> false in
+              if exists then mark_exceeded ()
+          | _ -> ()
+        end
 
   and def_aux n hyps goal r ts ~sc ~witness =
     (* Printf.eprintf "def_aux: %s\n%!" (witness_to_string witness) ; *)
