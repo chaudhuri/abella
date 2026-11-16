@@ -71,13 +71,14 @@ and add_source_file kind file =
 
 type conf = {
   abella : string ;
+  out_suffix : string ;
   makefile : string ;
   clobber : bool ;
   recursive : bool ;
 }
 
-let mk_conf abella makefile clobber recursive =
-  { abella ; makefile ; clobber ; recursive }
+let mk_conf abella out_suffix makefile clobber recursive =
+  { abella ; out_suffix ; makefile ; clobber ; recursive }
 
 let abella_dep conf files =
   List.iter (add_input_file conf.recursive) files ;
@@ -100,11 +101,13 @@ let abella_dep conf files =
   Printf.fprintf out "# Generated on: %s\n" time ;
   Printf.fprintf out ".PHONY: all\n" ;
   Printf.fprintf out "%%.thc: %%.thm\n" ;
-  Printf.fprintf out "\t%s --non-recursive --output=${<:%%.thm=%%.out} $<\n" conf.abella ;
+  Printf.fprintf out
+    "\t%s --non-recursive --output=${<:%%.thm=%%%s} $<\n"
+    conf.abella conf.out_suffix ;
   Printf.fprintf out "%%.thmodc: %%.thmod\n" ;
   Printf.fprintf out
-    "\t%s --non-recursive --output=${<:%%.thmod=%%.out} $<\n"
-    conf.abella ;
+    "\t%s --non-recursive --output=${<:%%.thmod=%%%s} $<\n"
+    conf.abella conf.out_suffix ;
   Hashtbl.iter begin fun file deps ->
     if not @@ (Filename.check_suffix file ".thc" ||
                Filename.check_suffix file ".thmodc") then () else
@@ -142,6 +145,12 @@ let () =
              ~docv:"CMD"
              ~absent:"$(b,abella[.exe])")
     in
+    let out_suffix =
+      let doc = "Save the output from Abella with suffix $(docv)" in
+      Arg.(value @@ opt string ".out" @@
+           info ["suffix"] ~doc
+             ~docv:"SUFFIX")
+    in
     let makefile =
       let doc = "Output dependencies to $(docv) as a makefile. \
                  If $(docv) is $(b,-), then send the output to \
@@ -159,7 +168,7 @@ let () =
       let doc = "Process directories recursively." in
       Arg.(value @@ flag @@ info ["r"] ~doc)
     in
-    Term.(const mk_conf $ abella $ makefile $ clobber $ recursive) in
+    Term.(const mk_conf $ abella $ out_suffix $ makefile $ clobber $ recursive) in
   let files =
     let doc = "An Abella $(b,.thm) or $(b,.thmod) file or a directory" in
     Arg.(value @@ pos_all string [] @@ info [] ~docv:"SOURCE" ~doc)
