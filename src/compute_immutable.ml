@@ -1,17 +1,9 @@
-(************************************************************)
-(* Compute_immutable: immutable-sequent port of Compute.    *)
-(*                                                          *)
-(* Mirrors [Compute.compute] but threads the sequent        *)
-(* explicitly instead of mutating [Prover.sequent]. Each    *)
-(* finished branch becomes a subgoal value paired with the  *)
-(* bind state captured at its completion; the list is in    *)
-(* completion order, first branch focused.                  *)
-(*                                                          *)
-(* The guard table is shared with [Compute] (via            *)
-(* [Compute.is_guarded]), so [Suspend] commands processed   *)
-(* by either driver apply here. Warnings are omitted, as    *)
-(* elsewhere in the immutable prover.                       *)
-(************************************************************)
+(*
+ * Author: Kaustuv Chaudhuri <kaustuv.chaudhuri@inria.fr>
+ * Copyright (C) 2024  Inria (Institut National de Recherche
+ *                            en Informatique et en Automatique)
+ * See LICENSE for licensing details.
+ *)
 
 open Term
 open Typing
