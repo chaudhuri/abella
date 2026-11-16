@@ -27,7 +27,7 @@ open Term
 open Typing
 open Test_helper
 
-module D = Abella_driver
+module D = Driver
 
 let processing_state = ref D.Process_top
 

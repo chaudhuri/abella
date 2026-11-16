@@ -22,7 +22,7 @@
 (* Command line and startup *)
 
 open Abella_lib
-open Abella_driver
+open Driver
 open Abella_types
 open Extensions
 
@@ -72,7 +72,7 @@ let abella_main
     if !Setup.mode = `interactive then
       Output.msg_printf "%s" welcome_msg ;
     State.Undo.set_enabled (!Setup.mode <> `batch) ;
-    let state = ref Abella_driver.Process_top in
+    let state = ref Driver.Process_top in
     while true do
       match process1 !state with
       | Ok next -> state := next

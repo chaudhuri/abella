@@ -25,7 +25,7 @@ open Abella_types
 open Extensions
 open Test_helper
 
-module D = Abella_driver
+module D = Driver
 
 let read_file path =
   let ch = open_in_bin path in
