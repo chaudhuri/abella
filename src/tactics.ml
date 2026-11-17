@@ -94,10 +94,10 @@ let freshen_nameless_bindings ~sr ~support ~ts bindings term =
   replace_metaterm_vars alist term
 
 let existentially_close ~used quant_vars body =
-  let bindings : (id * term) list ref = ref [] in
+  let bindings : (Id.t * term) list ref = ref [] in
   let emit x xv = bindings := (x, xv) :: !bindings in
   let rec renumber_one stem cur v =
-    let candidate = stem ^ string_of_int cur in
+    let candidate = Id.intern (Id.value stem ^ string_of_int cur) in
     if List.mem_assoc candidate used then
       renumber_one stem (cur + 1) v
     else begin
@@ -222,18 +222,18 @@ let object_inst t1 n t2 =
   if List.mem n (List.map term_to_name (metaterm_support t1)) then
     map_on_objs (fun obj -> [map_obj (replace_term_vars ~tag:Nominal [(n, t2)]) obj]) t1
   else
-    failwithf "Did not find %s" n
+    failwithf "Did not find %s" (Id.value n)
 
 (* Case analysis *)
 
 type case = {
   bind_state : bind_state ;
-  new_vars : (id * term) list ;
+  new_vars : (Id.t * term) list ;
   new_hyps : metaterm list ;
 }
 
 type stateless_case = {
-  stateless_new_vars : (id * term) list ;
+  stateless_new_vars : (Id.t * term) list ;
   stateless_new_hyps : metaterm list ;
 }
 
@@ -380,7 +380,7 @@ let predicate_wrapper r names t =
     match t with
     | True | False | Eq _ | Obj _ -> t
     | Pred(p, _) ->
-        if Itab.mem (term_head_name p) names then
+        if Id.Map.mem (term_head_name p) names then
           Pred(p, reduce_inductive_restriction r)
         else
           t
@@ -405,7 +405,7 @@ type spec_view =
   | Spec_atom of term
   | Spec_imp of term * term
   | Spec_amp of term * term
-  | Spec_pi of id * ty * term
+  | Spec_pi of Id.t * ty * term
 
 let spec_view t =
   match observe (hnorm t) with
@@ -574,7 +574,7 @@ let case_aux ~used ~sr ~clauses ~mutual ~defs ~global_support term =
      in the context *)
   let create_sync ~used ~sr ~support async_obj r =
     let raise_result =
-      fresh_raised_alist ~sr ~tag:Eigen ~used ~support [("F", oty)] in
+      fresh_raised_alist ~sr ~tag:Eigen ~used ~support [(Id.intern "F", oty)] in
     let f, fvar =
       match raise_result with
       | ([(_, f)], [fvar]) -> f, fvar
@@ -731,7 +731,7 @@ let coinductive_wrapper r names t =
     match t with
     | True | False | Eq _ | Obj _ -> t
     | Pred(p, _) ->
-        if Itab.mem (term_head_name p) names then
+        if Id.Map.mem (term_head_name p) names then
           Pred(p, reduce_coinductive_restriction r)
         else t
     | Binding(binding, ids, body) -> Binding(binding, ids, aux body)
@@ -809,7 +809,7 @@ let exclaim msg vars head body =
     Format.eprintf "[%s]@.vars = [%s]@.head = %s@.body = %s@."
       msg
       (List.map begin fun (v, t) ->
-          v ^ " = " ^ term_to_string t
+          Id.value v ^ " = " ^ term_to_string t
         end vars |> String.concat ", ")
       (term_to_string head)
       (List.map term_to_string body |> String.concat ", ")
@@ -957,7 +957,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
     let wrap body = List.map (fun t -> {context ; mode = Async ; right = t}) body in
     let filter_by_witness = match witness with
       | WUnfold (p, n, _) ->
-          (fun (i, (_, h, _)) -> term_head_name h = p && i = n)
+          (fun (i, (_, h, _)) -> Id.value (term_head_name h) = p && i = n)
       | WMagic ->
           (fun _ -> true)
       | _ -> bad_witness ()
@@ -979,7 +979,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       | Some cpairs ->
           let sc ws =
             if try_unify_cpairs cpairs then
-              sc (WUnfold(p, i, ws)) in
+              sc (WUnfold(Id.value p, i, ws)) in
           let witnesses = match witness with
             | WUnfold (_, _, ws) when List.length ws = List.length body -> ws
             | WMagic -> List.map (fun _ -> WMagic) body
@@ -1199,7 +1199,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
         let (alist, w) = match witness with
           | WExists (alist, w) ->
               let alist = List.map begin fun (x, t) ->
-                  (x, retype (Typing.forget_term t))
+                  (Id.intern x, retype (Typing.forget_term t))
                 end alist in
               (alist, w)
           | WMagic ->
@@ -1208,12 +1208,14 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
           | _ -> bad_witness ()
         in
         let body = replace_metaterm_vars alist body in
-        metaterm_aux n hyps body ts ~sc:(fun w -> sc (WExists(alist, w))) ~witness:w
+        metaterm_aux n hyps body ts ~sc:(fun w ->
+            sc (WExists(List.map (fun (x, t) -> (Id.value x, t)) alist, w)))
+          ~witness:w
     | Binding(Nabla, tids, body) ->
         let (alist, w) = match witness with
           | WIntros (ids, w) ->
               let alist = List.map2 begin fun id (x, ty) ->
-                  (x, nominal_var id ty)
+                  (x, nominal_var (Id.intern id) ty)
                 end ids tids in
               (alist, w)
           | WMagic -> (make_nabla_alist tids body, WMagic)
@@ -1230,7 +1232,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
           | WForall (ids, w) ->
               let alist = List.map2 begin fun id (x, ty) ->
                   let (ty, _) = raise_type ~sr support ty in
-                  (x, var Eigen id ts ty)
+                  (x, var Eigen (Id.intern id) ts ty)
                 end ids tids in
               (alist, w)
           | WMagic ->
@@ -1257,7 +1259,8 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       let mdefs = def_unfold (Pred (goal, r)) in
       let (csel, witness, subn) = match witness with
         | WMagic -> (Abella_types.Select_any, WMagic, n - 1)
-        | WUnfold (wp, wn, [w]) when wp = p -> (Abella_types.Select_num wn, w, n)
+        | WUnfold (wp, wn, [w]) when wp = Id.value p ->
+            (Abella_types.Select_num wn, w, n)
         | _ -> bad_witness ()
       in
       let doit () =
@@ -1267,7 +1270,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
           metaterm_aux subn hyps body ts
             ~witness
             ~sc:(fun w -> if try_unify_cpairs cpairs then
-                    sc (WUnfold(p, i, [w])))
+                    sc (WUnfold(Id.value p, i, [w])))
         end in
       unwind_state doit ()
     end with Failure _ -> ()
@@ -1285,7 +1288,7 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
 let check_restrictions formal actual =
   if (List.length formal <> List.length actual) then
     failwithf "%s arguments to apply\n(Expected %d but got %d)" begin
-      let diff = compare (List.length formal) (List.length actual) in
+      let diff = Stdlib.compare (List.length formal) (List.length actual) in
       if diff > 0 then "Not enough" else "Too many"
     end (List.length formal) (List.length actual) ;
   List.iter2 (fun fr ar -> match fr, ar with
@@ -1473,7 +1476,7 @@ let rec instantiate_withs term withs =
         let (xfr, xto) = List.find (fun (_xfr, xto) -> List.mem xto support) withs' in
         failwithf "Invalid instantiation %s = %s\n\
                  \ %s already occurs in the support"
-          xfr (term_to_string xto) (term_to_string xto)
+          (Id.value xfr) (term_to_string xto) (term_to_string xto)
       with Not_found -> () end ;
       let body, used_nominals =
         instantiate_withs (replace_metaterm_vars (withs' @ binders_as_withs) body) withs

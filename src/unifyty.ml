@@ -88,12 +88,12 @@ let unify_constraints ?(enable_bind=false) eqns =
       -> [%bug] "unify_constraints: unexpected bound type pointer"
     | Ty([], Tygenvar v), _ ->
        if enable_bind then
-         raise (InstGenericTyvar (v, ty2))
+         raise (InstGenericTyvar (Id.value v, ty2))
        else
          fail ()
     | _, Ty([], Tygenvar v) ->
        if enable_bind then
-         raise (InstGenericTyvar (v, ty1))
+         raise (InstGenericTyvar (Id.value v, ty1))
        else
          fail ()
     | Ty([], Tycons (cty1,args1)), Ty([], Tycons (cty2,args2))

@@ -98,8 +98,8 @@ type hyp = {
 }
 
 type sequent = {
-  mutable vars : (id * term) list ;
-  mutable user_vars : Iset.t ;
+  mutable vars : (Id.t * term) list ;
+  mutable user_vars : Id.Set.t ;
   mutable hyps : hyp list ;
   mutable goal : metaterm ;
   mutable count : int ;
@@ -121,9 +121,9 @@ let assign_sequent sq1 sq2 =
 let sequent =
   State.make ~copy:cp_sequent ~assign:assign_sequent {
     vars = [] ;
-    user_vars = Iset.empty ;
+    user_vars = Id.Set.empty ;
     hyps = [] ;
-    goal = termobj (const "placeholder" propty) ;
+    goal = termobj (const (Id.intern "placeholder") propty) ;
     count = 0 ;
     name = "" ;
     next_subgoal_id = 1 ;
@@ -198,7 +198,7 @@ let hyp_eq h1 h2 =
 
 let sequent_eq s1 s2 =
   Metaterm.metaterm_eq s1.goal s2.goal &&
-  Iset.equal s1.user_vars s2.user_vars &&
+  Id.Set.equal s1.user_vars s2.user_vars &&
   List.length s1.vars = List.length s2.vars &&
   List.for_all2 (fun (x1, t1) (x2, t2) -> x1 = x2 && Term.eq t1 t2)
     s1.vars s2.vars &&
@@ -210,7 +210,9 @@ let fresh_hyp_name base =
     sequent.count <- sequent.count + 1 ;
     "H" ^ (string_of_int sequent.count)
   end else
-    fresh_name base (List.map (fun h -> (h.id, ())) sequent.hyps)
+    Id.value
+      (fresh_name (Id.intern base)
+         (List.map (fun h -> (Id.intern h.id, ())) sequent.hyps))
 
 (* let normalize mt = *)
 (*   let before = metaterm_to_string mt in *)
@@ -242,16 +244,16 @@ let add_defs
     typarams preds flavor clauses =
   List.iter begin fun (id, _) ->
     if H.mem defs_table id then
-      failwithf "Predicate %s has already been defined" id ;
+      failwithf "Predicate %s has already been defined" (Id.value id) ;
   end preds ;
   (* List.iter begin fun (head, body) -> *)
   (*   Format.eprintf "%a := %a@." format_metaterm head format_metaterm body *)
   (* end defs ; *)
   let mutual = List.fold_left begin fun mutual (id, ty) ->
-      Itab.add id ty mutual
-    end Itab.empty preds in
+      Id.Map.add id ty mutual
+    end Id.Map.empty preds in
   let def = {flavor ; typarams ; mutual ; clauses} in
-  let is_defined id = Itab.mem id mutual || H.mem defs_table id in
+  let is_defined id = Id.Map.mem id mutual || H.mem defs_table id in
   Checks.check_def ~errors:strat_errors ~def ~is_defined () ;
   List.iter (fun (id, _) -> H.add defs_table id def) preds
 
@@ -264,6 +266,7 @@ let register_definition
     ?(strat_errors = !stratification_warnings_are_errors)
     ?(bound_tyvars=[]) = function
   | Define (flav, idtys, udefs) ->
+      let bound_tyvars = List.map Id.intern bound_tyvars in
       let local_typarams ty =
         List.minus (get_typaram ty) bound_tyvars
       in
@@ -278,12 +281,16 @@ let register_definition
       (* Note that in order to type check the definitions, the types
          of predicates being defined are fixed to their most generic
          form by fixing the type variables in them to generic ones *)
-      let consts = List.map (fun (id, ty) -> (id, Poly ([], ty))) idtys @ consts in
+      let consts =
+        List.map (fun (id, ty) -> (Id.value id, Poly ([], ty))) idtys
+        @ consts in
       let clauses = type_udefs ~sr:!sr ~sign:(basics, consts) udefs |>
                     List.map (fun (head, body) -> {head ; body}) in
       ensure_no_schm_clauses (typarams @ bound_tyvars) clauses;
       let (basics, consts) = !sign in
-      let consts = List.map (fun (id, ty) -> (id, Poly (typarams, ty))) idtys @ consts in
+      let consts =
+        List.map (fun (id, ty) -> (Id.value id, Poly (typarams, ty))) idtys
+        @ consts in
       sign := (basics, consts) ;
       add_defs ~strat_errors typarams idtys flav clauses ;
       CDefine (flav, typarams, idtys, clauses)
@@ -291,10 +298,10 @@ let register_definition
 
 let k_member = "member"
 let member_def =
-  let ty_a = tybase @@ Tygenvar "A" in
-  let ty_list_a = tybase @@ Tycons ("list", [ty_a]) in
+  let ty_a = tybase @@ Tygenvar (Id.intern "A") in
+  let ty_list_a = tybase @@ Tycons (Id.intern "list", [ty_a]) in
   let ty_member = tyarrow [ty_a ; ty_list_a] propty in
-  let const k = UCon (ghost_pos, k, fresh_tyvar ()) in
+  let const k = UCon (ghost_pos, Id.intern k, fresh_tyvar ()) in
   let rec app f ts =
     match ts with
     | [] -> f
@@ -311,7 +318,7 @@ let member_def =
                                                          const "L"]] in
     let body = app (const "member") [const "A" ; const "L"] in
     (UPred (head, Irrelevant), UPred (body, Irrelevant)) in
-  Define (Inductive, ["member", ty_member], [clause_nil ; clause_cons])
+  Define (Inductive, [(Id.intern "member", ty_member)], [clause_nil ; clause_cons])
   |> register_definition
 
 let () = built_ins_done := true
@@ -330,16 +337,16 @@ let clause_head_name cl =
 (* let rec app_ty tymap = function
  *   | Ty (args, res) ->
  *       let args = List.map (app_ty tymap) args in
- *       let res = try Itab.find res tymap with Not_found -> tybase res in
+ *       let res = try Id.Map.find res tymap with Not_found -> tybase res in
  *       tyarrow args res *)
 
 (* let instantiate_clauses_aux =
  *   let fn (pn, ty_acts) def =
- *     let Ty (ty_exps, _) = Itab.find pn def.mutual in
+ *     let Ty (ty_exps, _) = Id.Map.find pn def.mutual in
  *     let ty_fresh = List.fold_left begin fun fresh_sub tyvar ->
  *         let tv = Term.fresh_tyvar () in
- *         Itab.add tyvar tv fresh_sub
- *       end Itab.empty def.typarams in
+ *         Id.Map.add tyvar tv fresh_sub
+ *       end Id.Map.empty def.typarams in
  *     let ty_exps = List.map (app_ty ty_fresh) ty_exps in
  *     let eqns = List.map2 begin fun ty_exp ty_act ->
  *         (ty_exp, ty_act, (ghost, CArg))
@@ -347,11 +354,11 @@ let clause_head_name cl =
  *     let tysol = unify_constraints eqns in
  *     let tymap = List.fold_left begin fun tymap tyv ->
  *         try begin
- *           let Ty (_, tyf) = Itab.find tyv ty_fresh in
- *           Itab.add tyv (List.assoc tyf tysol) tymap
+ *           let Ty (_, tyf) = Id.Map.find tyv ty_fresh in
+ *           Id.Map.add tyv (List.assoc tyf tysol) tymap
  *         end with Not_found -> tymap
- *       end Itab.empty def.typarams in
- *     (\* Itab.iter begin fun v ty -> *\)
+ *       end Id.Map.empty def.typarams in
+ *     (\* Id.Map.iter begin fun v ty -> *\)
  *     (\*   Format.eprintf "instantiating: %s <- %s@." v (ty_to_string ty) *\)
  *     (\* end tymap ; *\)
  *     List.map begin fun cl ->
@@ -367,11 +374,11 @@ let clause_head_name cl =
  *   let ty_acts = List.map (tc []) args in
  *   instantiate_clauses_aux (pn, ty_acts) def *)
 
-let instantiate_pred_types tysub (tbl: ty Itab.t) : ty Itab.t =
-  let res = ref Itab.empty in
-  Itab.iter begin fun id ty ->
+let instantiate_pred_types tysub (tbl: ty Id.Map.t) : ty Id.Map.t =
+  let res = ref Id.Map.empty in
+  Id.Map.iter begin fun id ty ->
     let ty' = apply_sub_ty tysub ty in
-    res := Itab.add id ty' !res
+    res := Id.Map.add id ty' !res
   end tbl;
   !res
 
@@ -387,7 +394,7 @@ let instantiate_clauses p def =
   let tysub = List.map (fun id -> (id, Term.fresh_tyvar ())) def.typarams in
   mark_schematic_tysub tysub ;
   let mutual = instantiate_pred_types tysub def.mutual in
-  let dpty = Itab.find pn mutual in
+  let dpty = Id.Map.find pn mutual in
   unify_constraints [(pty, dpty, def_cinfo)];
   assert (ty_tyvars dpty = []);
   let clauses = List.map (instantiate_clause tysub) clauses in
@@ -407,13 +414,13 @@ let def_unfold term =
         (mutual,clauses)
       end else
         failwith "Cannot perform case-analysis on undefined atom"
-  | _ -> (Itab.empty, [])
+  | _ -> (Id.Map.empty, [])
 
 
 (* Pretty print *)
 
 let sequent_var_to_string (x, _xt) =
-  x (* ^ "(=" ^ term_to_string xt ^ ")" *)
+  Id.value x (* ^ "(=" ^ term_to_string xt ^ ")" *)
 
 let show_instantiations = State.rref false
 
@@ -453,8 +460,8 @@ let format_vars ff =
     if !show_types then begin
       pp_print_newline ff () ;
       eigen_vars
-      |> List.map (fun (x, xtm) -> (Term.tc [] xtm, x))
-      |> List.sort (fun (ty1, _) (ty2, _) -> compare ty1 ty2)
+      |> List.map (fun (x, xtm) -> (Term.tc [] xtm, Id.value x))
+      |> List.sort (fun (ty1, _) (ty2, _) -> Stdlib.compare ty1 ty2)
       |> List.collate_assoc
       |> List.iter (format_typed_vars ff) ;
     end else begin
@@ -471,7 +478,7 @@ let format_vars ff =
   end ;
   if inst_vars <> [] && !show_instantiations then
     List.iter begin fun (v, vtm) ->
-      pp_print_string ff v ;
+      pp_print_string ff (Id.value v) ;
       pp_print_string ff " <-- " ;
       Term.format_term ff vtm ;
       pp_print_newline ff () ;
@@ -490,15 +497,16 @@ let format_hyps fmt =
       match h.abbrev with
       | None -> (am, h :: hs)
       | Some ab ->
-          let am = match Itab.find ab am with
-            | hs -> Itab.add ab (h.id :: hs) am
-            | exception Not_found -> Itab.add ab [h.id] am
+          let ab = Id.intern ab in
+          let am = match Id.Map.find ab am with
+            | hs -> Id.Map.add ab (h.id :: hs) am
+            | exception Not_found -> Id.Map.add ab [h.id] am
           in
           (am, hs)
-    end (Itab.empty, []) sequent.hyps
+    end (Id.Map.empty, []) sequent.hyps
   in
-  Itab.iter begin fun ab hs ->
-    fprintf fmt "%s : %s@\n" (String.concat "," (List.rev hs)) ab
+  Id.Map.iter begin fun ab hs ->
+    fprintf fmt "%s : %s@\n" (String.concat "," (List.rev hs)) (Id.value ab)
   end am ;
   List.iter (format_hyp fmt) (List.rev hyps)
 
@@ -606,7 +614,7 @@ let state_json () : Json.t =
     ]
   else
   let vars = List.map begin fun ((v, t) as vt) ->
-      `List [ `String v ;
+      `List [ `String (Id.value v) ;
               if is_uninstantiated vt then `Null else
                 `String (term_to_string t) ]
     end sequent.vars in
@@ -669,9 +677,9 @@ let add_hyp ?name term =
 let add_named_hyp base term =
   let used =
     List.map (fun (x, _) -> (x, ())) sequent.vars @
-    List.map (fun h -> (h.id, ())) sequent.hyps
+    List.map (fun h -> (Id.intern h.id, ())) sequent.hyps
   in
-  let name = fresh_name base used in
+  let name = Id.value (fresh_name (Id.intern base) used) in
   update_hyp_count name ;
   ignore (unsafe_add_hyp ~user_named:true name term)
 
@@ -713,7 +721,7 @@ let replace_hyp name t =
 let add_var ?(user=false) ((name, _) as v) =
   sequent.vars <- List.append sequent.vars [v] ;
   if user then
-    sequent.user_vars <- Iset.add name sequent.user_vars
+    sequent.user_vars <- Id.Set.add name sequent.user_vars
 
 let add_if_new_var ?(user=false) ((name, _) as v) =
   if not (List.mem_assoc name sequent.vars) then
@@ -729,7 +737,7 @@ let nominal_vars_of_sequent sq =
 let rename_described ~hints ~base vars =
   let used =
     ref (List.map (fun (name, _) -> (name, ())) base.vars @
-         List.map (fun h -> (h.id, ())) sequent.hyps @
+         List.map (fun h -> (Id.intern h.id, ())) sequent.hyps @
          List.map (fun (v : var) -> (v.name, ()))
            (nominal_vars_of_sequent sequent))
   in
@@ -742,21 +750,21 @@ let rename_described ~hints ~base vars =
       | Some base_name ->
           let new_name =
             if old_var.tag = Nominal then begin
-              if not (is_nominal_name base_name) then
+              if not (is_nominal_name (Id.intern base_name)) then
                 failwithf
                   "Hint %S is not a valid nominal constant name; use n<number>"
                   base_name ;
               let used_for_hint = List.remove_assoc old_var.name !used in
-              if List.mem_assoc base_name used_for_hint then
+              if List.mem_assoc (Id.intern base_name) used_for_hint then
                 failwithf
                   "Nominal hint %S is already free in the subgoal"
                   base_name ;
-              base_name
+              Id.intern base_name
             end else begin
-              if is_nominal_name base_name then
+              if is_nominal_name (Id.intern base_name) then
                 failwithf
                   "Hint %S is reserved for nominal constants" base_name ;
-              fresh_name base_name !used
+              fresh_name (Id.intern base_name) !used
             end
           in
           used := (new_name, ()) :: !used ;
@@ -809,7 +817,7 @@ let rename_described ~hints ~base vars =
         List.fold_left begin fun user_vars
           (_, old_name, new_name, _, in_sequent) ->
           if in_sequent then
-            Iset.add new_name (Iset.remove old_name user_vars)
+            Id.Set.add new_name (Id.Set.remove old_name user_vars)
           else user_vars
         end sequent.user_vars renames
 
@@ -857,10 +865,10 @@ let remove_globals names =
   List.iter begin fun name ->
     H.remove lemmas name ;
     H.remove lemma_tags name ;
-    H.remove defs_table name
+    H.remove defs_table (Id.intern name)
   end names ;
   clauses := List.filter (fun (_, clause) ->
-      not (List.mem (term_head_name clause) names)) !clauses
+      not (List.mem (Id.value (term_head_name clause)) names)) !clauses
 
 let get_hyp name =
   let hyp = List.find (fun h -> h.id = name) sequent.hyps in
@@ -896,12 +904,13 @@ let warn_var_name name =
   | `warn | `strict ->
       if not (is_nominal_name name) &&
          List.mem_assoc name sequent.vars &&
-         not (Iset.mem name sequent.user_vars)
-      then report_user_name "variable" name
+         not (Id.Set.mem name sequent.user_vars)
+      then report_user_name "variable" (Id.value name)
 
 let warn_label_name name =
   if is_hyp name then warn_hyp_name name
-  else if List.mem_assoc name sequent.vars then warn_var_name name
+  else if List.mem_assoc (Id.intern name) sequent.vars then
+    warn_var_name (Id.intern name)
 
 let warn_term_vars term =
   let names =
@@ -954,7 +963,7 @@ let get_lemma ?(tys:ty list = []) name =
       failwithf "Type argument %s may not contain prop"
         (ty_to_string ty)
   end argtys tys ;
-  let tysub = List.map2 (fun id ty -> (id,ty)) argtys tys in
+  let tysub = List.map2 (fun id ty -> (Id.intern id, ty)) argtys tys in
   mark_schematic_tysub tysub ;
   map_on_tys (apply_sub_ty tysub) bod
 
@@ -1050,14 +1059,14 @@ let inst ?hint h ws =
         | [] -> add_hyp_with_hint (alt_for_subgoal hint 0) ht
         | (n, t) :: ws ->
             let ntids = metaterm_nominal_tids ht in
-            let nty = try List.assoc n ntids with
+            let nty = try List.assoc (Id.intern n) ntids with
               | Not_found -> failwithf "Nominal constant %s not in support" n in
             let ctx = sequent.vars @
                       (List.map (fun (id, ty) -> (id, nominal_var id ty)) ntids)
             in
             let t = type_uterm ~expected_ty:nty ~sr:!sr ~sign:!sign ~ctx t in
             warn_term_vars t ;
-            aux ws (object_inst ht n t)
+            aux ws (object_inst ht (Id.intern n) t)
       in
       aux ws ht
   | _ ->
@@ -1211,13 +1220,13 @@ let type_apply_withs stmt ws =
   List.map
     (fun (id, t) ->
        try
-         let ty = List.assoc id bindings in
+         let ty = List.assoc (Id.intern id) bindings in
          let t =
            type_uterm ~expected_ty:ty ~sr:!sr ~sign:!sign
              ~ctx:sequent.vars t
          in
          warn_term_vars t ;
-         (id, t)
+         (Id.intern id, t)
        with
        | Not_found -> failwithf "Unknown variable %s" id)
     ws
@@ -1285,13 +1294,13 @@ let type_backchain_withs stmt ws =
   List.map
     (fun (id, t) ->
        try
-         let ty = List.assoc id bindings in
+         let ty = List.assoc (Id.intern id) bindings in
          let t =
            type_uterm ~expected_ty:ty ~sr:!sr ~sign:!sign
              ~ctx:(nctx @ sequent.vars) t
          in
          warn_term_vars t ;
-         (id, t)
+         (Id.intern id, t)
        with
        | Not_found -> failwithf "Unknown variable %s" id)
     ws
@@ -1390,9 +1399,10 @@ let ensure_is_inductive term =
         | CoInductive ->
             failwithf "Cannot induct on %s since it has\
                      \ been coinductively defined"
-              pname
+              (Id.value pname)
       with Not_found ->
-        failwithf "Cannot induct on %s since it has not been defined" pname
+        failwithf "Cannot induct on %s since it has not been defined"
+          (Id.value pname)
       end
   | _ -> failwith "Can only induct on predicates and judgments"
 
@@ -1435,9 +1445,10 @@ let ensure_is_coinductive p =
     | Inductive ->
         failwithf "Cannot coinduct on %s since it has\
                  \ been inductively defined"
-          pname
+          (Id.value pname)
   with Not_found ->
-    failwithf "Cannot coinduct on %s since it has not been defined" pname
+    failwithf "Cannot coinduct on %s since it has not been defined"
+      (Id.value pname)
 
 let coinduction ?hint () =
   ensure_focused () ;
@@ -1491,10 +1502,10 @@ let monotone ?hint h t =
       let new_obj = {obj with context = Context.normalize [t]} in
       delay_mainline ?hint
         (Obj (new_obj, r))
-        (Binding(Forall, [("X", oty)],
-                 Arrow(member (Term.const "X" oty)
+        (Binding(Forall, [(Id.intern "X", oty)],
+                 Arrow(member (Term.const (Id.intern "X") oty)
                          (Context.context_to_term obj.context),
-                       member (Term.const "X" oty)
+                       member (Term.const (Id.intern "X") oty)
                          t))) ;
   | _ ->
       failwith "The monotone command can only be used on hypotheses of the form {...}"
@@ -1709,12 +1720,13 @@ let skip () =
 (* Clear *)
 
 let remove_var cm h =
+  let h = Id.intern h in
   let v =
     try term_to_var (List.assoc h sequent.vars)
-    with Not_found -> failwithf "Unknown variable %s" h
+    with Not_found -> failwithf "Unknown variable %s" (Id.value h)
   in
   sequent.vars <- List.filter (fun xv -> fst xv <> h) sequent.vars ;
-  sequent.user_vars <- Iset.remove h sequent.user_vars ;
+  sequent.user_vars <- Id.Set.remove h sequent.user_vars ;
   match cm with
   | Clear_extro ->
       let goal = replace_metaterm_vars [h, var Constant v.Term.name v.ts v.ty] sequent.goal in
@@ -1734,9 +1746,10 @@ let is_used v =
 
 let check_removable h =
   if not (is_hyp h) then
+    let h_id = Id.intern h in
     try
-      let v = List.assoc h sequent.vars in
-      if is_uninstantiated (h, v) && is_used h then
+      let v = List.assoc h_id sequent.vars in
+      if is_uninstantiated (h_id, v) && is_used h_id then
         failwithf "Cannot clear strict uninstantiated variable %s" h
     with Not_found ->
       failwithf "Unknown hypothesis or variable %s" h
@@ -1753,20 +1766,20 @@ let clear cm hs =
 
 let abbrev ids str =
   ensure_focused () ;
-  Iset.iter warn_hyp_name ids ;
+  Id.Set.iter (fun id -> warn_hyp_name (Id.value id)) ids ;
   sequent.hyps <-
     List.map begin fun h ->
-      if Iset.mem h.id ids then
+      if Id.Set.mem (Id.intern h.id) ids then
         {h with abbrev = Some str}
       else h
     end sequent.hyps
 
 let unabbrev ids =
   ensure_focused () ;
-  Iset.iter warn_hyp_name ids ;
+  Id.Set.iter (fun id -> warn_hyp_name (Id.value id)) ids ;
   sequent.hyps <-
     List.map begin fun h ->
-      if Iset.mem h.id ids then
+      if Id.Set.mem (Id.intern h.id) ids then
         {h with abbrev = None}
       else h
     end sequent.hyps
@@ -1783,24 +1796,26 @@ let rename_hyp hfr hto =
   in sequent.hyps <- hyps
 
 let rename_var vfr xto =
+  let vfr_id = Id.intern vfr in
+  let xto_id = Id.intern xto in
   let ty =
-    try tc [] (List.assoc vfr sequent.vars)
+    try tc [] (List.assoc vfr_id sequent.vars)
     with Not_found -> failwithf "Unknown variable %S" vfr
   in
-  let vto = var Eigen xto 0 ty in
-  let repl = [vfr, vto] in
+  let vto = var Eigen xto_id 0 ty in
+  let repl = [vfr_id, vto] in
   let rewrite mt = replace_metaterm_vars repl mt in
   sequent.hyps <-
     List.map (fun h -> { h with term = rewrite h.term }) sequent.hyps ;
   sequent.vars <-
     List.filter_map begin fun v ->
       let (x, _) = v in
-      if x = vfr then Some (xto, vto)
-      else if x = xto then None
+      if x = vfr_id then Some (xto_id, vto)
+      else if x = xto_id then None
       else Some v
     end sequent.vars ;
   sequent.user_vars <-
-    Iset.add xto (Iset.remove vfr sequent.user_vars) ;
+    Id.Set.add xto_id (Id.Set.remove vfr_id sequent.user_vars) ;
   sequent.goal <- rewrite sequent.goal
 
 let var_unavailable x =
@@ -1814,11 +1829,11 @@ let rename xfr xto =
     failwithf "%S already refers to a lemma" xto ;
   if List.exists (fun h -> h.id = xto) sequent.hyps then
     failwithf "%S already refers to an existing hypothesis" xto ;
-  if var_unavailable xto then
+  if var_unavailable (Id.intern xto) then
     failwithf "%S already refers to an existing variable" xto ;
   if List.exists (fun h -> h.id = xfr) sequent.hyps then
     rename_hyp xfr xto
-  else if List.mem_assoc xfr sequent.vars then
+  else if List.mem_assoc (Id.intern xfr) sequent.vars then
     rename_var xfr xto
   else
     failwithf "Unknown variable or hypothesis label %S" xfr
@@ -1826,6 +1841,7 @@ let rename xfr xto =
 (* Permute *)
 
 let permute_nominals ids form =
+  let ids = List.map Id.intern ids in
   ensure_focused () ;
   Option.iter warn_hyp_name form ;
   List.iter warn_var_name ids ;
@@ -1842,7 +1858,7 @@ let permute_nominals ids form =
   in
   let perm = List.map begin fun id ->
       try List.assoc id support_alist
-      with Not_found -> nominal_var id (tybase (atybase ""))
+      with Not_found -> nominal_var id (tybase (atybase (Id.intern "")))
     end ids in
   let result = Tactics.permute_nominals perm term in
   match form with

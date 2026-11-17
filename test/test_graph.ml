@@ -20,10 +20,10 @@ let assert_list_set_equal expected actual =
            (String.concat ", " (List.map Term.aty_to_string xs)))
   end
 
-let nd1 = Term.atybase "1"
-let nd2 = Term.atybase "2"
-let nd3 = Term.atybase "3"
-let nd4 = Term.atybase "4"
+let nd1 = Term.atybase (Id.intern "1")
+let nd2 = Term.atybase (Id.intern "2")
+let nd3 = Term.atybase (Id.intern "3")
+let nd4 = Term.atybase (Id.intern "4")
 
 let tests =
   suite "Graph" [

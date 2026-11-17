@@ -26,12 +26,10 @@ let show_ts  = false
 
 open Extensions
 
-type id = string
+type tyvar = Id.t
+type tycons = Id.t
 
-type tyvar = id
-type tycons = id
-
-type knd = Knd of int
+type knd = Knd of int [@@unboxed]
 type ty = Ty of ty list * aty
 and aty =
   | Tygenvar of tyvar
@@ -81,15 +79,8 @@ let iter_ty f ty =
 
 type tag = Eigen | Constant | Logic | Nominal
 
-module Itab = Map.Make (String)
-module Iset = struct
-    include Set.Make (String)
-    let of_list l =
-      List.fold_left (fun s x -> add x s) empty l
-  end
-
 type var = {
-  name : id ;
+  name : Id.t ;
   tag  : tag ;
   ts   : int ;
   ty   : ty ;
@@ -100,7 +91,7 @@ let eq_var v1 v2 =
   && eq_ty v1.ty v2.ty
 
 
-type tyctx = (id * ty) list
+type tyctx = (Id.t * ty) list
 
 type term =
   | Var  of var
@@ -390,7 +381,7 @@ let fresh =
 
 let fresh ?(tag=Logic) ts ty =
   let i = fresh () in
-  let name = (prefix tag) ^ (string_of_int i) in
+  let name = Id.intern ((prefix tag) ^ (string_of_int i)) in
     var tag name ts ty
 
 let remove_trailing_numbers s =
@@ -404,9 +395,9 @@ let remove_trailing_numbers s =
   String.sub s 0 len
 
 let fresh_name name used =
-  let basename = remove_trailing_numbers name in
+  let basename = remove_trailing_numbers (Id.value name) in
   let rec aux i =
-    let name = basename ^ (string_of_int i) in
+    let name = Id.intern (basename ^ (string_of_int i)) in
       if List.mem_assoc name used then
         aux (i+1)
       else
@@ -471,6 +462,12 @@ let tag2str = function
 
 let abs_name = "x"
 
+let arrow_id = Id.intern "=>"
+let amp_id = Id.intern "&"
+let cons_id = Id.intern "::"
+let pi_id = Id.intern "pi"
+let sigma_id = Id.intern "sigma"
+
 let arrow_op = Pretty.FMT " ->@ "
 let space_op = Pretty.FMT " "
 
@@ -490,10 +487,10 @@ and pretty_aty aty =
   match aty with
   | Tygenvar v
   | Typtr {contents=TV v} ->
-     Atom (STR v)
+     Atom (STR (Id.value v))
   | Typtr {contents=TT _} -> [%bug] "pretty_aty: unexpected bound type pointer"
   | Tycons (c,args) ->
-     let cty = Atom (STR (!display_name c)) in
+     let cty = Atom (STR (!display_name (Id.value c))) in
      let cargs = List.map pretty_ty args in
      List.fold_left begin fun aty arg ->
        Opapp (1, Infix (LEFT, aty, space_op, arg))
@@ -516,7 +513,7 @@ let ty_to_string ty =
 let var_to_string v =
   let (bef, aft) = if show_tag || show_ts || show_ty then ("$(", ")") else ("", "") in
   bef ^ begin
-    (!display_name v.name)
+    (!display_name (Id.value v.name))
     ^ (if show_tag then "!" ^ tag2str v.tag else "")
     ^ (if show_ts then "/" ^ string_of_int v.ts else "")
     ^ (if show_ty then ":" ^ ty_to_string v.ty else "")
@@ -532,7 +529,7 @@ let db_to_string cx0 i0 =
   let rec spin cx i =
     match cx, i with
     | [], _ -> abs_name ^ string_of_int (i0 - List.length cx0 + 1)
-    | (x, _) :: _, 1 -> x
+    | (x, _) :: _, 1 -> Id.value x
     | _ :: cx, _ -> spin cx (i - 1)
   in
   spin cx0 i0
@@ -566,7 +563,7 @@ let rec pretty_term (cx : tyctx) (t0 : term) =
               let cx = adjoin cx (x, ty) in
               let x = fst (List.hd cx) in
               let tys = (if show_ty then ":" ^ ty_to_string ty else "") in
-              Pretty.(Bracket { left = STR (x ^ tys ^ "\\") ;
+              Pretty.(Bracket { left = STR (Id.value x ^ tys ^ "\\") ;
                                 right = STR "" ;
                                 indent = 2 ;
                                 inner = spin cx vs ;
@@ -576,20 +573,23 @@ let rec pretty_term (cx : tyctx) (t0 : term) =
       end
     | App (t, ts) -> begin
         match observe (hnorm t), ts with
-        | Var {name="=>"; _}, [a; b] ->
+        | Var v, [a; b] when Id.equal v.name arrow_id ->
             Pretty.(Opapp (100, Infix (RIGHT, pretty_term cx a,
                                      FMT " =>@ ", pretty_term cx b)))
-        | Var {name="&"; _}, [a; b] ->
+        | Var v, [a; b] when Id.equal v.name amp_id ->
             Pretty.(Opapp (120, Infix (LEFT, pretty_term cx a,
                                      FMT " &@ ", pretty_term cx b)))
-        | Var {name="::"; _}, [a; b] ->
+        | Var v, [a; b] when Id.equal v.name cons_id ->
             Pretty.(Opapp (130, Infix (RIGHT, pretty_term cx a,
                                        FMT " ::@ ", pretty_term cx b)))
-        | Var {name=("pi"|"sigma" as q); _}, [a] -> begin
+        | Var v, [a] when Id.equal v.name pi_id
+                       || Id.equal v.name sigma_id -> begin
+            let q = Id.value v.name in
             match observe (hnorm a) with
             | Lam ([x, ty], t) ->
               let tys = (if show_ty then ":" ^ ty_to_string ty else "") in
-                Pretty.(Opapp (50, Prefix (STR (q ^ " " ^ x ^ tys ^ "\\"),
+                Pretty.(Opapp (50, Prefix (STR (q ^ " " ^ Id.value x
+                                                ^ tys ^ "\\"),
                                            pretty_term (adjoin cx (x, ty)) t)))
             | a ->
                 print_app Pretty.(Atom (STR "pi")) [pretty_term cx a]
@@ -674,13 +674,14 @@ let extract_tids test terms =
   |> List.find_all (fun (id, _ty) -> test id)
   |> List.unique ~cmp:eq_tid
 
-let is_question_name str =
-  str.[0] = '?'
+let is_question_name id =
+  (Id.value id).[0] = '?'
 
 let question_tids terms =
   extract_tids is_question_name terms
 
-let is_capital_name str =
+let is_capital_name id =
+  let str = Id.value id in
   String.length str > 0 &&
   not (String.contains str '.') &&
   match str.[0] with
@@ -694,7 +695,8 @@ let rec all_numbers s pos len =
   pos >= len ||
   (s.[pos] >= '0' && s.[pos] <= '9' && all_numbers s (pos + 1) len)
 
-let is_nominal_name str =
+let is_nominal_name id =
+  let str = Id.value id in
   String.length str > 1 &&
   str.[0] == 'n' &&
   all_numbers str 1 (String.length str)
@@ -743,11 +745,11 @@ let tybase bty =
 let aty_to_string aty =
   ty_to_string (tybase aty)
 
-let oaty = (atybase "o")
+let oaty = (atybase (Id.intern "o"))
 let oty = tybase oaty
-let olistaty = (atyapp (atybase "list") oty)
+let olistaty = (atyapp (atybase (Id.intern "list")) oty)
 let olistty = tybase olistaty
-let propaty = (atybase "prop")
+let propaty = (atybase (Id.intern "prop"))
 let propty = tybase propaty
 
 exception Is_prop
@@ -777,33 +779,33 @@ let rec tc (tyctx:tyctx) t =
     | _ -> [%bug] "tc: unexpected term form"
   in observe_ty ty
 
-let is_tyvar str =
-  str.[0] = '?'
+let is_tyvar id =
+  (Id.value id).[0] = '?'
 
-let tyvar str =
-  Ty ([], atyvar ("?"^str))
+let tyvar id =
+  Ty ([], atyvar (Id.intern ("?" ^ Id.value id)))
 
 let fresh_tyvar =
   let count = ref 0 in
     fun () ->
       incr count ;
-      tyvar (string_of_int !count)
+      tyvar (Id.intern (string_of_int !count))
 
 
-let is_imp t = is_head_name "=>" t
+let is_imp t = is_head_name arrow_id t
 
 let extract_imp t =
   match observe (hnorm t) with
     | App(_t, [a; b]) -> (a, b)
     | _ -> [%bug] "Check is_imp before calling extract_imp"
 
-let is_amp t = is_head_name "&" t
+let is_amp t = is_head_name amp_id t
 let extract_amp t =
   match observe (hnorm t) with
     | App(_t, [a; b]) -> (a, b)
     | _ -> [%bug] "Check is_amp before calling extract_amp"
 
-let is_pi t = is_head_name "pi" t
+let is_pi t = is_head_name pi_id t
 
 let extract_pi t =
   match observe (hnorm t) with
@@ -838,15 +840,15 @@ let rec term_iter_tys f t =
      [%bug] "term_iter_tys: unexpected pointer or suspension"
 
 let ty_tyvars ty =
-  let seen = ref Itab.empty in
+  let seen = ref Id.Map.empty in
   iter_ty begin fun aty ->
     match aty with
     | Typtr {contents=TV v} ->
-       if not (Itab.mem v !seen) then
-         seen := Itab.add v () !seen
+       if not (Id.Map.mem v !seen) then
+         seen := Id.Map.add v () !seen
     | _ -> ()
   end ty;
-  List.map fst (Itab.bindings !seen)
+  List.map fst (Id.Map.bindings !seen)
 
 let ty_contains_tyvar ty =
   let exception Found in
@@ -860,17 +862,17 @@ let ty_contains_tyvar ty =
   with Found -> true
 
 let term_collect_tyvar_names t =
-  let seen = ref Itab.empty in
+  let seen = ref Id.Map.empty in
   term_iter_tys begin fun ty ->
     iter_ty begin fun aty ->
       match aty with
       | Typtr {contents=TV v} ->
-         if not (Itab.mem v !seen) then
-           seen := Itab.add v () !seen
+         if not (Id.Map.mem v !seen) then
+           seen := Id.Map.add v () !seen
       | _ -> ()
     end ty
   end t;
-  List.map fst (Itab.bindings !seen)
+  List.map fst (Id.Map.bindings !seen)
 
 let terms_contain_tyvar l =
   let exception Found in
@@ -887,15 +889,15 @@ let terms_contain_tyvar l =
   with Found -> true
 
 let ty_gentyvars ty =
-  let seen = ref Itab.empty in
+  let seen = ref Id.Map.empty in
   iter_ty begin fun aty ->
     match aty with
     | Tygenvar v ->
-       if not (Itab.mem v !seen) then
-         seen := Itab.add v () !seen
+       if not (Id.Map.mem v !seen) then
+         seen := Id.Map.add v () !seen
     | _ -> ()
   end ty;
-  List.map fst (Itab.bindings !seen)
+  List.map fst (Id.Map.bindings !seen)
 
 let ty_contains_gentyvar ty =
   let exception Found in
@@ -909,17 +911,17 @@ let ty_contains_gentyvar ty =
   with Found -> true
 
 let term_collect_gentyvar_names t =
-  let seen = ref Itab.empty in
+  let seen = ref Id.Map.empty in
   term_iter_tys begin fun ty ->
     iter_ty begin fun aty ->
       match aty with
       | Tygenvar v ->
-         if not (Itab.mem v !seen) then
-           seen := Itab.add v () !seen
+         if not (Id.Map.mem v !seen) then
+           seen := Id.Map.add v () !seen
       | _ -> ()
     end ty
   end t;
-  List.map fst (Itab.bindings !seen)
+  List.map fst (Id.Map.bindings !seen)
 
 let terms_contain_gentyvar l =
   let exception Found in
@@ -938,7 +940,7 @@ let terms_contain_gentyvar l =
 
 (** Type substitutions *)
 
-type tysub = (string * ty) list
+type tysub = (Id.t * ty) list
 
 let rec apply_bind_aty ~btyvar v ty aty =
   match aty with
@@ -1013,3 +1015,40 @@ let schematic_instantiations : tysub ref = State.rref []
 let mark_schematic_tysub sub =
   if sub <> [] then
     schematic_instantiations := sub @ !schematic_instantiations
+
+(* Re-establish the interning invariant (equal strings share one key)
+   for types and terms unmarshalled from compiled artifacts, whose
+   keys were assigned by a different process. Freshly unmarshalled
+   reference cells are updated in place so that sharing between
+   occurrences of a variable is preserved. *)
+let rec reintern_ty = function
+  | Ty (tys, aty) -> Ty (List.map reintern_ty tys, reintern_aty aty)
+and reintern_aty = function
+  | Tygenvar v -> Tygenvar (Id.reintern v)
+  | Typtr ({contents = TV v} as r) ->
+     r := TV (Id.reintern v) ; Typtr r
+  | Typtr ({contents = TT t} as r) ->
+     r := TT (reintern_ty t) ; Typtr r
+  | Tycons (c, args) -> Tycons (Id.reintern c, List.map reintern_ty args)
+
+let reintern_tyctx cx =
+  List.map (fun (id, ty) -> (Id.reintern id, reintern_ty ty)) cx
+
+let rec reintern_term t =
+  match t with
+  | Var v ->
+     Var { v with name = Id.reintern v.name ; ty = reintern_ty v.ty }
+  | DB _ -> t
+  | Lam (cx, t) -> Lam (reintern_tyctx cx, reintern_term t)
+  | App (h, args) -> App (reintern_term h, List.map reintern_term args)
+  | Susp (t, ol, nl, e) ->
+     Susp (reintern_term t, ol, nl, reintern_env e)
+  | Ptr ({contents = V v} as r) ->
+     r := V { v with name = Id.reintern v.name ;
+                       ty = reintern_ty v.ty } ;
+     t
+  | Ptr ({contents = T t} as r) -> r := T (reintern_term t) ; t
+and reintern_env e = List.map reintern_envitem e
+and reintern_envitem = function
+  | Dum _ as d -> d
+  | Binding (t, n) -> Binding (reintern_term t, n)

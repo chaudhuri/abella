@@ -131,13 +131,13 @@ let pprint_tests = [
 
       test_case "((pi x\\p x) => qx) != (pi x\\(p x => q x))"
         (fun () ->
-          let p = const "p" (tyarrow [tybase (atybase "x")] oty) in
-          let q = const "q" (tyarrow [tybase (atybase "x")] oty) in
+          let p = const (Id.intern "p") (tyarrow [tybase (atybase (Id.intern "x"))] oty) in
+          let q = const (Id.intern "q") (tyarrow [tybase (atybase (Id.intern "x"))] oty) in
           let mkpi x ty f =
-            app (const "pi" (tyarrow [tyarrow [ty] oty] oty)) [lambda [x, ty] f] in
+            app (const (Id.intern "pi") (tyarrow [tyarrow [ty] oty] oty)) [lambda [Id.intern x, ty] f] in
           let mkimp f g =
-            app (const "=>" (tyarrow [oty ; oty] oty)) [f ; g] in
-          let ity = tybase (atybase "i") in
+            app (const (Id.intern "=>") (tyarrow [oty ; oty] oty)) [f ; g] in
+          let ity = tybase (atybase (Id.intern "i")) in
           let t1 =
             mkpi "x" ity (mkimp (app p [db 1]) (app q [db 1])) |> term_to_string in
           let t2 =
@@ -149,16 +149,16 @@ let pprint_tests = [
 let typing_tests = [
       test_case "F:(a->b->c) A:a B:b"
         (fun () ->
-           let f = const "F" (tyarrow [aty; bty] cty) in
-           let a = const "A" aty in
-           let b = const "B" bty in
+           let f = const (Id.intern "F") (tyarrow [aty; bty] cty) in
+           let a = const (Id.intern "A") aty in
+           let b = const (Id.intern "B") bty in
              Alcotest.check ty_testable "types differ" cty (tc [] (f ^^ [a; b]))) ;
 
       test_case "x:a\\y:b\\x"
         (fun () ->
            Alcotest.check ty_testable "types differ"
              (tyarrow [aty; bty] aty)
-             (tc [] ([("x",aty); ("y",bty)] // db 2))) ;
+             (tc [] ([(Id.intern "x",aty); (Id.intern "y",bty)] // db 2))) ;
     ]
 
 let binding_tests = [
@@ -178,25 +178,25 @@ let binding_tests = [
     ]
 
 let substitution_tests =
-  let gen name = tybase (Tygenvar name) in
-  let tv name = tybase (Typtr (ref (TV name))) in
-  let list ty = tybase (Tycons ("list", [ty])) in
+  let gen name = tybase (Tygenvar (Id.intern name)) in
+  let tv name = tybase (Typtr (ref (TV (Id.intern name)))) in
+  let list ty = tybase (Tycons (Id.intern "list", [ty])) in
   [
       test_case "Gentvar substitution is simultaneous"
         (fun () ->
            let t = gen "T" in
            let u = gen "U" in
              Alcotest.check ty_testable "types differ" u
-               (apply_sub_ty [("T", u); ("U", t)] t)) ;
+               (apply_sub_ty [(Id.intern "T", u); (Id.intern "U", t)] t)) ;
 
       test_case "Nested gentvar occurrences are simultaneous"
         (fun () ->
            let t = gen "T" in
            let u = gen "U" in
-           let sub = [("T", u); ("U", t)] in
-           let ty = tyarrow [list t; tybase (Tycons ("pair", [t; u]))] t in
+           let sub = [(Id.intern "T", u); (Id.intern "U", t)] in
+           let ty = tyarrow [list t; tybase (Tycons (Id.intern "pair", [t; u]))] t in
            let expected =
-             tyarrow [list u; tybase (Tycons ("pair", [u; t]))] u
+             tyarrow [list u; tybase (Tycons (Id.intern "pair", [u; t]))] u
            in
              Alcotest.check ty_testable "types differ" expected
                (apply_sub_ty sub ty)) ;
@@ -207,21 +207,21 @@ let substitution_tests =
            let u = gen "U" in
            let ty = tyarrow [t; u] t in
              Alcotest.check ty_testable "types differ" (tyarrow [u; u] u)
-               (apply_sub_ty [("T", u)] ty)) ;
+               (apply_sub_ty [(Id.intern "T", u)] ty)) ;
 
       test_case "Type variable substitution is simultaneous"
         (fun () ->
            let t = tv "T" in
            let u = tv "U" in
              Alcotest.check ty_testable "types differ" u
-               (apply_sub_ty_tyvar [("T", u); ("U", t)] t)) ;
+               (apply_sub_ty_tyvar [(Id.intern "T", u); (Id.intern "U", t)] t)) ;
 
       test_case "Gentvar substitution leaves type variables"
         (fun () ->
            let u = gen "U" in
            let ty = tv "T" in
              Alcotest.check ty_testable "types differ" ty
-               (apply_sub_ty [("T", u)] ty)) ;
+               (apply_sub_ty [(Id.intern "T", u)] ty)) ;
     ]
 
 let abstract_tests = [
@@ -232,7 +232,7 @@ let abstract_tests = [
           let x = uconst "X" in
           (*    `1 (g (y\ h `1 X)) *)
           let t = db 1 ^^ [(g ^^ [1 /// (h ^^ [db 1; x])])] in
-          let actual = abstract "X" emptyty t in
+          let actual = abstract (Id.intern "X") emptyty t in
           (* x\ `2 (g (y\ h y  x)) *)
           let expected = 1 /// (db 2 ^^ [(g ^^ [1 /// (h ^^ [db 1; db 2])])]) in
           Alcotest.check term_testable "terms differ" expected actual) ;
@@ -244,7 +244,7 @@ let abstract_tests = [
           let z = uconst "Z" in
           (*       X `1 (w\ Y w) Z *)
           let t = x ^^ [db 1; (1 /// (y ^^ [db 1])); z] in
-          let actual = abstract "Y" emptyty (abstract "Z" emptyty t) in
+          let actual = abstract (Id.intern "Y") emptyty (abstract (Id.intern "Z") emptyty t) in
           (* y\ z\ X `3 (w\ y w) z *)
           let expected = 2 /// (x ^^ [db 3; (1 /// (db 3 ^^ [db 1])); db 1]) in
           Alcotest.check term_testable "terms differ" expected actual) ;

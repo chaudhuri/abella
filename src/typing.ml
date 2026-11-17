@@ -27,8 +27,8 @@ open Unifyty
 (** Untyped terms *)
 
 type uterm =
-  | UCon of pos * string * ty
-  | ULam of pos * string * ty * uterm
+  | UCon of pos * Id.t * ty
+  | ULam of pos * Id.t * ty * uterm
   | UApp of pos * uterm * uterm
 
 let rec forget_term ?(cx=[]) t =
@@ -66,7 +66,7 @@ let change_pos p t =
 
 
 let predefined id pos =
-  UCon(pos, id, Term.fresh_tyvar ())
+  UCon(pos, Id.intern id, Term.fresh_tyvar ())
 
 let binop id t1 t2 =
   let pos = (fst (get_pos t1), snd (get_pos t2)) in
@@ -90,7 +90,7 @@ type umetaterm =
   | UAsyncObj of uterm * uterm * restriction
   | USyncObj of uterm * uterm * uterm * restriction
   | UArrow of umetaterm * umetaterm
-  | UBinding of binder * (id * ty) list * umetaterm
+  | UBinding of binder * (Id.t * ty) list * umetaterm
   | UOr of umetaterm * umetaterm
   | UAnd of umetaterm * umetaterm
   | UPred of uterm * restriction
@@ -112,7 +112,7 @@ let tyctx_to_nominal_ctx tyctx =
 (** Tables / Signatures *)
 
 type ktable = (string * knd) list
-type pty = Poly of string list * ty
+type pty = Poly of Id.t list * ty
 type ctable = (string * pty) list
 type sign = ktable * ctable
 
@@ -129,14 +129,14 @@ let add_types (ktable, ctable) ids knd =
       | Not_found -> ()
     end ;
 
-    if is_capital_name id then
+    if is_capital_name (Id.intern id) then
       failwithf "Types may not begin with a capital letter: %s" id;
   end ids ;
   ((List.map (fun id -> (id, knd)) ids) @ ktable, ctable)
 
 let lookup_type (ktable, _) id =
-  try List.assoc id ktable
-  with Not_found -> failwithf "Unknown type constructor: %s" id
+  try List.assoc (Id.value id) ktable
+  with Not_found -> failwithf "Unknown type constructor: %s" (Id.value id)
 
 (** Constants *)
 
@@ -152,7 +152,7 @@ let kind_check sign ty =
           let arity = karity knd in
           let nargs = List.length args in
           if not (nargs = arity) then
-            failwithf "%s expects %i arguments but has %i" cty arity nargs ;
+            failwithf "%s expects %i arguments but has %i" (Id.value cty) arity nargs ;
           List.iter aux args
        | Typtr {contents = TT _} ->
            [%bug] "kind_check: unexpected bound type pointer"
@@ -183,7 +183,7 @@ let check_const (ktable, ctable) (id, pty) =
   | Not_found -> ()
   end ;
 
-  if is_capital_name id then
+  if is_capital_name (Id.intern id) then
     failwithf "Constants may not begin with a capital letter: %s" id ;
 
   kind_check_poly (ktable, ctable) pty
@@ -207,7 +207,8 @@ let get_typarams tys = List.flatten_map get_typaram tys
 
 let add_consts ?typarams sign idtys =
   let typarams = match typarams with
-    | Some typarams -> List.map (fun _ -> typarams) idtys
+    | Some typarams ->
+       List.map (fun _ -> List.map Id.intern typarams) idtys
     | None -> idtys |> List.map snd |> List.map get_typaram
   in
   let idptys = List.map2
@@ -221,16 +222,19 @@ let freshen_ty (Poly(ids, ty)) =
 
 let lookup_const (_, ctable) id =
   try
-    freshen_ty (List.assoc id ctable)
+    freshen_ty (List.assoc (Id.value id) ctable)
   with
-  | Not_found -> failwithf "Unknown constant: %s" id
+  | Not_found -> failwithf "Unknown constant: %s" (Id.value id)
 
 (** Desugar types *)
+let olist_id = Id.intern "olist"
+let list_id = Id.intern "list"
+
 let rec desugar_aty aty =
   match aty with
   | Tycons (v,tys) ->
-     if v = "olist" && tys = [] then
-       Tycons ("list",[oty])
+     if Id.equal v olist_id && tys = [] then
+       Tycons (list_id,[oty])
      else
        let tys = List.map desugar_ty tys in
        Tycons (v,tys)
@@ -252,14 +256,14 @@ let k_cons = "::"
 let k_nil = "nil"
 
 let pervasive_sign =
-  let aty = tybase (Tygenvar "A") in
-  let alistty = tybase (atyapp (atybase "list") aty) in
+  let aty = tybase (Tygenvar (Id.intern "A")) in
+  let alistty = tybase (atyapp (atybase list_id) aty) in
   ([("o", Knd 0); ("list", Knd 1); ("prop", Knd 0)],
-   [("pi",     Poly(["A"], tyarrow [tyarrow [aty] oty] oty)) ;
+   [("pi",     Poly([Id.intern "A"], tyarrow [tyarrow [aty] oty] oty)) ;
     ("=>",     Poly([],    tyarrow [oty; oty] oty)) ;
     ("&",      Poly([],    tyarrow [oty; oty] oty)) ;
-    (k_cons,   Poly(["A"], tyarrow [aty; alistty] alistty)) ;
-    (k_nil,    Poly(["A"], alistty)) ])
+    (k_cons,   Poly([Id.intern "A"], tyarrow [aty; alistty] alistty)) ;
+    (k_nil,    Poly([Id.intern "A"], alistty)) ])
 
 let sign_to_tys sign =
   List.map
@@ -486,7 +490,7 @@ let check_pi_quantification ts =
   ignore
     (map_vars
        (fun v ->
-          if v.name = "pi" then
+          if Id.equal v.name pi_id then
             match observe_ty v.ty with
             | Ty([Ty([tau], _)], _) ->
                 check_spec_logic_quantification_type tau
@@ -520,13 +524,15 @@ let rec has_capital_head t =
   | UApp(_, h, _) -> has_capital_head h
   | _ -> false
 
+let underscore_id = Id.intern "_"
+
 let replace_underscores head body =
   let names = uterms_extract_if is_capital_name (head::body) in
   let used = ref (List.map (fun x -> (x, ())) names) in
   let rec aux t =
     match t with
-    | UCon(p, id, ty) when id = "_" ->
-        let id' = fresh_name "X" !used in
+    | UCon(p, id, ty) when Id.equal id underscore_id ->
+        let id' = fresh_name (Id.intern "X") !used in
         used := (id', ()) :: !used ;
         UCon(p, id', ty)
     | UCon _ -> t
@@ -542,15 +548,15 @@ let replace_underscores head body =
   | h::b -> (h, b)
   | [] -> [%bug] "replace_underscores: empty term list"
 
-let clause_map : (string list * term) Itab.t ref = State.rref Itab.empty
-let seen_name cname = Itab.mem cname !clause_map
+let clause_map : (Id.t list * term) Id.Map.t ref = State.rref Id.Map.empty
+let seen_name cname = Id.Map.mem (Id.intern cname) !clause_map
 let register_clause name clause =
   (* Printf.printf "Note: registered %S : %s\n%!" name *)
   (*   (Term.term_to_string clause) ; *)
-  clause_map := Itab.add name clause !clause_map
+  clause_map := Id.Map.add (Id.intern name) clause !clause_map
 let lookup_clause cname =
   if seen_name cname
-  then Some (Itab.find cname !clause_map)
+  then Some (Id.Map.find (Id.intern cname) !clause_map)
   else None
 
 let generalize_tyvars t =
@@ -561,7 +567,7 @@ let generalize_tyvars t =
 
 let print_clause cl =
   let (vars, clause) = cl in
-  let vstr = String.concat "," vars in
+  let vstr = String.concat "," (List.map Id.value vars) in
   let cstr = term_to_string clause in
   Output.msg_printf "Typed clause: [%s] %s\n" vstr cstr
 

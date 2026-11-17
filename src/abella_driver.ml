@@ -176,7 +176,7 @@ let query q =
               Output.msg_printf "Found solution:" ;
               List.iter
                 (fun (n, v) ->
-                   Output.msg_printf "%s = %s" n (term_to_string v))
+                   Output.msg_printf "%s = %s" (Id.value n) (term_to_string v))
                 ctx ;
               Output.blank_line ())
       in
@@ -339,9 +339,9 @@ let run_atomic_tactic cmd =
   | ClearDups ->
       Prover.clear_duplicates ()
   | Abbrev(hs, s) ->
-      Prover.abbrev (Iset.of_list hs) s
+      Prover.abbrev (Id.Set.of_list (List.map Id.intern hs)) s
   | Unabbrev(hs) ->
-      Prover.unabbrev (Iset.of_list hs)
+      Prover.unabbrev (Id.Set.of_list (List.map Id.intern hs))
   | Rename(hfr, hto) ->
       Prover.rename hfr hto
   | Search(bounds) -> begin
@@ -705,7 +705,7 @@ and process_top1_body () =
             "Declared predicate %s may not take an argument containing prop"
             name
         end else
-          List.minus (get_typaram ty) (bound_params ())
+          List.minus (List.map Id.value (get_typaram ty)) (bound_params ())
       in
       Prover.add_global_consts ~typarams
         (List.map (fun id -> (id, ty)) ids) ;

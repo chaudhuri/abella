@@ -224,7 +224,7 @@ End Foo.
           | CDeclPred (["p"], [], ty) ->
               let has_T = ref false in
               Term.iter_ty begin function
-                | Term.Tygenvar "T" -> has_T := true
+                | Term.Tygenvar v when Id.value v = "T" -> has_T := true
                 | _ -> ()
               end ty ;
               !has_T
@@ -320,7 +320,7 @@ End Param.
       end ;
       let has_define =
         List.exists begin function
-          | CDefine (_, [], [("q", _)], _) -> true
+          | CDefine (_, [], [(id, _)], _) when Id.value id = "q" -> true
           | _ -> false
         end content
       in
@@ -328,7 +328,8 @@ End Param.
         true has_define ;
       let has_polymorphic_define =
         List.exists begin function
-          | CDefine (_, ["A"], [("eq", _)], _) -> true
+          | CDefine (_, tys, [(id, _)], _)
+            when tys = [Id.intern "A"] && Id.value id = "eq" -> true
           | _ -> false
         end content
       in
@@ -346,7 +347,7 @@ End Param.
         has_mixed_decl ;
       let has_mixed_define =
         List.exists begin function
-          | CDefine (_, ["A"], [("mix", _)], _) -> true
+          | CDefine (_, tys, [(id, _)], _) when tys = [Id.intern "A"] && Id.value id = "mix" -> true
           | _ -> false
         end content
       in
@@ -400,7 +401,7 @@ End Keys.
         "predicate" ;
       check_class "defined predicate is not a key"
         (find (function
-             | CDefine (_, _, [("d", _)], _) -> true
+             | CDefine (_, _, [(id, _)], _) when Id.value id = "d" -> true
              | _ -> false)) "define" ;
       check_class "theorem is not a key"
         (find (function
@@ -554,7 +555,7 @@ End HoDefine.
       let (_, _, content, _, _) = read_thmod_values bytes in
       let has_ho_define =
         List.exists begin function
-          | CDefine (_, [], [("h", _)], _) -> true
+          | CDefine (_, [], [(id, _)], _) when Id.value id = "h" -> true
           | _ -> false
         end content
       in
@@ -578,7 +579,7 @@ End Poly.
       in
       let has_poly_use =
         List.exists begin function
-          | CDefine (_, [], [("d", _)], _) -> true
+          | CDefine (_, [], [(id, _)], _) when Id.value id = "d" -> true
           | _ -> false
         end content
       in

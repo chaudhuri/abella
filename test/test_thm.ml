@@ -332,7 +332,7 @@ Axiom ax : forall (x:u), d x.
       Alcotest.check Alcotest.bool "type declaration" true
         (has (function CType (["c"], _, _) -> true | _ -> false)) ;
       Alcotest.check Alcotest.bool "definition" true
-        (has (function CDefine (_, _, [("d", _)], _) -> true | _ -> false)) ;
+        (has (function CDefine (_, _, [(id, _)], _) when Id.value id = "d" -> true | _ -> false)) ;
       Alcotest.check Alcotest.bool "finished theorem" true
         (has (function
              | CTheorem ("t", [], _, Finished) -> true
@@ -482,8 +482,8 @@ let test_ctype_stores_typarams () =
 
 let test_decl_pred_replay_preserves_typarams () =
   with_session begin fun () ->
-    let a = tybase (Tygenvar "A") in
-    let b = tybase (Tygenvar "B") in
+    let a = tybase (Tygenvar (Id.intern "A")) in
+    let b = tybase (Tygenvar (Id.intern "B")) in
     let pred_ty = tyarrow [a; b] propty in
     let const_ty = tyarrow [a] b in
     let repl = Thm.Replacement.make [] in
@@ -495,7 +495,7 @@ let test_decl_pred_replay_preserves_typarams () =
       match List.assoc name (snd !Typing.sign) with
       | Poly(typarams, scheme_ty) ->
           Alcotest.check (Alcotest.list Alcotest.string)
-            (name ^ " type parameters") expected typarams ;
+            (name ^ " type parameters") expected (List.map Id.value typarams) ;
           Alcotest.check ty_testable (name ^ " type") ty scheme_ty
       | exception Not_found ->
           Alcotest.fail ("missing declaration " ^ name)
@@ -946,7 +946,7 @@ let test_try_tactical () =
     assert_ok (fst (process_command "intros H10.")) ;
     assert_ok (fst (process_command "try [!Z H] : case H10.")) ;
     Alcotest.check Alcotest.bool "variable hint applied" true
-      (List.mem_assoc "Z" Prover.sequent.vars) ;
+      ((List.mem_assoc (Id.intern "Z") Prover.sequent.vars)) ;
     Alcotest.check Alcotest.bool "hypothesis hint applied" true
       (List.exists (fun (h : Prover.hyp) -> h.id = "H")
          Prover.sequent.hyps) ;

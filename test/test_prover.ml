@@ -27,7 +27,11 @@ let assert_search_fails () =
 
 let add_defs_for ids flavor clauses =
   let idtys =
-    List.map (fun id -> (id, Typing.lookup_const !Typing.sign id)) ids
+    List.map
+      (fun id ->
+        let id = Id.intern id in
+        (id, Typing.lookup_const !Typing.sign id))
+      ids
   in
   add_defs [] idtys flavor clauses
 
@@ -78,7 +82,7 @@ let tests =
            case (remove "H1") ;
            Alcotest.check Alcotest.bool
              "R should be added to variable list" true
-             (List.mem_assoc "R" sequent.vars)
+             (List.mem_assoc (Id.intern "R") sequent.vars)
         ) ;
 
       test_case "Intros should raise over support"
@@ -958,7 +962,7 @@ let tests =
            remove_globals ["foo"; "foo_lem"] ;
 
            Alcotest.check Alcotest.bool "definition should be removed" false
-             (Hashtbl.mem defs_table "foo") ;
+             (Hashtbl.mem defs_table (Id.intern "foo")) ;
            Alcotest.check_raises "lemma should be removed"
              (Failure "Could not find theorem named \"foo_lem\"")
              (fun () -> ignore (get_lemma_tag "foo_lem"))
@@ -1030,12 +1034,12 @@ let tests =
            add_hyp (freshen "{a}") ;
            add_hyp (freshen "{b}") ;
 
-           abbrev (Term.Iset.of_list ["H1"; "H2"]) "both" ;
+           abbrev (Id.Set.of_list (List.map Id.intern ["H1"; "H2"])) "both" ;
            Alcotest.check Alcotest.bool "both should be abbreviated" true
              (List.for_all
                 (fun h -> h.abbrev = Some "both") sequent.hyps) ;
 
-           unabbrev (Term.Iset.of_list ["H1"]) ;
+           unabbrev (Id.Set.of_list (List.map Id.intern ["H1"])) ;
            match sequent.hyps with
            | [h1; h2] ->
                Alcotest.check Alcotest.bool "H1 should be unabbreviated"
@@ -1178,12 +1182,12 @@ let tests =
            case ?hint (remove "H1") ;
            assert_n_subgoals 2 ;
            Alcotest.check Alcotest.bool "first variable" true
-             (List.mem_assoc "U" sequent.vars) ;
+             ((List.mem_assoc (Id.intern "U") sequent.vars)) ;
            Alcotest.check Alcotest.bool "first hypothesis" true
              (List.exists (fun h -> h.id = "H1") sequent.hyps) ;
            skip () ;
            Alcotest.check Alcotest.bool "second variable" true
-             (List.mem_assoc "V" sequent.vars) ;
+             ((List.mem_assoc (Id.intern "V") sequent.vars)) ;
            Alcotest.check Alcotest.bool "second hypothesis" true
              (List.exists (fun h -> h.id = "H2") sequent.hyps)
         ) ;
@@ -1199,12 +1203,12 @@ let tests =
            case ?hint (remove "H1") ;
            assert_n_subgoals 2 ;
            Alcotest.check Alcotest.bool "first variable" true
-             (List.mem_assoc "U" sequent.vars) ;
+             ((List.mem_assoc (Id.intern "U") sequent.vars)) ;
            Alcotest.check Alcotest.bool "first hypothesis" true
              (List.exists (fun h -> h.id = "H") sequent.hyps) ;
            skip () ;
            Alcotest.check Alcotest.bool "second variable" true
-             (List.mem_assoc "U" sequent.vars) ;
+             ((List.mem_assoc (Id.intern "U") sequent.vars)) ;
            Alcotest.check Alcotest.bool "second hypothesis" true
              (List.exists (fun h -> h.id = "H") sequent.hyps)
         ) ;
@@ -1215,9 +1219,9 @@ let tests =
              ~goal:"forall (X:i) (Y:i), rel1 X Y -> rel1 X Y" ;
            intros (user_alt ["U"; "V"] ["H"]) ;
            Alcotest.check Alcotest.bool "first variable" true
-             (List.mem_assoc "U" sequent.vars) ;
+             ((List.mem_assoc (Id.intern "U") sequent.vars)) ;
            Alcotest.check Alcotest.bool "second variable" true
-             (List.mem_assoc "V" sequent.vars) ;
+             ((List.mem_assoc (Id.intern "V") sequent.vars)) ;
            Alcotest.check Alcotest.bool "hypothesis" true
              (List.exists (fun h -> h.id = "H") sequent.hyps)
         ) ;
@@ -1230,9 +1234,9 @@ let tests =
            intros { hspec_vars = [User_name "U"; Dont_care] ;
                     hspec_hyps = [User_name "H"] } ;
            Alcotest.check Alcotest.bool "first variable" true
-             (List.mem_assoc "U" sequent.vars) ;
+             ((List.mem_assoc (Id.intern "U") sequent.vars)) ;
            Alcotest.check Alcotest.bool "second variable was not hinted"
-             false (List.mem_assoc "U1" sequent.vars) ;
+             false ((List.mem_assoc (Id.intern "U1") sequent.vars)) ;
            Alcotest.check Alcotest.bool "first hypothesis" true
              (List.exists (fun h -> h.id = "H") sequent.hyps) ;
            Alcotest.check Alcotest.bool "repeated hypothesis" true

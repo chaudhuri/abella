@@ -42,7 +42,7 @@
       ~severity:Error parse_fmt pos_string
 
   let predefined ~pos id =
-    UCon(pos, id, Term.fresh_tyvar ())
+    UCon(pos, Id.intern id, Term.fresh_tyvar ())
 
   let binop ~pos id t1 t2 =
     UApp(pos, UApp(pos, predefined ~pos id, t1), t2)
@@ -57,11 +57,12 @@
       let bod = iterated_app (n - 1) f x in
       UApp((fst (get_pos f), snd (get_pos bod)), f, bod)
 
-  let is_illegal_constant k = Term.is_nominal_name k
+  let is_illegal_constant k = Term.is_nominal_name (Id.intern k)
 
   let binding_cons (x, ty) tids =
+    let x = Id.intern x in
     if List.mem_assoc x tids then
-      error_report "Repeated bound variable %s" x
+      error_report "Repeated bound variable %s" (Id.value x)
     else
       (x, ty) :: tids
 
@@ -78,7 +79,9 @@
         id ;
     id
 
-  let deloc_id_ty (lid, ty) = (deloc_id lid, ty)
+  let deloc_term_id lid = Id.intern (deloc_id lid)
+
+  let deloc_term_id_ty (lid, ty) = (deloc_term_id lid, ty)
 
   let make_sig (sigid : string wpos) (sigpre : string wpos list) sigdecls =
     let badconsts = ref [] in
@@ -102,6 +105,7 @@
                     Identifiers matching n[0-9]+ are reserved for nominal constants." ks
 
   let id_to_aty id =
+    let id = Id.intern id in
     if Term.is_capital_name id then
       Term.Tygenvar id
     else
@@ -138,7 +142,7 @@
          Module names must match [A-Z][A-Za-z0-9_]*." id
 
   let check_module_param ~pos id =
-    if not (Term.is_capital_name id) then
+    if not (Term.is_capital_name (Id.intern id)) then
       error_report ~pos
         "Invalid module parameter %S.@\n\
          Module parameters must be type variables." id
@@ -370,7 +374,7 @@ term:
     { binop ~pos:$loc($2) "::" x l }
   | v=aid; BSLASH; bod=term
     { let (id, ty) = v in
-      let id = deloc_id id in
+      let id = deloc_term_id id in
       ULam($loc(v), id, ty, bod) }
   | e=exp; es=exp_list
     { nested_app e es }
@@ -384,9 +388,9 @@ exp:
     { change_pos $loc t }
   | vty=paid
     { let (id, ty) = vty in
-      UCon($loc, id.el, ty) }
+      UCon($loc, Id.intern id.el, ty) }
   | q=QUALID
-    { UCon($loc, qualid_to_string q, Term.fresh_tyvar ()) }
+    { UCon($loc, Id.intern (qualid_to_string q), Term.fresh_tyvar ()) }
 
 exp_list:
   | e=exp; es=exp_list
@@ -395,7 +399,7 @@ exp_list:
     { [e] }
   | vty=aid; BSLASH; bod=term
     { let (id, ty) = vty in
-      let id = deloc_id id in
+      let id = deloc_term_id id in
       [ULam($loc, id, ty, bod)] }
 
 lpsig:
@@ -434,7 +438,7 @@ pty:
   | a=id
     { Term.tybase (id_to_aty a) }
   | q=QUALID
-    { Term.tybase (Term.atybase (qualid_to_string q)) }
+    { Term.tybase (Term.atybase (Id.intern (qualid_to_string q))) }
   | LPAREN; a=ty; RPAREN
     {a}
 
@@ -442,7 +446,7 @@ aty:
   | a=id
     { id_to_aty a }
   | q=QUALID
-    { Term.atybase (qualid_to_string q) }
+    { Term.atybase (Id.intern (qualid_to_string q)) }
   | a=aty; b=pty
     {
       let open Term in
@@ -482,7 +486,7 @@ clause_head:
     { head }
   | f=paid; args=loption(exp_list)
     { let (id, ty) = f in
-      nested_app (UCon($loc(f), id.el, ty)) args }
+      nested_app (UCon($loc(f), Id.intern id.el, ty)) args }
 
 clause_body:
   | t=term; COMMA; bod=clause_body
@@ -716,7 +720,7 @@ ewitnesses:
 
 ewitness:
   | x=id; EQ; t=term
-    { Types.ESub (x, t) }
+    { Types.ESub (Id.intern x, t) }
   | t=term
     { Types.ETerm t }
 
@@ -784,7 +788,7 @@ binding_list:
 
 binding_one:
   | x=id
-    { check_legal_var x $startpos(x) ; [x, Term.fresh_tyvar ()] }
+    { check_legal_var x $startpos(x) ; [Id.intern x, Term.fresh_tyvar ()] }
   | LPAREN; vs=binding_vars; COLON; ty=ty; RPAREN
     { List.fold_right (fun x tids -> binding_cons (x, ty) tids) vs [] }
 
@@ -819,7 +823,7 @@ restriction:
     { Metaterm.CoEqual (List.length rs) }
 
 id_tys:
-  | xts=separated_nonempty_list(COMMA, x=loc_id; COLON; ty=ty {deloc_id_ty (x, ty)})
+  | xts=separated_nonempty_list(COMMA, x=loc_id; COLON; ty=ty {deloc_term_id_ty (x, ty)})
     { xts }
 
 top_command:
@@ -878,7 +882,7 @@ pure_top_command:
   | SUSPEND; head=term; DOT
     { Types.Suspend (head, None) }
   | SUSPEND; head=term; DEFEQ; test=separated_nonempty_list(COMMA, id); DOT
-    { Types.Suspend (head, Some test) }
+    { Types.Suspend (head, Some (List.map Id.intern test)) }
 
 %inline
 import_withs:

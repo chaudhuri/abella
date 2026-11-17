@@ -20,7 +20,7 @@ let assert_raises_unify_failure f =
     | Unify.UnifyFailure _ -> ()
 
 let assert_metaterm_unify s1 s2 =
-  let ctx = List.map (fun id -> (id, var Logic id 0 ity)) ["?1"; "?2"; "?3"] in
+  let ctx = List.map (fun id -> (id, var Logic id 0 ity)) (List.map Id.intern ["?1"; "?2"; "?3"]) in
   let t1 = parse_metaterm ~ctx s1 in
   let t2 = parse_metaterm ~ctx s2 in
     meta_right_unify t1 t2 ;
@@ -51,12 +51,12 @@ let tests =
 
       test_case "Print forall"
         (fun () ->
-           let t = forall [("A", emptyty)] b in
+           let t = forall [(Id.intern "A", emptyty)] b in
              assert_pprint_equal "forall A, {B}" t) ;
 
       test_case "Print exists"
         (fun () ->
-           let t = exists [("A", emptyty)] b in
+           let t = exists [(Id.intern "A", emptyty)] b in
              assert_pprint_equal "exists A, {B}" t) ;
 
       test_case "Print smaller restricted object"
@@ -126,33 +126,33 @@ let tests =
 
       test_case "Print exists left of OR"
         (fun () ->
-           let t = meta_or (exists [("A", emptyty)] b) c in
+           let t = meta_or (exists [(Id.intern "A", emptyty)] b) c in
              assert_pprint_equal "(exists A, {B}) \\/ {C}" t) ;
 
       test_case "Replace should descend underneath exists"
         (fun () ->
-           let t = exists [("A", emptyty)] b in
-           let t' = replace_metaterm_vars [("B", var_c)] t in
+           let t = exists [(Id.intern "A", emptyty)] b in
+           let t' = replace_metaterm_vars [(Id.intern "B", var_c)] t in
              assert_pprint_equal "exists A, {C}" t') ;
 
       test_case "Replace should not descend underneath exists if names are equal"
         (fun () ->
-           let t = exists [("A", emptyty)] a in
-           let t' = replace_metaterm_vars [("A", var_b)] t in
+           let t = exists [(Id.intern "A", emptyty)] a in
+           let t' = replace_metaterm_vars [(Id.intern "A", var_b)] t in
              assert_pprint_equal "exists A, {A}" t') ;
 
       test_case "Replace should not capture exists variables"
         (fun () ->
-           let t = exists [("A", emptyty)] b in
-           let t' = replace_metaterm_vars [("B", var_a)] t in
+           let t = exists [(Id.intern "A", emptyty)] b in
+           let t' = replace_metaterm_vars [(Id.intern "B", var_a)] t in
              assert_pprint_equal "exists A1, {A}" t') ;
 
       test_case "Cascading capture"
         (fun () ->
-           let t = forall [("E2", emptyty)]
+           let t = forall [(Id.intern "E2", emptyty)]
              (arrow (Eq(uconst "E2", uvar Eigen "E" 0))
-                (exists [("E1", emptyty)] (Eq(uconst "E1", uconst "E2")))) in
-           let t' = replace_metaterm_vars [("E", uvar Eigen "E1" 0)] t in
+                (exists [(Id.intern "E1", emptyty)] (Eq(uconst "E1", uconst "E2")))) in
+           let t' = replace_metaterm_vars [(Id.intern "E", uvar Eigen "E1" 0)] t in
              assert_pprint_equal
                "forall E2, E2 = E1 -> (exists E3, E3 = E2)" t');
 
@@ -191,9 +191,9 @@ let tests =
 
       test_case "Normalize should instantiate pi x\\ with nominal constant"
         (fun () ->
-           let pi = const "pi" iiity in
-           let pred = const "pred" iiity in
-           let t = pi ^^ [[("x",ity)] // (pred ^^ [db 1; db 1])] in
+           let pi = const (Id.intern "pi") iiity in
+           let pred = const (Id.intern "pred") iiity in
+           let t = pi ^^ [[(Id.intern "x",ity)] // (pred ^^ [db 1; db 1])] in
            let t = termobj t in
              assert_pprint_equal "{pi x1\\pred x1 x1}" t ;
              assert_pprint_equal "{pred n1 n1}" (normalize t)) ;
@@ -202,7 +202,7 @@ let tests =
         (fun () ->
            let const_a = uconst "A" in
            let p = uconst "p" in
-           let t = forall [("A", emptyty)]
+           let t = forall [(Id.intern "A", emptyty)]
              (arrow (pred (p ^^ [var_a])) (pred (p ^^ [const_a])))
            in
              assert_pprint_equal "forall A1, p A -> p A1" (normalize t)) ;
@@ -210,9 +210,9 @@ let tests =
       test_case "Normalize should rename bound nabla variables if needed"
         (fun () ->
            let const_n1 = uconst "n1" in
-           let nom_n1 = nominal_var "n1" emptyty in
+           let nom_n1 = nominal_var (Id.intern "n1") emptyty in
            let p = uconst "p" in
-           let t = forall [("n1", emptyty)]
+           let t = forall [(Id.intern "n1", emptyty)]
              (arrow (pred (p ^^ [nom_n1])) (pred (p ^^ [const_n1])))
            in
              assert_pprint_equal "forall n2, p n1 -> p n2" (normalize t)) ;
@@ -222,9 +222,9 @@ let tests =
            (* The var_a should force renaming of the A which should
               cascade and force renaming of A1 *)
            let eq = Eq(uconst "A", uconst "A1") in
-           let t = Binding(Forall, [("A", emptyty)],
+           let t = Binding(Forall, [(Id.intern "A", emptyty)],
                            Arrow(pred var_a,
-                                 Binding(Forall, [("A1", emptyty)], eq)))
+                                 Binding(Forall, [(Id.intern "A1", emptyty)], eq)))
            in
              assert_pprint_equal "forall A1, A -> (forall A2, A1 = A2)"
                (normalize t) );
@@ -232,18 +232,18 @@ let tests =
       test_case "Normalize should rename nested binders (2)"
         (fun () ->
            let eq = Eq(uconst "A1", uconst "A1") in
-           let t = Binding(Forall, [("A1", emptyty)],
+           let t = Binding(Forall, [(Id.intern "A1", emptyty)],
                            Arrow(Eq(var_a, uvar Eigen "A1" 0),
-                                 Binding(Forall, [("A1", emptyty)], eq)))
+                                 Binding(Forall, [(Id.intern "A1", emptyty)], eq)))
            in
              assert_pprint_equal "forall A2, A = A1 -> (forall A3, A3 = A3)"
                (normalize t) );
 
       test_case "Normalize should rename nominals of different types"
         (fun () ->
-           let t = pred ((uconst "foo") ^^ [nominal_var "n1" aty;
-                                            nominal_var "n1" bty;
-                                            nominal_var "n2" aty])
+           let t = pred ((uconst "foo") ^^ [nominal_var (Id.intern "n1") aty;
+                                            nominal_var (Id.intern "n1") bty;
+                                            nominal_var (Id.intern "n2") aty])
            in
              assert_pprint_equal "foo n3 n1 n2" (normalize t)) ;
 
@@ -293,7 +293,7 @@ let tests =
 
       test_case "Meta right unify - variable renaming (2)"
         (fun () ->
-           let ctx = [("?1", var Logic "?1" 0 (tyarrow [iity] ity))] in
+           let ctx = [(Id.intern "?1", var Logic (Id.intern "?1") 0 (tyarrow [iity] ity))] in
            let t1 = parse_metaterm ~ctx "forall A, foo (iabs A)" in
            let t2 = parse_metaterm ~ctx "forall B, foo (?1 B)" in
              meta_right_unify t1 t2 ;
@@ -325,10 +325,10 @@ let tests =
         (fun () ->
            let tv1 = fresh_tyvar () in
            let tv2 = fresh_tyvar () in
-           let c1 = const "c1" ity in
-           let c2 = const "c2" aty in
-           let l1 = lambda [("x", tv1)] c1 in
-           let l2 = lambda [("x", tv2)] c2 in
+           let c1 = const (Id.intern "c1") ity in
+           let c2 = const (Id.intern "c2") aty in
+           let l1 = lambda [(Id.intern "x", tv1)] c1 in
+           let l2 = lambda [(Id.intern "x", tv2)] c2 in
            let t1 = Eq(l1, l1) in
            let t2 = Eq(l2, l2) in
              Alcotest.check Alcotest.bool "should fail" false
@@ -341,7 +341,7 @@ let tests =
            let tv1 = fresh_tyvar () in
            let tv2 = fresh_tyvar () in
              Alcotest.check Alcotest.bool "should unify" true
-               (tids_unifyable [("x", tv1)] [("x", tv2)]) ;
+               (tids_unifyable [(Id.intern "x", tv1)] [(Id.intern "x", tv2)]) ;
              Alcotest.check Alcotest.bool "type binding leaked" true
                (eq_ty (observe_ty tv1) tv1)) ;
 
@@ -349,11 +349,11 @@ let tests =
         (fun () ->
            let tv1 = fresh_tyvar () in
            let tv2 = fresh_tyvar () in
-           let natty = tybase (atybase "nat") in
+           let natty = tybase (atybase (Id.intern "nat")) in
              Alcotest.check Alcotest.bool "should not unify" false
                (tids_unifyable
-                  [("x", tv1); ("y", natty)]
-                  [("x", tv2); ("y", ity)]) ;
+                  [(Id.intern "x", tv1); (Id.intern "y", natty)]
+                  [(Id.intern "x", tv2); (Id.intern "y", ity)]) ;
              Alcotest.check Alcotest.bool "type binding leaked" true
                (eq_ty (observe_ty tv1) tv1)) ;
 
@@ -368,11 +368,11 @@ let tests =
       test_case "Meta right unify - fresh binder type may be bound"
         (fun () ->
            let tv = fresh_tyvar () in
-           let natty = tybase (atybase "nat") in
+           let natty = tybase (atybase (Id.intern "nat")) in
            let forall_p binder_ty =
-             let p = const "p" (tyarrow [binder_ty] propty) in
-             let x = const "x" binder_ty in
-             Binding(Forall, [("x", binder_ty)],
+             let p = const (Id.intern "p") (tyarrow [binder_ty] propty) in
+             let x = const (Id.intern "x") binder_ty in
+             Binding(Forall, [(Id.intern "x", binder_ty)],
                      Pred(p ^^ [x], Irrelevant))
            in
              meta_right_unify (forall_p tv) (forall_p natty)) ;
@@ -382,9 +382,9 @@ let tests =
            let tv1 = fresh_tyvar () in
            let tv2 = fresh_tyvar () in
            let forall_p binder_ty =
-             let p = const "p" (tyarrow [binder_ty] propty) in
-             let x = const "x" binder_ty in
-             Binding(Forall, [("x", binder_ty)],
+             let p = const (Id.intern "p") (tyarrow [binder_ty] propty) in
+             let x = const (Id.intern "x") binder_ty in
+             Binding(Forall, [(Id.intern "x", binder_ty)],
                      Pred(p ^^ [x], Irrelevant))
            in
              meta_right_unify (forall_p tv1) (forall_p tv2) ;
@@ -396,8 +396,8 @@ let tests =
            let tv1 = fresh_tyvar () in
            let tv2 = fresh_tyvar () in
              meta_right_unify
-               (Binding(Forall, [("x", tv1)], True))
-               (Binding(Forall, [("x", tv2)], True)) ;
+               (Binding(Forall, [(Id.intern "x", tv1)], True))
+               (Binding(Forall, [(Id.intern "x", tv2)], True)) ;
              Alcotest.check Alcotest.bool "binder types did not unify" true
                (eq_ty (observe_ty tv1) (observe_ty tv2))) ;
 
@@ -406,12 +406,12 @@ let tests =
            let tv1 = fresh_tyvar () in
            let tv2 = fresh_tyvar () in
            let t1 =
-             Binding(Forall, [("x", tv1)],
-                     Pred(const "x" tv1, Irrelevant))
+             Binding(Forall, [(Id.intern "x", tv1)],
+                     Pred(const (Id.intern "x") tv1, Irrelevant))
            in
            let t2 =
-             Binding(Forall, [("x", tv2)],
-                     Pred(const "z" tv2, Irrelevant))
+             Binding(Forall, [(Id.intern "x", tv2)],
+                     Pred(const (Id.intern "z") tv2, Irrelevant))
            in
              Alcotest.check Alcotest.bool "should fail" false
                (try_meta_right_unify t1 t2) ;
@@ -420,13 +420,13 @@ let tests =
 
       test_case "Fresh raised alist with subordination"
         (fun () ->
-           let tm = tybase (atybase "tm") in
-           let tp = tybase (atybase "tp") in
+           let tm = tybase (atybase (Id.intern "tm")) in
+           let tp = tybase (atybase (Id.intern "tp")) in
            let t_lam = tyarrow [tp; tyarrow [tm] tm] tm in
            let sr = Subordination.update Subordination.empty t_lam in
-           let sr = Subordination.close sr [atybase "tp"; atybase "tm"] in
-           let support = [nominal_var "n1" tm; nominal_var "n2" tp] in
-           let tids = [("X", tm); ("Y", tp)] in
+           let sr = Subordination.close sr [atybase (Id.intern "tp"); atybase (Id.intern "tm")] in
+           let support = [nominal_var (Id.intern "n1") tm; nominal_var (Id.intern "n2") tp] in
+           let tids = [(Id.intern "X", tm); (Id.intern "Y", tp)] in
              match
                fresh_raised_alist ~used:[] ~sr ~tag:Eigen ~support tids
              with

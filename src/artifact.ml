@@ -23,6 +23,7 @@ module type SPEC = sig
   val extract : unit -> t
   val encode : t -> Obj.t list
   val decode : (unit -> Obj.t) -> t
+  val reintern : t -> t
 end
 
 module type CODEC = sig
@@ -99,7 +100,7 @@ module Make (Spec : SPEC) : CODEC with type t = Spec.t = struct
     | Failure _ | Invalid_argument _ as e -> corrupt_artifact what e
 
   let decode_body ~what read =
-    try Spec.decode read
+    try Spec.reintern (Spec.decode read)
     with
     | Failure _ | Invalid_argument _ as e -> corrupt_artifact what e
 
@@ -258,7 +259,8 @@ let install_compiled_decl ?strat_errors ?(subordinate=false) decl =
       end ;
       let (basics, consts) = !sign in
       let consts =
-        List.map (fun (id, ty) -> (id, Poly (typarams, ty))) idtys @ consts
+        List.map (fun (id, ty) -> (Id.value id, Poly (typarams, ty))) idtys
+        @ consts
       in
       sign := (basics, consts) ;
       Prover.add_defs ?strat_errors typarams idtys flavor clauses

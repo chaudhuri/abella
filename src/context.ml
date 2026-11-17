@@ -65,16 +65,19 @@ let context_to_string ctx =
   in
     aux ctx
 
-let cons = const "::" (tyarrow [oty; olistty] olistty)
-let nil = const "nil" olistty
-let imp = const "=>" (tyarrow [oty; oty] oty)
-let amp = const "&" (tyarrow [oty; oty] oty)
+let nil_id = Id.intern "nil"
+let cons_id = Id.intern "::"
+
+let cons = const cons_id (tyarrow [oty; olistty] olistty)
+let nil = const nil_id olistty
+let imp = const arrow_id (tyarrow [oty; oty] oty)
+let amp = const amp_id (tyarrow [oty; oty] oty)
 
 let is_nil t =
-  Term.is_head_name "nil" t
+  Term.is_head_name nil_id t
 
 let is_cons t =
-  Term.is_head_name "::" t
+  Term.is_head_name cons_id t
 
 let extract_cons t =
   match observe (hnorm t) with

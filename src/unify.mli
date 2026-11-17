@@ -40,8 +40,8 @@ val explain_error : unify_error -> string
 
 exception UnifyError of unify_error
 
-val right_unify : ?used:(id * term) list -> term -> term -> unit
-val left_unify : ?used:(id * term) list -> term -> term -> unit
+val right_unify : ?used:(Id.t * term) list -> term -> term -> unit
+val left_unify : ?used:(Id.t * term) list -> term -> term -> unit
 
 val unifyty : ty -> ty -> bool
 
@@ -50,16 +50,16 @@ val unifyty_list_compat : ty list -> ty list -> bool
 
 val try_with_state : fail:'a -> (unit -> 'a) -> 'a
 
-val try_right_unify : ?used:(id * term) list -> term -> term -> bool
-val try_left_unify : ?used:(id * term) list -> term -> term -> bool
+val try_right_unify : ?used:(Id.t * term) list -> term -> term -> bool
+val try_left_unify : ?used:(Id.t * term) list -> term -> term -> bool
 
 val try_left_unify_cpairs :
-  used:(id * term) list -> term -> term -> (term * term) list option
+  used:(Id.t * term) list -> term -> term -> (term * term) list option
 val try_right_unify_cpairs : term -> term -> (term * term) list option
 
 val left_flexible_heads :
-  used:(id * term) list ->
+  used:(Id.t * term) list ->
   sr:Subordination.sr ->
-  ((id*ty) list * term * term list) ->
-  ((id*ty) list * term * term list) ->
+  ((Id.t*ty) list * term * term list) ->
+  ((Id.t*ty) list * term * term list) ->
     term list

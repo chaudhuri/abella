@@ -4,9 +4,10 @@ open Term
 open Test_helper
 
 let def_of pred clauses =
+  let pred = Id.intern pred in
   { flavor = Inductive ;
     typarams = [] ;
-    mutual = Itab.singleton pred propty ;
+    mutual = Id.Map.singleton pred propty ;
     clauses }
 
 let contains haystack needle =
@@ -54,7 +55,7 @@ let tests =
              def_of "russell_d"
                (parse_defs "russell_d := ho_decl (x \\ russell_d).")
            in
-           let is_defined id = id = "russell_d" in
+           let is_defined id = Id.equal id (Id.intern "russell_d") in
              assert_warning def is_defined ;
              assert_strat_failure def is_defined
         );
@@ -65,7 +66,8 @@ let tests =
              def_of "russell_d"
                (parse_defs "russell_d := ho_decl (x \\ russell_d).")
            in
-           let is_defined id = List.mem id ["russell_d" ; "ho_decl"] in
+           let is_defined id =
+             List.mem (Id.value id) ["russell_d" ; "ho_decl"] in
              Checks.check_def ~errors:true ~def ~is_defined ()
         );
 
@@ -76,7 +78,7 @@ let tests =
                (parse_defs
                   "russell_d := russell_d -> russell_d.")
            in
-           let is_defined id = id = "russell_d" in
+           let is_defined id = Id.equal id (Id.intern "russell_d") in
              assert_strat_failure def is_defined
         );
     ]

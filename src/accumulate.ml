@@ -98,9 +98,9 @@ let merge_named_clauses ncs =
 let ensure_no_redefine_keywords name uclauses =
   List.iter begin fun { el = (_, head, _) ; _ } ->
     let id = uterm_head_name head in
-    if id = "pi" || id = "=>" || id = "&" then
+    if List.mem id [Term.pi_id ; Term.arrow_id ; Term.amp_id] then
       failwithf "Module %s attempts to re-define keyword %s"
-        name id
+        name (Id.value id)
   end uclauses
 
 let rec get_named_clauses ~sr filename =

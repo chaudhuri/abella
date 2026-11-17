@@ -20,10 +20,9 @@
 (* along with Abella.  If not, see <http://www.gnu.org/licenses/>.          *)
 (****************************************************************************)
 
-type id = string
 
 (* Kinds *)
-type knd = Knd of int
+type knd = Knd of int [@@unboxed]
 
 val kind : int -> knd
 val kincr : knd -> knd
@@ -31,8 +30,8 @@ val karity : knd -> int
 
 (* Types *)
 
-type tyvar = id
-type tycons = id
+type tyvar = Id.t
+type tycons = Id.t
 
 type ty = Ty of ty list * aty
 and aty =
@@ -43,7 +42,7 @@ and typtr = in_typtr ref
 and in_typtr = TV of tyvar | TT of ty
 
 val eq_ty : ty -> ty -> bool
-val eq_tid : (id * ty) -> (id * ty) -> bool
+val eq_tid : (Id.t * ty) -> (Id.t * ty) -> bool
 val observe_ty : ty -> ty
 val iter_ty : (aty -> unit) -> ty -> unit
 
@@ -63,14 +62,8 @@ val contains_prop : ty -> bool
 
 type tag = Eigen | Constant | Logic | Nominal
 
-module Itab : Map.S with type key := id
-module Iset : sig
-    include Set.S with type elt := id
-    val of_list : id list -> t
-  end
-
 type var = private {
-  name : id ;
+  name : Id.t ;
   tag  : tag ;
   ts   : int ;
   ty   : ty ;
@@ -80,7 +73,7 @@ type var = private {
  * but is completely hidden by the interface. *)
 
 type ptr
-type tyctx = (id * ty) list
+type tyctx = (Id.t * ty) list
 
 type term = private
   | Var of var
@@ -101,7 +94,7 @@ val deep_copy : term -> term
 (** Creation of terms.
   * There is probably more to come here. *)
 
-val var : tag -> string -> int -> ty -> term
+val var : tag -> Id.t -> int -> ty -> term
 
 val app : term -> term list -> term
 val susp : term -> int -> int -> env -> term
@@ -117,7 +110,7 @@ end
 val get_ctx_tys : tyctx -> ty list
 
 val eq : term -> term -> bool
-val eq_idterm : (id * term) -> (id * term) -> bool
+val eq_idterm : (Id.t * term) -> (Id.t * term) -> bool
 
 (* Binding a variable to a term or type . The *contents* of the cell
    representing the * variable is a reference which must be
@@ -147,24 +140,24 @@ val add_dummies : env -> int -> int -> env
 (* Add abstractions. *)
 val lambda : tyctx -> term -> term
 
-(** Abstract [t] over constant or variable named [id]. *)
-val abstract : string -> ty -> term -> term
+(** Abstract [t] over constant or variable named [Id.t]. *)
+val abstract : Id.t -> ty -> term -> term
 
 (** Abella specific additions and changes *)
-val const : ?ts:int -> string -> ty -> term
+val const : ?ts:int -> Id.t -> ty -> term
 val fresh : ?tag:tag -> int -> ty -> term
-val fresh_wrt : ts:int -> tag -> id -> ty ->
-                  (id * term) list -> term * (id * term) list
+val fresh_wrt : ts:int -> tag -> Id.t -> ty ->
+                  (Id.t * term) list -> term * (Id.t * term) list
 
-val nominal_var : string -> ty -> term
+val nominal_var : Id.t -> ty -> term
 
 val find_vars : tag -> term list -> var list
 val find_var_refs : tag -> term list -> term list
 val map_vars : (var -> 'a) -> term list -> 'a list
 
 val term_to_var : term -> var
-val term_to_name : term -> string
-val term_to_pair : term -> string * term
+val term_to_name : term -> Id.t
+val term_to_pair : term -> Id.t * term
 
 val has_logic_head : term -> bool
 val has_eigen_head : term -> bool
@@ -191,30 +184,37 @@ val term_to_string : ?cx:tyctx ->
 
 val prefix : tag -> string
 
-val get_used : term list -> (id * term) list
+(** Interned logical constants *)
+val arrow_id : Id.t
+val amp_id : Id.t
+val cons_id : Id.t
+val pi_id : Id.t
+val sigma_id : Id.t
+
+val get_used : term list -> (Id.t * term) list
 val is_free : term -> bool
 
-val is_nominal_name : string -> bool
+val is_nominal_name : Id.t -> bool
 val is_nominal : term -> bool
-val fresh_name : string -> (string * 'a) list -> string
+val fresh_name : Id.t -> (Id.t * 'a) list -> Id.t
 val term_head : term -> (term * term list) option
-val is_head_name : string -> term -> bool
-val term_head_name : term -> string
+val is_head_name : Id.t -> term -> bool
+val term_head_name : term -> Id.t
 val term_head_ty : term -> ty
 
-val is_capital_name : string -> bool
-val capital_tids : term list -> (id * ty) list
-val question_tids : term list -> (id * ty) list
-val nominal_tids : term list -> (id * ty) list
-val all_tids : term list -> (id * ty) list
+val is_capital_name : Id.t -> bool
+val capital_tids : term list -> (Id.t * ty) list
+val question_tids : term list -> (Id.t * ty) list
+val nominal_tids : term list -> (Id.t * ty) list
+val all_tids : term list -> (Id.t * ty) list
 
 val tc : tyctx -> term -> ty
 
-val atyvar : string -> aty
-val atybase : string -> aty
+val atyvar : Id.t -> aty
+val atybase : Id.t -> aty
 val atyapp : aty -> ty -> aty
-val tyvar : string -> ty
-val is_tyvar : string -> bool
+val tyvar : Id.t -> ty
+val is_tyvar : Id.t -> bool
 val fresh_tyvar : unit -> ty
 
 val is_imp : term -> bool
@@ -229,21 +229,27 @@ val extract_pi : term -> term
 val term_map_on_tys : (ty -> ty) -> term -> term
 val term_iter_tys : (ty -> unit) -> term -> unit
 
-val ty_tyvars : ty -> string list
+val ty_tyvars : ty -> Id.t list
 val ty_contains_tyvar : ty -> bool
-val term_collect_tyvar_names : term -> string list
+val term_collect_tyvar_names : term -> Id.t list
 val terms_contain_tyvar : term list -> bool
 
-val ty_gentyvars : ty -> string list
+val ty_gentyvars : ty -> Id.t list
 val ty_contains_gentyvar : ty -> bool
-val term_collect_gentyvar_names : term -> string list
+val term_collect_gentyvar_names : term -> Id.t list
 val terms_contain_gentyvar : term list -> bool
 
 (* Type substitutions *)
-type tysub = (string * ty) list
+type tysub = (Id.t * ty) list
 val apply_sub_ty : tysub -> ty -> ty
 val apply_sub_ty_tyvar : tysub -> ty -> ty
 
 (* Schematic instantiations pending audit for [prop] *)
 val schematic_instantiations : tysub ref
 val mark_schematic_tysub : tysub -> unit
+
+(* Re-establish the interning invariant for unmarshalled values *)
+val reintern_ty : ty -> ty
+val reintern_aty : aty -> aty
+val reintern_tyctx : tyctx -> tyctx
+val reintern_term : term -> term

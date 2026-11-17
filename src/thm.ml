@@ -78,35 +78,37 @@ module Replacement = struct
   }
 
   type t = {
-    map : target Itab.t ;
-    range : Iset.t ;
+    map : target Id.Map.t ;
+    range : Id.Set.t ;
   }
 
   let make withs =
-    let map = ref Itab.empty in
-    let range = ref Iset.empty in
+    let map = ref Id.Map.empty in
+    let range = ref Id.Set.empty in
     List.iter begin fun (decl, defn) ->
-      if Itab.mem decl !map then
+      let decl_id = Id.intern decl in
+      let defn_id = Id.intern defn in
+      if Id.Map.mem decl_id !map then
         failwithf "Duplicate replacement for %s in \"with\"" decl ;
-      let pred = UCon (ghost_pos, defn, Term.fresh_tyvar ()) in
+      let pred = UCon (ghost_pos, defn_id, Term.fresh_tyvar ()) in
       let pred = type_uterm ~sr:!sr ~sign:!sign ~ctx:[] pred in
-      map := Itab.add decl { name = defn ; term = pred ; ty = tc [] pred } !map ;
-      range := Iset.add defn !range
+      map := Id.Map.add decl_id { name = defn ; term = pred ; ty = tc [] pred } !map ;
+      range := Id.Set.add defn_id !range
     end withs ;
     { map = !map ; range = !range }
 
-  let find repl decl = Itab.find decl repl.map
-  (* let find_opt repl decl = Itab.find_opt decl repl.map *)
+  let find repl decl = Id.Map.find (Id.intern decl) repl.map
+  (* let find_opt repl decl = Id.Map.find_opt decl repl.map *)
 
   let term (repl : t) body =
-    let (abs, args) = Itab.fold begin fun decl defn (abs, args) ->
+    let (abs, args) = Id.Map.fold begin fun decl defn (abs, args) ->
         (Term.abstract decl defn.ty abs, defn.term :: args)
       end repl.map (body, []) in
     Term.app abs args
 
   let metaterm repl body =
     let alist =
-      Itab.fold (fun decl defn alist -> (decl, defn.term) :: alist)
+      Id.Map.fold (fun decl defn alist -> (decl, defn.term) :: alist)
         repl.map []
     in
     replace_metaterm_vars alist body
@@ -131,13 +133,13 @@ module Replacement = struct
     | CTheorem (nm, tyvars, body, fin) ->
         CTheorem (nm, tyvars, metaterm repl body, fin)
     | CDefine (flav, tyvars, preds, cls) ->
-        check_no_existing (List.map fst preds)
+        check_no_existing (List.map (fun (id, _) -> Id.value id) preds)
           ~what:"defined atom"
-          ~mem:(fun id -> Iset.mem id repl.range) ;
+          ~mem:(fun id -> Id.Set.mem (Id.intern id) repl.range) ;
         CDefine (flav, tyvars, preds, List.map (clause repl) cls)
     | CImport (fn, ws) ->
         let ws = List.map begin fun (wfrom, wto) ->
-            match Itab.find_opt wfrom repl.map with
+            match Id.Map.find_opt (Id.intern wfrom) repl.map with
             | Some defn -> (wfrom, defn.name)
             | _ -> (wfrom, wto)
           end ws in
@@ -145,13 +147,13 @@ module Replacement = struct
     | CKind (ids, _) ->
         check_no_existing ids
           ~what:"declared type"
-          ~mem:(fun id -> Itab.mem id repl.map) ;
+          ~mem:(fun id -> Id.Map.mem (Id.intern id) repl.map) ;
         comp
     | CType (ids, _, _)
     | CDeclPred (ids, _, _) ->
         check_no_existing ids
           ~what:"declared constant"
-          ~mem:(fun id -> Itab.mem id repl.map) ;
+          ~mem:(fun id -> Id.Map.mem (Id.intern id) repl.map) ;
         comp
     | CSuspend _
     | CClose _ -> comp
@@ -192,6 +194,13 @@ module Spec : Artifact.SPEC with type t = artifact = struct
     let thc_predicates = (Obj.obj (read ()) : string list) in
     let thc_content = (Obj.obj (read ()) : compiled list) in
     { thc_spec_sign ; thc_spec_clauses ; thc_predicates ; thc_content }
+
+  let reintern art = {
+    thc_spec_sign = reintern_sign art.thc_spec_sign ;
+    thc_spec_clauses = List.map reintern_clause art.thc_spec_clauses ;
+    thc_predicates = art.thc_predicates ;
+    thc_content = List.map reintern_compiled art.thc_content ;
+  }
 end
 
 module Codec = Artifact.Make (Spec)
@@ -243,7 +252,8 @@ let ensure_valid_import imp_spec_sign imp_spec_clauses imp_predicates =
   in
   let () = if missing_clauses <> [] then
       failwithf "Imported file makes reference to unknown clauses for: %s"
-        (String.concat ", " (clauses_to_predicates missing_clauses))
+        (String.concat ", "
+           (List.map Id.value (clauses_to_predicates missing_clauses)))
   in
 
   (* 4. Clauses for imported predicates must be subset of imported clauses *)
@@ -253,13 +263,14 @@ let ensure_valid_import imp_spec_sign imp_spec_clauses imp_predicates =
          (fun (_,clause) ->
             clausify clause |>
             List.map (fun (_, h, _) -> term_head_name h) |>
-            List.exists (fun h -> List.mem h imp_predicates))
+            List.exists (fun h -> List.mem (Id.value h) imp_predicates))
          !Prover.clauses)
       imp_spec_clauses
   in
   let () = if extended_clauses <> [] then
       failwithf "Cannot import file since clauses have been extended for: %s"
-        (String.concat ", " (clauses_to_predicates extended_clauses))
+        (String.concat ", "
+           (List.map Id.value (clauses_to_predicates extended_clauses)))
   in
   ()
 

@@ -2,6 +2,7 @@ let () =
   Alcotest.run "Abella"
     [
       Test_unify.tests ;
+      Test_id.tests ;
       Test_term.tests ;
       Test_context.tests ;
       Test_graph.tests ;

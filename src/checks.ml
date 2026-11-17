@@ -51,29 +51,29 @@ let untyped_ensure_no_restrictions term =
 let contains_prop = Term.contains_prop
 
 type non_wff_reason =
-  | Nonstrat of id
-  | Ho_args of (id * ty) list
+  | Nonstrat of Id.t
+  | Ho_args of (Id.t * ty) list
 exception Non_wff of non_wff_reason
 
 let add_sgn preds p posity =
   let old_posity =
-    try Itab.find p preds with Not_found -> posity in
+    try Id.Map.find p preds with Not_found -> posity in
   let posity =
     if old_posity = posity then posity
     else NONPOS
   in
-  Itab.add p posity preds
+  Id.Map.add p posity preds
 
 let contains_prop_argument ty =
   let Ty(tys, _) = observe_ty ty in
   List.exists contains_prop tys
 
 let get_pred_occurrences ~is_defined mt =
-  let preds = ref Iset.empty in
+  let preds = ref Id.Set.empty in
   let rec aux_term t =
     match observe (hnorm t) with
     | Var v when contains_prop v.ty ->
-        preds := Iset.add v.Term.name !preds
+        preds := Id.Set.add v.Term.name !preds
     | App (t, ts) ->
         aux_term t ; List.iter aux_term ts
     | Lam (_, t) ->
@@ -84,7 +84,7 @@ let get_pred_occurrences ~is_defined mt =
   let rec aux_defined_term t =
     match observe (hnorm t) with
     | Var v when contains_prop v.ty && is_defined v.Term.name ->
-        preds := Iset.add v.Term.name !preds
+        preds := Id.Set.add v.Term.name !preds
     | App (t, ts) ->
         aux_defined_term t ; List.iter aux_defined_term ts
     | Lam (_, t) ->
@@ -93,7 +93,7 @@ let get_pred_occurrences ~is_defined mt =
     | _ -> [%bug] "aux_defined_term: unexpected term form"
   in
   let declared_higher_order name occurrence_ty =
-    match List.assoc_opt name (snd !sign) with
+    match List.assoc_opt (Id.value name) (snd !sign) with
     | Some (Poly (_, scheme_ty)) -> contains_prop_argument scheme_ty
     | None -> contains_prop_argument occurrence_ty
   in
@@ -113,10 +113,12 @@ let get_pred_occurrences ~is_defined mt =
   !preds
 
 let check_theorem ?(bound = []) tys thm =
+  let bound = List.map Id.intern bound in
+  let tys = List.map Id.intern tys in
   begin match List.intersect tys bound with
   | param :: _ ->
       failwithf "Module parameter %s may not be listed as a \
-                 declaration-local type parameter" param
+                 declaration-local type parameter" (Id.value param)
   | [] -> ()
   end ;
   let tys' = List.minus (metaterm_collect_gentyvar_names thm) bound in
@@ -127,15 +129,15 @@ let check_theorem ?(bound = []) tys thm =
 let check_noredef ids =
   let (_, ctable) = !sign in
   List.iter begin fun id ->
-    if List.mem id (List.map fst ctable) then
-      failwithf "Predicate or constant %s already exists" id
+    if List.mem (Id.value id) (List.map fst ctable) then
+      failwithf "Predicate or constant %s already exists" (Id.value id)
   end ids
 
 let ensure_not_capital name =
   if is_capital_name name then
     failwithf "Invalid defined predicate name %S.\n\
              \ Defined predicates may not begin with a capital letter."
-      name
+      (Id.value name)
 
 let ensure_wellformed_head t =
   match t with
@@ -156,8 +158,8 @@ let check_well_formed
                    List.filter_map is_ho_var in
     let scan () =
       if ho_names <> [] then raise (Non_wff (Ho_args ho_names)) ;
-      Iset.iter begin fun pname ->
-        if Itab.mem pname def.mutual then
+      Id.Set.iter begin fun pname ->
+        if Id.Map.mem pname def.mutual then
           raise (Non_wff (Nonstrat pname)) ;
       end nonposities in
     try scan () with
@@ -167,11 +169,11 @@ let check_well_formed
               Printf.sprintf
                 "Definition might not be stratified\n\
                \ (%S occurs to the left of -> in clause #%d)"
-                name clauseno
+                (Id.value name) clauseno
         | Ho_args vtys ->
             let msgs =
               List.map begin fun (v, ty) ->
-                Printf.sprintf "  %s : %s" v (ty_to_string ty)
+                Printf.sprintf "  %s : %s" (Id.value v) (ty_to_string ty)
               end vtys |> String.concat "\n"
             in
             Printf.sprintf
@@ -186,12 +188,12 @@ let check_well_formed
 
 let check_def
     ?(errors = !stratification_warnings_are_errors) ~def ~is_defined () =
-  Itab.iter (fun nm _ -> ensure_not_capital nm) def.mutual ;
+  Id.Map.iter (fun nm _ -> ensure_not_capital nm) def.mutual ;
   List.iter begin fun {head ; body} ->
     let head_pred = def_head_name head in
     ensure_wellformed_head head ;
-    if not (Itab.mem head_pred def.mutual) then
-      failwithf "Found stray clause for %s" head_pred ;
+    if not (Id.Map.mem head_pred def.mutual) then
+      failwithf "Found stray clause for %s" (Id.value head_pred) ;
     ensure_no_restrictions head ;
     ensure_no_restrictions body ;
   end def.clauses ;
@@ -244,10 +246,10 @@ let ensure_no_prop_schematic_instantiation () =
       if eq_ty ty propty then
         failwithf "Schematic type variable %s cannot be instantiated \
                    with prop"
-          id
+          (Id.value id)
       else
         failwithf "Schematic type variable %s cannot be instantiated \
                    with %s, which contains prop"
-          id (ty_to_string ty)
+          (Id.value id) (ty_to_string ty)
   | None ->
       schematic_instantiations := !live

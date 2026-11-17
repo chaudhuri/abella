@@ -26,7 +26,7 @@ open Printf
 open Extensions
 
 type uclause = string option * uterm * uterm list
-type clause = string list * term
+type clause = Id.t list * term
 
 type flavor = Inductive | CoInductive
 
@@ -37,11 +37,11 @@ type def_clause = {
 }
 type def = {
   flavor   : flavor ;
-  typarams : string list ;
-  mutual   : ty Itab.t ;
+  typarams : Id.t list ;
+  mutual   : ty Id.Map.t ;
   clauses  : def_clause list ;
 }
-type defs_table = (string, def) Hashtbl.t
+type defs_table = (Id.t, def) Hashtbl.t
 
 type id = string
 
@@ -97,20 +97,20 @@ type top_command =
   | Type          of id list * ty
   | Close         of aty list
   | SSplit        of id * id list
-  | Suspend       of uterm * id list option
+  | Suspend       of uterm * Id.t list option
   | TopCommon     of common_command
 
 type fin = Finished | Unfinished | Axiomatic
 
 type guard = {
-  predicate : id ;
+  predicate : Id.t ;
   pattern : term ;
   condition : term list ;
 }
 
 type compiled =
   | CTheorem      of id * string list * metaterm * fin
-  | CDefine       of flavor * string list * tyctx * def_clause list
+  | CDefine       of flavor * Id.t list * tyctx * def_clause list
   | CImport       of string * (string * string) list
   | CKind         of id list * knd
   | CType         of id list * string list * ty
@@ -163,7 +163,7 @@ type depth_bound = int
 
 type ewitness =
   | ETerm of uterm
-  | ESub  of id * uterm
+  | ESub  of Id.t * uterm
 
 type clear_mode =
   | Clear_delete
@@ -279,7 +279,7 @@ let id_list_to_string ids =
 
 let idtys_to_string idtys =
   String.concat ",\t\n"
-    (List.map (fun (id, ty) -> id ^ " : " ^ (ty_to_string ty)) idtys)
+    (List.map (fun (id, ty) -> Id.value id ^ " : " ^ (ty_to_string ty)) idtys)
 
 let inst_to_string tys =
   match tys with
@@ -401,7 +401,7 @@ let top_command_to_string tc =
     | Suspend (head, Some test) ->
         sprintf "Suspend %s := %s"
           (uterm_to_string head)
-          (String.concat ", " test)
+          (String.concat ", " (List.map Id.value test))
     | TopCommon(cc) ->
         common_command_to_string cc
 
@@ -441,7 +441,7 @@ let dbound_to_string = function
 
 let ewitness_to_string = function
   | ETerm t -> uterm_to_string t
-  | ESub (x, t) -> x ^ " = " ^ uterm_to_string t
+  | ESub (x, t) -> Id.value x ^ " = " ^ uterm_to_string t
 
 let rec command_to_string c =
   match c with
@@ -587,3 +587,45 @@ and prefix_command_to_string c =
   match c with
   | Then _ -> "(" ^ command_to_string c ^ ")"
   | _ -> command_to_string c
+
+(* Re-establish the interning invariant for values unmarshalled from
+   compiled artifacts, whose id keys were assigned by a different
+   process. See [Term.reintern_term]. *)
+
+let reintern_poly (Poly (ids, ty)) =
+  Poly (List.map Id.reintern ids, Term.reintern_ty ty)
+
+let reintern_sign (ktable, ctable) =
+  (ktable, List.map (fun (id, pty) -> (id, reintern_poly pty)) ctable)
+
+let reintern_clause (ids, t) =
+  (List.map Id.reintern ids, Term.reintern_term t)
+
+let reintern_def_clause cl =
+  { head = Metaterm.reintern_metaterm cl.head ;
+    body = Metaterm.reintern_metaterm cl.body }
+
+let reintern_guard g =
+  { predicate = Id.reintern g.predicate ;
+    pattern = Term.reintern_term g.pattern ;
+    condition = List.map Term.reintern_term g.condition }
+
+let reintern_compiled = function
+  | CTheorem (id, tys, stmt, fin) ->
+     CTheorem (id, tys, Metaterm.reintern_metaterm stmt, fin)
+  | CDefine (flavor, typarams, idtys, clauses) ->
+     CDefine (flavor, List.map Id.reintern typarams,
+              Term.reintern_tyctx idtys,
+              List.map reintern_def_clause clauses)
+  | CKind (ids, knd) ->
+     CKind (ids, knd)
+  | CImport _ as comp -> comp
+  | CType (ids, typarams, ty) ->
+     CType (ids, typarams, Term.reintern_ty ty)
+  | CDeclPred (ids, typarams, ty) ->
+     CDeclPred (ids, typarams, Term.reintern_ty ty)
+  | CClose atys ->
+     CClose (List.map (fun (a, args) ->
+                (Term.reintern_aty a, List.map Term.reintern_aty args))
+               atys)
+  | CSuspend g -> CSuspend (reintern_guard g)

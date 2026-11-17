@@ -327,7 +327,7 @@ let tests =
       test_case "Annotated qualified term name"
         (fun () ->
            match parse_uterm "(Foo.x : i)" with
-           | UCon (_, "Foo.x", ty) ->
+           | UCon (_, id, ty) when Id.value id = "Foo.x" ->
                Alcotest.check Alcotest.string "annotated type"
                  "i" (Term.ty_to_string ty)
            | _ -> Alcotest.fail "Not an annotated constant") ;

@@ -332,7 +332,7 @@ let new_name name =
 let resolve_locals locals name =
   match List.assoc_opt name locals with
   | Some name -> name
-  | None -> resolve_id name
+  | None -> Id.intern (resolve_id (Id.value name))
 
 let rec resolve_aty aty =
   match aty with
@@ -340,7 +340,8 @@ let rec resolve_aty aty =
   | Typtr {contents=TT ty} -> Typtr (ref (TT (resolve_ty ty)))
   | Typtr {contents=TV v} -> Typtr (ref (TV v))
   | Tycons (name, args) ->
-      Tycons (resolve_type_name name, List.map resolve_ty args)
+      Tycons (Id.intern (resolve_type_name (Id.value name)),
+              List.map resolve_ty args)
 
 and resolve_ty (Ty (args, aty)) =
   Ty (List.map resolve_ty args, resolve_aty aty)
@@ -397,7 +398,7 @@ let resolve_top cmd =
       Axiom (new_name name, tys, resolve_umetaterm body)
   | Define (flavor, idtys, clauses) ->
       let locals =
-        List.map (fun (id, _) -> (id, new_name id)) idtys
+        List.map (fun (id, _) -> (id, Id.intern (new_name (Id.value id)))) idtys
       in
       let idtys =
         List.map (fun (id, ty) -> (List.assoc id locals, resolve_ty ty))
@@ -560,9 +561,10 @@ let items_of_compiled ?(local=last_segment) citem =
             item_ty = Some ty ;
             item_typarams = typarams }) ids
   | CDefine (_, typarams, idtys, _) ->
+      let typarams = List.map Id.value typarams in
       List.map (fun (id, ty) ->
-          { item_local = local id ;
-            item_name = id ;
+          { item_local = local (Id.value id) ;
+            item_name = Id.value id ;
             item_class = DefineItem ;
             item_ty = Some ty ;
             item_typarams = typarams }) idtys
@@ -743,9 +745,9 @@ let sign_of_content content =
     List.flatten_map (function
         | CType (ids, typarams, ty)
         | CDeclPred (ids, typarams, ty) ->
-            List.map (fun id -> (id, Poly (typarams, ty))) ids
+            List.map (fun id -> (id, Poly (List.map Id.intern typarams, ty))) ids
         | CDefine (_, typarams, idtys, _) ->
-            List.map (fun (id, ty) -> (id, Poly (typarams, ty))) idtys
+            List.map (fun (id, ty) -> (Id.value id, Poly (typarams, ty))) idtys
         | CTheorem _ | CKind _ | CImport _ | CClose _ | CSuspend _ -> [])
       content
   in
@@ -804,6 +806,10 @@ module Spec : Artifact.SPEC with type t = artifact = struct
       ta_nested = nested ;
       ta_exports = exports ;
     }
+
+  let reintern art = {
+    art with ta_content = List.map reintern_compiled art.ta_content ;
+  }
 end
 
 module Codec = Artifact.Make (Spec)
@@ -926,17 +932,18 @@ let rec map_ty r (Ty (args, aty)) =
   Ty (List.map (map_ty r) args, map_aty r aty)
 
 and map_aty r = function
-  | Tygenvar v -> Tygenvar (r.r_tyvar v)
+  | Tygenvar v -> Tygenvar (Id.intern (r.r_tyvar (Id.value v)))
   | Typtr {contents=TT ty} -> Typtr (ref (TT (map_ty r ty)))
-  | Typtr {contents=TV v} -> Typtr (ref (TV (r.r_tyvar v)))
+  | Typtr {contents=TV v} -> Typtr (ref (TV (Id.intern (r.r_tyvar (Id.value v)))))
   | Tycons (name, args) ->
-      Tycons (r.r_tycons name, List.map (map_ty r) args)
+      Tycons (Id.intern (r.r_tycons (Id.value name)), List.map (map_ty r) args)
 
 let rec map_term r t =
   match observe (hnorm t) with
   | Var v ->
       let name =
-        if v.tag = Constant then r.r_const v.name else v.name
+        if v.tag = Constant then Id.intern (r.r_const (Id.value v.name))
+        else v.name
       in
       var v.tag name v.ts (map_ty r v.ty)
   | DB i -> db i
@@ -982,10 +989,14 @@ let map_compiled r comp =
         (r.r_lemma id, List.map r.r_tyvar tys, map_metaterm r stmt, fin)
   | CDefine (flavor, typarams, idtys, clauses) ->
       let idtys =
-        List.map (fun (id, ty) -> (r.r_const id, map_ty r ty)) idtys
+        List.map
+          (fun (id, ty) ->
+            (Id.intern (r.r_const (Id.value id)), map_ty r ty)) idtys
       in
       CDefine
-        (flavor, List.map r.r_tyvar typarams, idtys,
+        (flavor,
+         List.map (fun tv -> Id.intern (r.r_tyvar (Id.value tv))) typarams,
+         idtys,
          List.map (map_clause r) clauses)
   | CType (ids, typarams, ty) ->
       CType
@@ -1074,7 +1085,8 @@ let replace_constants f comp =
 
 let ids_of_compiled = function
   | CTheorem (id, _, _, _) -> [id]
-  | CDefine (_, _, idtys, _) -> List.map fst idtys
+  | CDefine (_, _, idtys, _) ->
+      List.map (fun (id, _) -> Id.value id) idtys
   | CType (ids, _, _) | CDeclPred (ids, _, _) | CKind (ids, _) -> ids
   | CImport _ | CClose _ | CSuspend _ -> []
 
@@ -1083,7 +1095,8 @@ let local_ids decls = List.unique (List.flatten_map ids_of_compiled decls)
 let const_ids decls =
   List.unique (List.flatten_map (function
       | CType (ids, _, _) | CDeclPred (ids, _, _) -> ids
-      | CDefine (_, _, idtys, _) -> List.map fst idtys
+      | CDefine (_, _, idtys, _) ->
+      List.map (fun (id, _) -> Id.value id) idtys
       | CTheorem _ | CKind _ | CImport _ | CClose _ | CSuspend _ -> [])
     decls)
 
@@ -1099,7 +1112,7 @@ let lemma_ids decls =
 
 let typarams_of_compiled = function
   | CTheorem (_, tys, _, _) -> tys
-  | CDefine (_, typarams, _, _) -> typarams
+  | CDefine (_, typarams, _, _) -> List.map Id.value typarams
   | CType (_, typarams, _) | CDeclPred (_, typarams, _) -> typarams
   | CKind _ | CImport _ | CClose _ | CSuspend _ -> []
 
@@ -1175,7 +1188,10 @@ let alpha_rename_decl ~avoid comp =
   match typarams_of_compiled comp with
   | [] -> comp
   | typarams ->
-      let used = List.unique (avoid @ tyvars_of_compiled comp @ typarams) in
+      let used =
+        List.unique
+          (avoid @ List.map Id.value (tyvars_of_compiled comp) @ typarams)
+      in
       let fresh = fresh_tyvar_names (List.length typarams) used in
       let pairs = List.combine typarams fresh in
       let rename name =
@@ -1192,25 +1208,27 @@ let materialize_decl ~renamer ~avoid ~tysub comp =
   |> map_compiled_types (apply_sub_ty tysub)
 
 let tyvar_subst params args =
-  List.map2 (fun param arg -> (param, arg)) params args
+  List.map2 (fun param arg -> (Id.intern param, arg)) params args
 
 let scheme_matches ~key_params ~key_ty ~value_params ~value_ty =
+  let to_tyvar s = tybase (Tygenvar (Id.intern s)) in
   List.length key_params = List.length value_params &&
   List.exists begin fun perm ->
     let subst =
       List.map2
-        (fun param value -> (param, tybase (Tygenvar value)))
+        (fun param value -> (Id.intern param, to_tyvar value))
         key_params perm
     in
     eq_ty (apply_sub_ty subst key_ty) value_ty
   end (List.permute (List.length value_params) value_params)
 
 let statements_match ~key_params ~key_stmt ~value_params ~value_stmt =
+  let to_tyvar s = tybase (Tygenvar (Id.intern s)) in
   List.length key_params = List.length value_params &&
   List.exists begin fun perm ->
     let subst =
       List.map2
-        (fun param value -> (param, tybase (Tygenvar value)))
+        (fun param value -> (Id.intern param, to_tyvar value))
         key_params perm
     in
     let key_stmt = map_on_tys (apply_sub_ty subst) key_stmt |> normalize in
@@ -1310,7 +1328,8 @@ let summary_to_string ~name ~params ~prefix content =
         in
         let idtys =
           String.concat ", "
-            (List.map (fun (id, ty) -> id ^ " : " ^ ty_to_string ty) idtys)
+            (List.map
+               (fun (id, ty) -> Id.value id ^ " : " ^ ty_to_string ty) idtys)
         in
         line "  %s %s by" keyword idtys ;
         List.iter
@@ -1412,12 +1431,12 @@ let resolve_type_args args =
         (ty_to_string ty) ;
     let free = get_typaram ty in
     if in_module () then begin
-      let allowed = all_params () in
+      let allowed = List.map Id.intern (all_params ()) in
       match List.minus free allowed with
       | [] -> ()
       | bad :: _ ->
           failwithf "Type argument %s contains the free type variable %s"
-            (ty_to_string ty) bad
+            (ty_to_string ty) (Id.value bad)
     end else if free <> [] then
       failwithf "Type argument %s contains a free type variable"
         (ty_to_string ty) ;
@@ -1453,7 +1472,7 @@ let materialize_import ~decls ~from ~to_ ~params ~args ~is_instance ~avoid =
   let tysub =
     if is_instance then [] else tyvar_subst params args
   in
-  let avoid = avoid @ List.flatten_map get_typaram args in
+  let avoid = avoid @ List.map Id.value (List.flatten_map get_typaram args) in
   let materialized =
     List.map (materialize_decl ~renamer ~avoid ~tysub) decls
   in
@@ -1507,7 +1526,7 @@ let value_of_name ~predicate name =
         | Some (Poly (typarams, ty)) when is_predicate_ty ty ->
             PredValue {
               pv_name = name ;
-              pv_typarams = typarams ;
+              pv_typarams = List.map Id.value typarams ;
               pv_ty = ty ;
             }
         | _ -> failwithf "%s is not a declared or defined predicate" name
@@ -1572,7 +1591,8 @@ let target_local_names ~renamer decls =
   let consts =
     List.flatten_map (function
         | CType (ids, _, _) | CDeclPred (ids, _, _) -> ids
-        | CDefine (_, _, idtys, _) -> List.map fst idtys
+        | CDefine (_, _, idtys, _) ->
+      List.map (fun (id, _) -> Id.value id) idtys
         | CTheorem _ | CKind _ | CImport _ | CClose _ | CSuspend _ -> [])
       decls
     |> List.map renamer.r_const
@@ -1692,8 +1712,8 @@ let import_module
       pred_pairs
   in
   let substitute name =
-    match List.assoc_opt name pred_map with
-    | Some name -> name
+    match List.assoc_opt (Id.value name) pred_map with
+    | Some name -> Id.intern name
     | None -> name
   in
   let target_consts, target_kinds =
@@ -1703,7 +1723,8 @@ let import_module
     match find_decl_by_id key.rk_prefixed materialized with
     | Some (CDeclPred (_, _, ty) | CType (_, _, ty)) ->
         begin match
-            List.intersect (tycons_of_ty ty) target_kinds
+            List.intersect
+              (List.map Id.value (tycons_of_ty ty)) target_kinds
         with
         | [] -> ()
         | name :: _ ->
@@ -1719,7 +1740,7 @@ let import_module
         let stmt = map_metaterm_constants substitute stmt in
         begin match
             List.intersect
-              (metaterm_names stmt)
+              (List.map Id.value (metaterm_names stmt))
               (target_consts @ target_kinds)
         with
         | [] -> ()

@@ -80,7 +80,7 @@ let object_cut_tests = [
 let assert_object_inst ~on ~inst ~using ~expect =
   let on = parse_metaterm on in
   let using = uvar Eigen using 0 in
-  let actual = object_inst on inst using in
+  let actual = object_inst on (Id.intern inst) using in
     assert_pprint_equal expect actual
 
 let object_instantiation_tests = [
@@ -298,7 +298,7 @@ let apply_tests =
         (fun () ->
            let h = freshen "nabla x, rel1 x n1" in
            try begin
-             ignore (instantiate_withs h [("x", nominal_var "n1" ity)]) ;
+             ignore (instantiate_withs h [(Id.intern "x", nominal_var (Id.intern "n1") ity)]) ;
            end with
            | exn -> assert_failure_begins "Invalid instantiation " exn);
 
@@ -306,8 +306,8 @@ let apply_tests =
         (fun () ->
            let h = freshen "forall E, nabla x, rel1 E x" in
            try begin
-             instantiate_withs h [("x", nominal_var "n1" ity);
-                                  ("E", nominal_var "n1" ity)] |>
+             instantiate_withs h [(Id.intern "x", nominal_var (Id.intern "n1") ity);
+                                  (Id.intern "E", nominal_var (Id.intern "n1") ity)] |>
              ignore
            end with
            | exn -> assert_failure_begins "Invalid instantiation " exn);
@@ -319,14 +319,14 @@ let apply_tests =
                "Invalid instantiation for nabla variable"
                (Failure "Invalid instantiation for nabla variable")
                (fun () ->
-                  ignore (instantiate_withs h [("x", nominal_var "n1" ity);
-                                               ("y", nominal_var "n1" ity)])));
+                  ignore (instantiate_withs h [(Id.intern "x", nominal_var (Id.intern "n1") ity);
+                                               (Id.intern "y", nominal_var (Id.intern "n1") ity)])));
 
       test_case "Instantiate should allow distinct nominals"
         (fun () ->
            let h = freshen "nabla x y, rel1 x y" in
-           let (t, _) = instantiate_withs h [("x", nominal_var "n1" ity);
-                                             ("y", nominal_var "n2" ity)] in
+           let (t, _) = instantiate_withs h [(Id.intern "x", nominal_var (Id.intern "n1") ity);
+                                             ((Id.intern "y"), nominal_var (Id.intern "n2") ity)] in
              assert_pprint_equal "rel1 n1 n2" t);
 
       test_case "Instantiate should not allow non-nominal for nabla"
@@ -336,20 +336,20 @@ let apply_tests =
                "Invalid instantiation for nabla variable"
                (Failure "Invalid instantiation for nabla variable")
                (fun () ->
-                  ignore (instantiate_withs h [("x", const "A" ity)])));
+                  ignore (instantiate_withs h [(Id.intern "x", const (Id.intern "A") ity)])));
 
       test_case "Apply with no arguments"
         (fun () ->
            let h = freshen "forall E, foo E" in
-           let a = const "a" ity in
-           let (t, _) = apply_with ~sr ~used:[] h [] [("E", a)] in
+           let a = const (Id.intern "a") ity in
+           let (t, _) = apply_with ~sr ~used:[] h [] [(Id.intern "E", a)] in
              assert_pprint_equal "foo a" t);
 
       test_case "Apply with no arguments should contain logic variables"
         (fun () ->
            let h = freshen "forall A B, rel1 A B" in
-           let a = const "a" ity in
-           let (t, _) = apply_with ~sr ~used:[] h [] [("A", a)] in
+           let a = const (Id.intern "a") ity in
+           let (t, _) = apply_with ~sr ~used:[] h [] [(Id.intern "A", a)] in
            let logic_vars = metaterm_vars_alist Logic t in
              Alcotest.check Alcotest.bool
                "Should contain logic variable(s)" true
@@ -366,7 +366,7 @@ let apply_tests =
         (fun () ->
            let h = freshen "forall (X:i) Y, X = Y -> true" in
            let _, obligations =
-             apply_with ~sr ~used:[] h [None] [("X", nominal_var "n1" ity)]
+             apply_with ~sr ~used:[] h [None] [(Id.intern "X", nominal_var (Id.intern "n1") ity)]
            in
              match obligations with
                | [Eq(_, t2)] ->
@@ -509,10 +509,10 @@ let add_to_itab itab id =
     List.assoc id |>
     (function Typing.Poly(_, ty) -> ty)
   in
-  Itab.add id ty itab
+  Id.Map.add (Id.intern id) ty itab
 
 let case ?used ?(sr=Subordination.empty) ?(clauses=[]) ?(defs=[])
-    ?(mutual=Itab.empty) ?(global_support=[]) metaterm =
+    ?(mutual=Id.Map.empty) ?(global_support=[]) metaterm =
   let used =
     match used with
       | None -> metaterm_vars_alist Eigen metaterm
@@ -530,7 +530,7 @@ let case_tests = [
                    assert_pprint_equal "{eval (abs R) (abs R)}" term ;
                    Alcotest.check Alcotest.bool
                      "R should be flagged as used" true
-                     (List.mem "R" (List.map fst case1.new_vars)) ;
+                     ((List.mem "R" (List.map (fun id -> Id.value id) (List.map fst case1.new_vars)))) ;
 
                    set_bind_state case2.bind_state ;
                    assert_pprint_equal "{eval (app M N) B}" term ;
@@ -542,13 +542,13 @@ let case_tests = [
                    end ;
                    Alcotest.check Alcotest.bool
                      "R should be flagged as used" true
-                     (List.mem "R" (List.map fst case2.new_vars)) ;
+                     (List.mem "R" (List.map (fun id -> Id.value id) (List.map fst case2.new_vars))) ;
                    Alcotest.check Alcotest.bool
                      "M should be flagged as used" true
-                     (List.mem "M" (List.map fst case2.new_vars)) ;
+                     (List.mem "M" (List.map (fun id -> Id.value id) (List.map fst case2.new_vars))) ;
                    Alcotest.check Alcotest.bool
                      "N should be flagged as used" true
-                     (List.mem "N" (List.map fst case2.new_vars))
+                     (List.mem "N" (List.map (fun id -> Id.value id) (List.map fst case2.new_vars)))
                | cases -> assert_expected_cases 2 cases) ;
 
       test_case "Restriction should become smaller"
@@ -569,7 +569,7 @@ let case_tests = [
         (fun () ->
            let term = freshen "foo A @" in
            let defs = parse_defs "foo X := foo X." in
-           let mutual = add_to_itab Itab.empty "foo" in
+           let mutual = add_to_itab Id.Map.empty "foo" in
              match case ~defs ~mutual term with
                | [case1] ->
                    set_bind_state case1.bind_state ;
@@ -584,7 +584,7 @@ let case_tests = [
         (fun () ->
            let term = freshen "foo A @" in
            let defs = parse_defs "foo X := forall (Y:i), foo X." in
-           let mutual = add_to_itab Itab.empty "foo" in
+           let mutual = add_to_itab Id.Map.empty "foo" in
              match case ~defs ~mutual term with
                | [case1] ->
                    set_bind_state case1.bind_state ;
@@ -599,7 +599,7 @@ let case_tests = [
         (fun () ->
            let term = freshen "foo A @" in
            let defs = parse_defs "foo X := foo X -> foo X." in
-           let mutual = add_to_itab Itab.empty "foo" in
+           let mutual = add_to_itab Id.Map.empty "foo" in
              match case ~defs ~mutual term with
                | [case1] ->
                    set_bind_state case1.bind_state ;
@@ -614,7 +614,7 @@ let case_tests = [
         (fun () ->
            let term = freshen "foo A @" in
            let defs = parse_defs "foo X := foo X \\/ bar X." in
-           let mutual = add_to_itab Itab.empty "foo" in
+           let mutual = add_to_itab Id.Map.empty "foo" in
              match case ~defs ~mutual term with
                | [case1] ->
                    set_bind_state case1.bind_state ;
@@ -678,7 +678,7 @@ let case_tests = [
            let used = [] in
              match case ~used term with
                | [{new_vars=new_vars ; new_hyps=[hyp] ; _}] ->
-                   let var_names = List.map fst new_vars in
+                   let var_names = List.map (fun id -> Id.value id) (List.map fst new_vars) in
                      Alcotest.check (Alcotest.list Alcotest.string) "string lists differ" ["A"; "B"] var_names ;
                      assert_pprint_equal "rel1 A B" hyp ;
                | _ -> Alcotest.fail "Pattern mismatch") ;
@@ -689,7 +689,7 @@ let case_tests = [
            let used = [] in
              match case ~used term with
                | [{new_vars=new_vars ; new_hyps=[hyp1; hyp2] ; _}] ->
-                   let var_names = List.map fst new_vars in
+                   let var_names = List.map (fun id -> Id.value id) (List.map fst new_vars) in
                      Alcotest.check (Alcotest.list Alcotest.string) "string lists differ" ["A"; "B"] var_names ;
                      assert_pprint_equal "foo A" hyp1 ;
                      assert_pprint_equal "bar B" hyp2 ;
@@ -701,7 +701,7 @@ let case_tests = [
            let used = [] in
              match case ~used term with
                | [{new_vars=new_vars ; new_hyps=[hyp1; hyp2] ; _}] ->
-                   let var_names = List.map fst new_vars in
+                   let var_names = List.map (fun id -> Id.value id) (List.map fst new_vars) in
                      Alcotest.check (Alcotest.list Alcotest.string) "string lists differ" ["B"] var_names ;
                      assert_pprint_equal "{a}" hyp1 ;
                      assert_pprint_equal "bar B" hyp2 ;
@@ -731,7 +731,7 @@ let case_tests = [
            let used = [] in
              match case ~used term with
                | [{new_vars=new_vars ; new_hyps=[hyp] ; _}] ->
-                   let var_names = List.map fst new_vars in
+                   let var_names = List.map (fun id -> Id.value id) (List.map fst new_vars) in
                      Alcotest.check (Alcotest.list Alcotest.string) "string lists differ" ["A"] var_names ;
                      assert_pprint_equal "rel1 n1 (A n1)" hyp ;
                | _ -> Alcotest.fail "Pattern mismatch") ;
@@ -749,7 +749,7 @@ let case_tests = [
         let term = freshen "{L, hyp A |- hyp B}" in
         match case term with
         | [{new_vars=[(x, _)] ; new_hyps=[_; hyp] ; _}] ->
-            let exp = Printf.sprintf "member %s (hyp A :: L)" x in
+            let exp = Printf.sprintf "member %s (hyp A :: L)" (Id.value x) in
             assert_pprint_equal exp hyp
         | _ -> Alcotest.fail "Pattern mismatch"
       end ;
@@ -759,7 +759,7 @@ let case_tests = [
           let term = freshen "{L |- p1 A}@" in
           match case term with
           | [{new_vars=[(x, _)] ; new_hyps=[_; hyp] ; _}] ->
-              let exp = Printf.sprintf "member %s L" x in
+              let exp = Printf.sprintf "member %s L" (Id.value x) in
               assert_pprint_equal exp hyp
           | _ ->
               Alcotest.fail "Pattern mismatch"
@@ -844,7 +844,7 @@ let case_tests = [
            let defs =
              parse_defs "nabla x, ctx (hyp x :: L) := ctx L." in
            let term = freshen "ctx (K (n2:i))" in
-           let global_support = [nominal_var "n2" ity] in
+           let global_support = [nominal_var (Id.intern "n2") ity] in
              match case ~defs ~global_support term with
                | [case1; case2] ->
                    set_bind_state case1.bind_state ;
@@ -859,7 +859,7 @@ let case_tests = [
            let defs =
              parse_defs "nabla x y, ctx (eq x y :: L) := ctx L." in
            let term = freshen "ctx (K (n2:i))" in
-           let global_support = [nominal_var "n2" ity] in
+           let global_support = [nominal_var (Id.intern "n2") ity] in
              match case ~defs ~global_support term with
                | [case1; case2; case3] ->
                    set_bind_state case1.bind_state ;
@@ -876,7 +876,7 @@ let case_tests = [
         (fun () ->
            let defs = parse_defs "nabla x, foo x." in
            let term = freshen "foo A" in
-           let global_support = [nominal_var "n1" ity] in
+           let global_support = [nominal_var (Id.intern "n1") ity] in
              match case ~defs ~global_support term with
                | [case1] ->
                    set_bind_state case1.bind_state ;
@@ -941,8 +941,8 @@ let case_tests = [
 
       test_case "Logic variable against a constant should result in an equality"
         (fun () ->
-           let x = var Logic "X" 0 ity in
-           let a = const ~ts:0 "t1" ity in
+           let x = var Logic (Id.intern "X") 0 ity in
+           let a = const ~ts:0 (Id.intern "t1") ity in
            let term = Eq(x, a) in
              match case ~used:[] term with
                | [case1] ->
@@ -979,10 +979,10 @@ let case_tests = [
       test_case "Should use subordination information for nabla in the head of definitions"
         (fun () ->
            let defs = parse_defs "nabla x y, sr_a_b x y." in
-           let a = var Eigen "A" 0 sr_a in
-           let b = var Eigen "B" 0 sr_b in
+           let a = var Eigen (Id.intern "A") 0 sr_a in
+           let b = var Eigen (Id.intern "B") 0 sr_b in
            let term = freshen "sr_a_b X Y" in
-           let used = ("A", a) :: ("B", b) ::(metaterm_vars_alist Eigen term) in
+           let used = (Id.intern "A", a) :: (Id.intern "B", b) ::(metaterm_vars_alist Eigen term) in
              match case ~used ~sr:sr_sr ~defs term with
                | [case1] ->
                    set_bind_state case1.bind_state ;
@@ -992,12 +992,12 @@ let case_tests = [
 
       test_case "On flex-rigid: R N = plus A B"
         (fun () ->
-           let tm = tybase (atybase "tm") in
-           let r = var Eigen "R" 0 (tyarrow [tm] tm) in
-           let n = var Eigen "N" 0 tm in
-           let a = var Eigen "A" 0 tm in
-           let b = var Eigen "B" 0 tm in
-           let plus = var Constant "plus" 0 (tyarrow [tm; tm] tm) in
+           let tm = tybase (atybase (Id.intern "tm")) in
+           let r = var Eigen (Id.intern "R") 0 (tyarrow [tm] tm) in
+           let n = var Eigen (Id.intern "N") 0 tm in
+           let a = var Eigen (Id.intern "A") 0 tm in
+           let b = var Eigen (Id.intern "B") 0 tm in
+           let plus = var Constant (Id.intern "plus") 0 (tyarrow [tm; tm] tm) in
            let term = Eq(r ^^ [n], plus ^^ [a; b]) in
              match case term with
                | [case1; case2] ->
@@ -1016,9 +1016,9 @@ let case_tests = [
 
       test_case "On flex-rigid: X^0 Y^0 a^1 = a^1"
         (fun () ->
-           let x = var Eigen "X" 0 iiity in
-           let y = var Eigen "Y" 0 ity in
-           let a = var Constant "a" 1 ity in
+           let x = var Eigen (Id.intern "X") 0 iiity in
+           let y = var Eigen (Id.intern "Y") 0 ity in
+           let a = var Constant (Id.intern "a") 1 ity in
            let term = Eq(x ^^ [y; a], a) in
              match case term with
                | [case1] ->
@@ -1028,10 +1028,10 @@ let case_tests = [
 
       test_case "On flex-rigid: R X b = a b"
         (fun () ->
-           let r = var Eigen "R" 0 (tyarrow [iiity; ity] ity) in
-           let x = var Eigen "X" 0 iiity in
-           let a = var Constant "a" 0 iity in
-           let b = var Constant "b" 0 ity in
+           let r = var Eigen (Id.intern "R") 0 (tyarrow [iiity; ity] ity) in
+           let x = var Eigen (Id.intern "X") 0 iiity in
+           let a = var Constant (Id.intern "a") 0 iity in
+           let b = var Constant (Id.intern "b") 0 ity in
            let term = Eq(r ^^ [x; b], a ^^ [b]) in
              match case term with
                | [case1; case2] ->
@@ -1055,10 +1055,10 @@ let case_tests = [
 
       test_case "Generic equality case stays a conflict pair"
         (fun () ->
-           let generic = tybase (Tygenvar "A") in
-           let r = var Eigen "R" 0 (tyarrow [generic] ity) in
-           let a = var Eigen "A1" 0 generic in
-           let c = var Constant "c" 0 (tyarrow [generic] ity) in
+           let generic = tybase (Tygenvar (Id.intern "A")) in
+           let r = var Eigen (Id.intern "R") 0 (tyarrow [generic] ity) in
+           let a = var Eigen (Id.intern "A1") 0 generic in
+           let c = var Constant (Id.intern "c") 0 (tyarrow [generic] ity) in
            let term = Eq(r ^^ [a], c ^^ [a]) in
              match case ~used:[] term with
                | [{new_hyps=[hyp]; _}] -> assert_metaterm_equal term hyp
@@ -1066,15 +1066,15 @@ let case_tests = [
 
       test_case "Nabla head case needs a generic instantiation"
         (fun () ->
-           let generic = tybase (Tygenvar "A") in
+           let generic = tybase (Tygenvar (Id.intern "A")) in
            let tv = fresh_tyvar () in
-           let tids = [("x", tv); ("y", generic)] in
-           let foo = const "foo" (tyarrow [ity; ity] propty) in
+           let tids = [(Id.intern "x", tv); (Id.intern "y", generic)] in
+           let foo = const (Id.intern "foo") (tyarrow [ity; ity] propty) in
            let args = List.map (fun (id, ty) -> const id ty) tids in
            let head = Binding(Nabla, tids, Pred(foo ^^ args, Irrelevant)) in
            let defs = [Abella_types.{head = head; body = True}] in
-           let n1 = nominal_var "n1" ity in
-           let n2 = nominal_var "n2" ity in
+           let n1 = nominal_var (Id.intern "n1") ity in
+           let n2 = nominal_var (Id.intern "n2") ity in
            let term = Pred(foo ^^ [n1; n2], Irrelevant) in
            let raised_generic =
              try
@@ -1093,13 +1093,13 @@ let case_tests = [
 
       test_case "Nabla head case with ground types succeeds"
         (fun () ->
-           let tids = [("x", aty); ("y", bty)] in
-           let foo = const "foo" (tyarrow [aty; bty] propty) in
+           let tids = [(Id.intern "x", aty); (Id.intern "y", bty)] in
+           let foo = const (Id.intern "foo") (tyarrow [aty; bty] propty) in
            let args = List.map (fun (id, ty) -> const id ty) tids in
            let head = Binding(Nabla, tids, Pred(foo ^^ args, Irrelevant)) in
            let defs = [Abella_types.{head = head; body = True}] in
-           let n1 = nominal_var "n1" aty in
-           let n2 = nominal_var "n2" bty in
+           let n1 = nominal_var (Id.intern "n1") aty in
+           let n2 = nominal_var (Id.intern "n2") bty in
            let term = Pred(foo ^^ [n1; n2], Irrelevant) in
              match case ~used:[] ~defs term with
                | [] -> Alcotest.fail "Expected at least one case"
@@ -1206,8 +1206,8 @@ let assert_search ?(clauses="") ?(defs="")
   let clauses = parse_clauses clauses in
   let defs = if defs = "" then [] else parse_defs defs in
   let mutual =
-    List.map (fun {Abella_types.head; _} -> def_head_name head) defs |>
-    List.fold_left add_to_itab Itab.empty
+    List.map (fun {Abella_types.head; _} -> Id.value (def_head_name head)) defs |>
+    List.fold_left add_to_itab Id.Map.empty
   in
   let def_unfold _ = (mutual, defs) in (*TODO*)
   let hyps = List.map (fun h -> ("", h)) (List.map freshen hyps) in
@@ -1699,8 +1699,8 @@ let search_tests = [
 
 let unfold ~defs goal =
   let mutual =
-    List.map (fun {Abella_types.head; _} -> def_head_name head) defs |>
-    List.fold_left add_to_itab Itab.empty in
+    List.map (fun {Abella_types.head; _} -> Id.value (def_head_name head)) defs |>
+    List.fold_left add_to_itab Id.Map.empty in
   let mdefs = (mutual, defs) in
     unfold ~mdefs ~used:[] Abella_types.Select_any Abella_types.Solution_first
       goal (*TODO*)
@@ -1769,7 +1769,7 @@ let permute_tests = [
       test_case "Basic"
         (fun () ->
            let h = freshen "foo n1 -> bar n2" in
-           let perm = [nominal_var "n1" ity; nominal_var "n2" ity] in
+           let perm = [nominal_var (Id.intern "n1") ity; nominal_var (Id.intern "n2") ity] in
              assert_pprint_equal
                "foo n2 -> bar n1"
                (permute_nominals perm h)) ;
@@ -1780,7 +1780,7 @@ let permute_tests = [
       test_case "Should avoid capture"
         (fun () ->
            let h = freshen "nabla n1, foo n1 -> bar n3" in
-           let perm = [nominal_var "n1" ity; nominal_var "n3" ity] in
+           let perm = [nominal_var (Id.intern "n1") ity; nominal_var (Id.intern "n3") ity] in
              assert_pprint_equal
                "nabla n2, foo n2 -> bar n1"
                (permute_nominals perm h)) ; *)

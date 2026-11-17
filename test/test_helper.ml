@@ -126,12 +126,12 @@ let () = process_top_command "Kind     sr_a, sr_b      type."
 let () = process_top_command "Type     a_to_b   sr_a -> sr_b."
 let () = process_top_command "Type     sr_a_b   sr_a -> sr_b -> prop."
 let () = process_top_command "Close    sr_a, sr_b."
-let sr_a = Term.tybase (Term.atybase "sr_a")
-let sr_b = Term.tybase (Term.atybase "sr_b")
+let sr_a = Term.tybase (Term.atybase (Id.intern "sr_a"))
+let sr_b = Term.tybase (Term.atybase (Id.intern "sr_b"))
 let sr_sr =
   Subordination.close
     (Subordination.update Subordination.empty (Term.tyarrow [sr_a] sr_b))
-    [Term.atybase "sr_a"; Term.atybase "sr_b"]
+    [Term.atybase (Id.intern "sr_a"); Term.atybase (Id.intern "sr_b")]
 
 let freshen str =
   let uterm = parse_umetaterm str in
@@ -160,6 +160,11 @@ let ty_testable =
     (fun ppf t -> Format.pp_print_string ppf (Term.ty_to_string t))
     (=)
 
+let id_testable =
+  Alcotest.testable
+    (fun ppf id -> Format.pp_print_string ppf (Id.value id))
+    Id.equal
+
 let renumber_term t =
   let rec spin dep t =
     match Term.observe (Term.hnorm t) with
@@ -167,7 +172,7 @@ let renumber_term t =
     | Term.Lam (tycx, t) ->
         let (dep, tycx) = List.fold_left begin
           fun (dep, tycx) (_, ty) ->
-            let xv = "x" ^ string_of_int dep in
+            let xv = Id.intern ("x" ^ string_of_int dep) in
             let dep = dep + 1 in
             let tycx = (xv, ty) :: tycx in
             (dep, tycx)
@@ -216,21 +221,21 @@ let group prefix cases =
 
 (* Quick types *)
 
-let ity = Term.tybase (Term.atybase "i")
+let ity = Term.tybase (Term.atybase (Id.intern "i"))
 let iity = Term.tyarrow [ity] ity
 let iiity = Term.tyarrow [ity; ity] ity
 let iiiity = Term.tyarrow [ity; ity; ity] ity
 
-let aty = Term.tybase (Term.atybase "a")
-let bty = Term.tybase (Term.atybase "b")
-let cty = Term.tybase (Term.atybase "c")
-let dty = Term.tybase (Term.atybase "d")
-let ety = Term.tybase (Term.atybase "e")
+let aty = Term.tybase (Term.atybase (Id.intern "a"))
+let bty = Term.tybase (Term.atybase (Id.intern "b"))
+let cty = Term.tybase (Term.atybase (Id.intern "c"))
+let dty = Term.tybase (Term.atybase (Id.intern "d"))
+let ety = Term.tybase (Term.atybase (Id.intern "e"))
 
 (* We can ignore types for some tests *)
 
-let emptyty = Term.tybase (Term.atybase "")
-let uconst name = Term.const name emptyty
-let uvar tag name ts = Term.var tag name ts emptyty
-let unominal_var name = Term.nominal_var name emptyty
-let (///) n t = Term.lambda (List.replicate n ("x",emptyty)) t
+let emptyty = Term.tybase (Term.atybase (Id.intern ""))
+let uconst name = Term.const (Id.intern name) emptyty
+let uvar tag name ts = Term.var tag (Id.intern name) ts emptyty
+let unominal_var name = Term.nominal_var (Id.intern name) emptyty
+let (///) n t = Term.lambda (List.replicate n (Id.intern "x",emptyty)) t

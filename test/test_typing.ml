@@ -8,21 +8,16 @@ open Metaterm
 let dummy_pos = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let ucon ?(ty=fresh_tyvar ()) v =
-  UCon(dummy_pos, v, ty)
+  UCon(dummy_pos, Id.intern v, ty)
 
 let ulam v ?(ty=fresh_tyvar ()) t =
-  ULam(dummy_pos, v, ty, t)
+  ULam(dummy_pos, Id.intern v, ty, t)
 
 let uapp t1 t2 =
   UApp(dummy_pos, t1, t2)
 
 let upred t =
   UPred(t, Irrelevant)
-
-type uterm =
-  | UCon of pos * string * ty
-  | ULam of pos * string * ty * uterm
-  | UApp of pos * uterm * uterm
 
 
 let tests =
@@ -43,7 +38,7 @@ let tests =
       test_case "Should not allow quantification over prop in definition"
         (fun () ->
            let udef =
-             (UTrue, UBinding(Forall, [("x", propty)], upred (ucon "x")))
+             (UTrue, UBinding(Forall, [(Id.intern "x", propty)], upred (ucon "x")))
            in
              Alcotest.check_raises
                "Cannot quantify over type prop"
@@ -54,7 +49,7 @@ let tests =
       test_case "Should not allow quantification over prop in metaterm"
         (fun () ->
            let umetaterm =
-             UBinding(Forall, [("x", propty)], upred (ucon "x"))
+             UBinding(Forall, [(Id.intern "x", propty)], upred (ucon "x"))
            in
              Alcotest.check_raises
                "Cannot quantify over type prop"
@@ -101,7 +96,7 @@ let tests =
              ignore (parse_metaterm "poly t1") ;
              Checks.ensure_no_prop_schematic_instantiation () ;
              Alcotest.check (Alcotest.list (Alcotest.pair
-               Alcotest.string ty_testable))
+               id_testable ty_testable))
                "instantiations should be pruned" []
                !schematic_instantiations
            end
@@ -133,7 +128,7 @@ let tests =
 
       test_case "Should compare terms of schematic types with equality"
         (fun () ->
-           let x = Term.const "X" (Term.tybase (Term.Tygenvar "A")) in
+           let x = Term.const (Id.intern "X") (Term.tybase (Term.Tygenvar (Id.intern "A"))) in
            Typing.ensure_no_prop_equality (Metaterm.Eq (x, x))
         );
 
@@ -153,16 +148,16 @@ let tests =
 
       test_case "Type parameters keep first-occurrence order"
         (fun () ->
-           let a = tybase (Tygenvar "A") in
-           let b = tybase (Tygenvar "B") in
+           let a = tybase (Tygenvar (Id.intern "A")) in
+           let b = tybase (Tygenvar (Id.intern "B")) in
            let ty = tyarrow [b; a; b; a] propty in
              Alcotest.check (Alcotest.list Alcotest.string)
-               "type parameters differ" ["B"; "A"] (get_typaram ty)
+               "type parameters differ" ["B"; "A"] (List.map Id.value (get_typaram ty))
         );
 
       test_case "Type and definition schemes agree"
         (fun () ->
-           let a = tybase (Tygenvar "A") in
+           let a = tybase (Tygenvar (Id.intern "A")) in
            let ty = tyarrow [a; a] propty in
            let scheme =
              List.assoc "item3_eq" (snd (add_consts !sign [("item3_eq", ty)]))
@@ -175,16 +170,16 @@ let tests =
              match scheme with
              | Poly(ids, _) ->
                  Alcotest.check (Alcotest.list Alcotest.string)
-                   "type parameters differ" ["A"] ids
+                   "type parameters differ" ["A"] (List.map Id.value ids)
         );
 
       test_case "Unused type parameters are not invented"
         (fun () ->
-           let a = tybase (Tygenvar "A") in
+           let a = tybase (Tygenvar (Id.intern "A")) in
            let ty = tyarrow [a] propty in
              Alcotest.check (Alcotest.list Alcotest.string)
-               "type parameters differ" ["A"] (get_typaram ty) ;
+               "type parameters differ" ["A"] (List.map Id.value (get_typaram ty)) ;
              Alcotest.check Alcotest.bool "unused parameter invented" false
-               (List.mem "B" (get_typaram ty))
+               ((List.mem "B" (List.map Id.value (get_typaram ty))))
         );
     ]

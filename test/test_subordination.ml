@@ -3,8 +3,8 @@ open Abella_lib
 open Term
 open Subordination
 
-let tm = tybase (atybase "tm")
-let tp = tybase (atybase "tp")
+let tm = tybase (atybase (Id.intern "tm"))
+let tp = tybase (atybase (Id.intern "tp"))
 let t_lam = tyarrow [tp; tyarrow [tm] tm] tm
 
 let tests =
@@ -12,7 +12,7 @@ let tests =
     test_case "STLC example"
       (fun () ->
          let sr = update empty t_lam in
-         let sr = close sr [atybase "tm"; atybase "tp"] in
+         let sr = close sr [atybase (Id.intern "tm"); atybase (Id.intern "tp")] in
            Alcotest.check Alcotest.bool "expected true" true (query sr tp tp) ;
            Alcotest.check Alcotest.bool "expected true" true (query sr tm tm) ;
            Alcotest.check Alcotest.bool "expected true" true (query sr tp tm) ;
@@ -34,12 +34,12 @@ let tests =
            Alcotest.check_raises
              "Cannot close tm without closing tp"
              (Failure "Cannot close tm without closing tp")
-             (fun () -> ignore (close sr [atybase "tm"]))
+             (fun () -> ignore (close sr [atybase (Id.intern "tm")]))
       );
 
     test_case "Should not be able to subordinate closed types"
       (fun () ->
-         let sr = close empty [atybase "tm"] in
+         let sr = close empty [atybase (Id.intern "tm")] in
            Alcotest.check_raises
              "Type tm is closed and cannot be subordinated by tp"
              (Failure "Type tm is closed and cannot be subordinated by tp")
@@ -49,21 +49,21 @@ let tests =
     test_case "Should be able to properly update closed types"
       (fun () ->
          let sr = update empty t_lam in
-         let sr = close sr [atybase "tm"; atybase "tp"] in
+         let sr = close sr [atybase (Id.intern "tm"); atybase (Id.intern "tp")] in
            ignore (update sr t_lam)
       );
 
     test_case "Should be able to sequentially close"
       (fun () ->
          let sr = update empty t_lam in
-         let sr = close sr [atybase "tp"] in
-           ignore (close sr [atybase "tm"])
+         let sr = close sr [atybase (Id.intern "tp")] in
+           ignore (close sr [atybase (Id.intern "tm")])
       );
 
     test_case "Should not subordinate between separately closed types"
       (fun () ->
-         let a = atybase "a" in
-         let b = atybase "b" in
+         let a = atybase (Id.intern "a") in
+         let b = atybase (Id.intern "b") in
          let sr = close empty [a] in
          let sr = close sr [b] in
            Alcotest.check_raises
@@ -75,25 +75,25 @@ let tests =
 
     test_case "Should allow edges between open types"
       (fun () ->
-         let a = atybase "a" in
-         let b = atybase "b" in
+         let a = atybase (Id.intern "a") in
+         let b = atybase (Id.intern "b") in
            ignore (update empty (tyarrow [tybase a] (tybase b)))
       );
 
     test_case "Should allow constants of closed types"
       (fun () ->
-         let b = atybase "b" in
+         let b = atybase (Id.intern "b") in
          let sr = close empty [b] in
            ignore (ensure sr (tybase b))
       );
 
     test_case "Subordination should by transitive"
       (fun () ->
-         let a = tybase (atybase "a") in
-         let b = tybase (atybase "b") in
-         let c = tybase (atybase "c") in
+         let a = tybase (atybase (Id.intern "a")) in
+         let b = tybase (atybase (Id.intern "b")) in
+         let c = tybase (atybase (Id.intern "c")) in
          let sr = update empty (tyarrow [tyarrow [a] b] c) in
-         let sr = close sr [atybase "a"; atybase "b"; atybase "c"] in
+         let sr = close sr [atybase (Id.intern "a"); atybase (Id.intern "b"); atybase (Id.intern "c")] in
            Alcotest.check Alcotest.bool "expected true" true (query sr a b) ;
            Alcotest.check Alcotest.bool "expected true" true (query sr b c) ;
            Alcotest.check Alcotest.bool "expected true" true (query sr a c) ;

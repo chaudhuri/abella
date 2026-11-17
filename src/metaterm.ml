@@ -52,7 +52,7 @@ type metaterm =
   | Eq of term * term
   | Obj of obj * restriction
   | Arrow of metaterm * metaterm
-  | Binding of binder * (id * ty) list * metaterm
+  | Binding of binder * (Id.t * ty) list * metaterm
   | Or of metaterm * metaterm
   | And of metaterm * metaterm
   | Pred of term * restriction
@@ -97,7 +97,8 @@ let meta_or a b = Or(a, b)
 let meta_and a b = And(a, b)
 let pred p = Pred(p, Irrelevant)
 
-let member_const = Term.const "member" (tyarrow [oty; olistty] propty)
+let member_id = Id.intern "member"
+let member_const = Term.const member_id (tyarrow [oty; olistty] propty)
 
 let member e ctx =
   pred (app member_const [e; ctx])
@@ -206,7 +207,8 @@ let pp_print_tids ff tids =
   let open Format in
   let pp_sep ff () = pp_print_space ff () in
   if not !show_types then begin
-    pp_print_list ~pp_sep (fun ff (x, _) -> pp_print_string ff x) ff tids
+    pp_print_list ~pp_sep
+      (fun ff (x, _) -> pp_print_string ff (Id.value x)) ff tids
   end else begin
     let rec collate cur_ids cur_ty res tids =
       match tids with
@@ -224,7 +226,8 @@ let pp_print_tids ff tids =
         let pp_collated ff (xs, ty) =
           pp_open_box ff 2 ; begin
             pp_print_string ff "(" ;
-            pp_print_list ~pp_sep pp_print_string ff xs ;
+            pp_print_list ~pp_sep
+              (fun ff x -> pp_print_string ff (Id.value x)) ff xs ;
             pp_print_string ff " : " ;
             pp_print_string ff (ty_to_string ty) ;
             pp_print_string ff ")"
@@ -278,13 +281,14 @@ let format_metaterm ff mt =
   pp_open_vbox ff 0 ; begin
     if !show_types then begin
       let noms = metaterm_support mt |>
-                 List.fast_sort (fun n1 n2 -> compare (term_head_name n1) (term_head_name n2))
+                 List.fast_sort (fun n1 n2 -> Stdlib.compare
+                   (Id.value (term_head_name n1)) (Id.value (term_head_name n2)))
       in
       if noms <> [] then begin
         pp_open_hovbox ff 1 ; begin
           pp_print_string ff "[" ;
           List.iter_sep ~sep:(pp_print_commaspace ff) begin fun nom ->
-            pp_print_string ff (term_head_name nom) ;
+            pp_print_string ff (Id.value (term_head_name nom)) ;
             pp_print_string ff " : " ;
             pp_print_string ff (tc [] nom |> ty_to_string) ;
           end noms ;
@@ -437,7 +441,7 @@ let map_preds ?(parity=EVEN) ?(posity=POS) f term =
   aux parity posity term
 
 let is_member = function
-  | Pred (t,_) -> is_head_name "member" t
+  | Pred (t,_) -> is_head_name member_id t
   | _ -> false
 
 let extract_member = function
@@ -673,10 +677,11 @@ let fresh_nominals_by_list tys used_names =
   let result = ref [] in
   let get_name () =
     let n = ref 1 in
-      while List.mem (p ^ (string_of_int !n)) (!result @ used_names) do
+      while List.mem (Id.intern (p ^ (string_of_int !n)))
+              (!result @ used_names) do
         incr n
       done ;
-      p ^ (string_of_int !n)
+      Id.intern (p ^ (string_of_int !n))
   in
     for _ = 1 to List.length tys do
       result := !result @ [get_name()] ;
@@ -1049,17 +1054,17 @@ let rec metaterm_iter_tys f mt =
   | Pred (p, _) -> term_iter_tys f p
 
 let metaterm_collect_tyvar_names t =
-  let seen = ref Itab.empty in
+  let seen = ref Id.Map.empty in
   metaterm_iter_tys begin fun ty ->
     iter_ty begin fun aty ->
       match aty with
       | Typtr {contents=TV v} ->
-         if not (Itab.mem v !seen) then
-           seen := Itab.add v () !seen
+         if not (Id.Map.mem v !seen) then
+           seen := Id.Map.add v () !seen
       | _ -> ()
     end ty
   end t;
-  List.map fst (Itab.bindings !seen)
+  List.map fst (Id.Map.bindings !seen)
 
 let metaterms_contain_tyvar l =
   let exception Found in
@@ -1076,17 +1081,17 @@ let metaterms_contain_tyvar l =
   with Found -> true
 
 let metaterm_collect_gentyvar_names t =
-  let seen = ref Itab.empty in
+  let seen = ref Id.Map.empty in
   metaterm_iter_tys begin fun ty ->
     iter_ty begin fun aty ->
       match aty with
       | Tygenvar v ->
-         if not (Itab.mem v !seen) then
-           seen := Itab.add v () !seen
+         if not (Id.Map.mem v !seen) then
+           seen := Id.Map.add v () !seen
       | _ -> ()
     end ty
   end t;
-  List.map fst (Itab.bindings !seen)
+  List.map fst (Id.Map.bindings !seen)
 
 let obj_mode_eq m1 m2 =
   match m1, m2 with
@@ -1122,3 +1127,22 @@ let rec metaterm_eq m1 m2 =
   | Pred (p1, r1), Pred (p2, r2) ->
       r1 = r2 && Term.eq p1 p2
   | _ -> false
+
+(* Re-establish the interning invariant for unmarshalled values; see
+   [Term.reintern_term]. *)
+let rec reintern_metaterm = function
+  | True | False as mt -> mt
+  | Eq (a, b) -> Eq (reintern_term a, reintern_term b)
+  | Obj (obj, r) -> Obj (reintern_obj obj, r)
+  | Arrow (a, b) -> Arrow (reintern_metaterm a, reintern_metaterm b)
+  | Binding (q, tids, body) ->
+     Binding (q, reintern_tyctx tids, reintern_metaterm body)
+  | Or (a, b) -> Or (reintern_metaterm a, reintern_metaterm b)
+  | And (a, b) -> And (reintern_metaterm a, reintern_metaterm b)
+  | Pred (p, r) -> Pred (reintern_term p, r)
+and reintern_obj obj =
+  { context = Context.map reintern_term obj.context ;
+    right = reintern_term obj.right ;
+    mode = (match obj.mode with
+            | Async -> Async
+            | Sync f -> Sync (reintern_term f)) }

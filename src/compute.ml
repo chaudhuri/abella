@@ -24,6 +24,9 @@ let guard_to_string guard =
   Format.pp_print_flush ff () ;
   Buffer.contents buf
 
+let underscore_id = Id.intern "_"
+let hash_id = Id.intern "#"
+
 let standardize_predicate (ut : Typing.uterm) =
   let rec get_predicate = function
     | Typing.UCon (_, pred, _) -> pred
@@ -33,14 +36,14 @@ let standardize_predicate (ut : Typing.uterm) =
   in
   let pred = get_predicate ut in
   let rec get_vars ctx = function
-    | Typing.UCon (pos, "_", _) ->
-        let id = Term.fresh_name "#" ctx in
+    | Typing.UCon (pos, id, _) when Id.equal id underscore_id ->
+        let id = Term.fresh_name hash_id ctx in
         let ty = fresh_tyvar () in
         let ctx = (id, ty) :: ctx in
         (ctx, Typing.UCon (pos, id, ty))
     | UCon (pos, id, _) when is_capital_name id ->
         if List.mem_assoc id ctx then
-          failwithf_at ~pos "Repeated variable %s" id ;
+          failwithf_at ~pos "Repeated variable %s" (Id.value id) ;
         let ty = fresh_tyvar () in
         let ctx = (id, ty) :: ctx in
         (ctx, UCon (pos, id, ty))
@@ -66,12 +69,14 @@ let make_guard ~head ~test =
     failwithf "Expected target type prop or o, got %s" (ty_to_string ty) ;
   let condition = match test with
     | None ->
-        List.filter_map (fun (id, vtm) -> if id.[0] = '#' then None else Some vtm) vars
+        List.filter_map
+          (fun (id, vtm) ->
+            if (Id.value id).[0] = '#' then None else Some vtm) vars
     | Some test ->
         List.unique test
         |> List.map begin fun vid ->
           match List.assoc_opt vid vars with
-          | None -> failwithf "Unknown condition variable %s" vid
+          | None -> failwithf "Unknown condition variable %s" (Id.value vid)
           | Some term -> term
         end
   in
@@ -96,7 +101,7 @@ let evaluate_guard guard t =
   [%trace 2 "result: %b" result] ;
   result
 
-let guards : (id, guard) Hashtbl.t = State.table ()
+let guards : (Id.t, guard) Hashtbl.t = State.table ()
 
 let add_guard (gd : guard) = Hashtbl.add guards gd.predicate gd
 
@@ -117,11 +122,11 @@ let is_guarded atm =
 
 let () =
   let open Typing in
-  let e = UCon (ghost_pos, "_", fresh_tyvar ()) in
-  let l = UCon (ghost_pos, "L", fresh_tyvar ()) in
+  let e = UCon (ghost_pos, underscore_id, fresh_tyvar ()) in
+  let l = UCon (ghost_pos, Id.intern "L", fresh_tyvar ()) in
   let head = UApp (ghost_pos,
                    UApp (ghost_pos,
-                         UCon (ghost_pos, "member", fresh_tyvar ()),
+                         UCon (ghost_pos, Id.intern "member", fresh_tyvar ()),
                          e),
                    l) in
   let test = None in
@@ -133,7 +138,7 @@ type compute_hyp = {
 }
 
 type compute_wait = {
-  vars : (id * term) list ;
+  vars : (Id.t * term) list ;
   chyp : compute_hyp ;
 }
 
@@ -144,11 +149,11 @@ let format_ch ff (ch : compute_hyp) =
 
 let cw_to_string w =
   Printf.sprintf "<%s>%s"
-    (List.map fst w.vars |> String.concat ", ")
+    (List.map fst w.vars |> List.map Id.value |> String.concat ", ")
     (ch_to_string w.chyp)
 
 let pp_print_wait_var ff (v, t) =
-  Format.fprintf ff "%s <- %s" v (term_to_string t)
+  Format.fprintf ff "%s <- %s" (Id.value v) (term_to_string t)
 
 let get_wait clr form =
   let vars = get_metaterm_used form in
