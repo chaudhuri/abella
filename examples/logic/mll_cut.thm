@@ -1,0 +1,443 @@
+% Cut-elimination for one-sided Multiplicative Linear Logic (MLL)
+% using Seal to represent contexts as multisets up to permutation.
+
+Define remove : A -> list A -> list A -> prop by
+  remove X (X :: L) L
+; remove X (Y :: L) (Y :: K) := remove X L K.
+
+Theorem remove_swap [A] : forall (X : A) Y L L1 L2,
+  remove X L L1 -> remove Y L L2 ->
+  (X = Y /\ L1 = L2) \/ exists K, remove Y L1 K /\ remove X L2 K.
+induction on 1. intros. case H1.
+  case H2.
+    left. search.
+    right. exists K. search.
+  case H2.
+    right. exists K. search.
+    apply IH to H3 H4. case H5.
+      left. search.
+      right. exists (Y1 :: K2). search.
+
+Define perm : list A -> list A -> prop by
+  perm nil nil
+; perm (X :: L) K := exists K', remove X K K' /\ perm L K'.
+
+Theorem perm_remove [A] : forall (X : A) L K K',
+  perm L K -> remove X K K' ->
+  exists L', remove X L L' /\ perm L' K'.
+induction on 1. intros. case H1.
+  case H2.
+  apply remove_swap to H2 H3. case H5.
+    exists L1. search.
+    apply IH to H4 H7. exists (X1 :: L'). search.
+
+Theorem perm_right_cons [A] : forall (X : A) L K K',
+  remove X K K' -> perm K' L -> perm K (X :: L).
+induction on 1. intros. case H1.
+  search.
+  case H2. apply IH to H3 H5. search.
+
+Theorem perm_sym [A] : forall (L K : list A), perm L K -> perm K L.
+induction on 1. intros. case H1.
+  search.
+  apply IH to H3. apply perm_right_cons to H2 H4. search.
+
+Theorem perm_trans [A] : forall (L K M : list A), perm L K -> perm K M -> perm L M.
+induction on 1. intros. case H1.
+  case H2. search.
+  apply perm_sym to H2. apply perm_remove to H5 H3.
+    apply perm_sym to H7. apply IH to H4 H8. search.
+
+Seal mset A := list A with perm by perm_sym, perm_trans.
+
+Define is_list : list A -> prop by
+  is_list nil
+; is_list (X :: L) := is_list L.
+
+Theorem perm_refl [A] : forall (L : list A), is_list L -> perm L L.
+induction on 1. intros. case H1. search. apply IH to H2. search.
+
+Theorem remove_is_list [A] : forall (X : A) L L',
+  remove X L L' -> is_list L' -> is_list L.
+induction on 1. intros. case H1.
+  search.
+  case H2. apply IH to H3 H4. search.
+
+Theorem remove_is_list_rev [A] : forall (X : A) L L',
+  remove X L L' -> is_list L -> is_list L'.
+induction on 1. intros. case H1.
+  case H2. search.
+  case H2. apply IH to H3 H4. search.
+
+Theorem perm_is_list [A] : forall (L K : list A), perm L K -> is_list L /\ is_list K.
+induction on 1. intros. case H1.
+  search.
+  apply IH to H3. apply remove_is_list to H2 H5. search.
+
+Theorem mset_cons [A] : forall (X : A) G D,
+  mset G = mset D -> mset (X :: G) = mset (X :: D).
+intros. case H1. case H2. search. search.
+
+Theorem perm_cons [A] : forall (X : A) L K,
+  perm L K -> perm (X :: L) (X :: K).
+intros. search.
+
+Theorem mset_trans [A] : forall (X Y Z : list A),
+  mset X = mset Y -> mset Y = mset Z -> mset X = mset Z.
+intros. case H1. case H2. case H3.
+  case H4. search. search.
+  case H4. search. apply perm_trans to H5 H6. search.
+
+Theorem perm_tail [A] : forall (X : A) L K, perm L (X :: K) ->
+  exists L', remove X L L' /\ perm L' K.
+intros. apply perm_sym to H1. case H2. apply perm_sym to H4. exists K'. search.
+
+Define append : list A -> list A -> list A -> prop by
+  append nil L L
+; append (X :: L) K (X :: W) := append L K W.
+
+Theorem append_nil [A] : forall (L : list A), is_list L -> append L nil L.
+induction on 1. intros. case H1. search. apply IH to H2. search.
+
+Theorem append_is_list [A] : forall (G D W : list A),
+  append G D W -> is_list D -> is_list W.
+induction on 1. intros. case H1.
+  search.
+  apply IH to H3 H2. search.
+
+Theorem append_is_list_left [A] : forall (G D W : list A),
+  append G D W -> is_list G.
+induction on 1. intros. case H1. search. apply IH to H2. search.
+
+Theorem append_remove_left_rev [A] : forall (X : A) G D W' G',
+  remove X G G' -> append G' D W' ->
+  exists W, remove X W W' /\ append G D W.
+induction on 1. intros. case H1.
+  exists (X :: W'). search.
+  case H2. apply IH to H3 H4. exists (Y :: W1). search.
+
+Theorem append_perm_left [A] : forall (G G' D W : list A),
+  perm G G' -> append G D W -> is_list D ->
+  exists W', append G' D W' /\ perm W W'.
+induction on 1. intros. case H1.
+  case H2. apply perm_refl to H3. exists D. search.
+  case H2. apply IH to H5 H6 H3.
+    apply append_remove_left_rev to H4 H7.
+    apply perm_sym to H8. apply perm_right_cons to H9 H11.
+    apply perm_sym to H12. exists W2. search.
+
+Theorem append_mset_left [A] : forall (G G' D W : list A),
+  append G D W -> mset G = mset G' -> is_list D ->
+  exists W', append G' D W' /\ mset W = mset W'.
+intros. case H2. case H4.
+  exists W. search.
+  apply append_perm_left to H5 H1 H3. exists W'. search.
+
+Theorem append_mset_right [A] : forall (G D D' W : list A),
+  append G D W -> mset D = mset D' ->
+  exists W', append G D' W' /\ mset W = mset W'.
+induction on 1. intros. case H1.
+  exists D'. search.
+  apply IH to H3 H2. exists (X :: W'). split. search.
+    case H5. search. search.
+
+Theorem append_assoc [A] : forall (G1 G2 G D W : list A),
+  append G1 G2 G -> append G D W ->
+  exists W1, append G2 D W1 /\ append G1 W1 W.
+induction on 1. intros. case H1.
+  exists W. search.
+  case H2. apply IH to H3 H4. exists W3. search.
+
+Theorem append_split_remove [A] : forall (X : A) G1 G2 G G',
+  append G1 G2 G -> remove X G G' ->
+  (exists G1', remove X G1 G1' /\ append G1' G2 G') \/
+  (exists G2', remove X G2 G2' /\ append G1 G2' G').
+induction on 1. intros. case H1.
+  right. exists G'. search.
+  case H2.
+    left. exists L. search.
+    apply IH to H3 H4. case H5.
+      left. exists (X1 :: G1'). search.
+      right. exists G2'. search.
+
+Theorem append_cons_right_mset [A] : forall (X : A) G D W,
+  append G D W -> is_list D ->
+  exists W', append G (X :: D) W' /\ mset (X :: W) = mset W'.
+induction on 1. intros. case H1.
+  exists (X :: W). search.
+  apply IH to H3 H2 with X = X. exists (X1 :: W'). split. search.
+    assert is_list W1. apply append_is_list to H3 H2. search.
+    assert perm (X :: X1 :: W1) (X1 :: X :: W1).
+      apply perm_refl to H6. search.
+    case H5.
+      search.
+      assert perm (X1 :: X :: W1) (X1 :: W').
+      apply perm_trans to H7 H9. search.
+
+Theorem append_comm_mset [A] : forall (G D W : list A),
+  append G D W -> is_list D ->
+  exists W', append D G W' /\ mset W = mset W'.
+induction on 1. intros. case H1.
+  apply append_nil to H2. exists W. search.
+  apply IH to H3 H2.
+    assert is_list L. apply append_is_list_left to H3. search.
+    apply append_cons_right_mset to H4 H6 with X = X.
+    exists W'1. split. search.
+    case H5.
+      case H8. search. search.
+      case H8. search. apply perm_trans to _ H10. search.
+
+Kind atm type.
+Kind form type.
+Type atom, natom atm -> form.
+Type par, tens form -> form -> form.
+
+Define dual : form -> form -> prop by
+  dual (atom A) (natom A)
+; dual (tens A B) (par AA BB) := dual A AA /\ dual B BB.
+
+Define mll : mset form -> prop by
+  mll (mset (atom A :: natom A :: nil))
+; mll (mset (par A B :: G)) := mll (mset (A :: B :: G))
+; mll (mset (tens A B :: G)) :=
+    exists G1 G2, append G1 G2 G /\
+                  mll (mset (A :: G1)) /\
+                  mll (mset (B :: G2)).
+
+Theorem mll_is_list : forall G, mll (mset G) -> is_list G.
+induction on 1. intros. case H1.
+  case H2. search. apply perm_is_list to H3. search.
+  case H2.
+    apply IH to H3. case H4. case H5. search.
+    apply perm_is_list to H4. search.
+  case H2.
+    apply IH to H4. apply IH to H5.
+      case H6. case H7. apply append_is_list to H3 H9. search.
+    apply perm_is_list to H6. search.
+
+Theorem par_inv : forall G A B,
+  mll (mset (par A B :: G)) -> mll (mset (A :: B :: G)).
+induction on 1. intros. case H1.
+- % 1. Identity
+  case H2. apply perm_tail to H3. case H4. case H6. case H7.
+- % 2. Par
+  case H2.
+  + search.
+  + apply perm_tail to H4. case H5.
+    * search.
+    * apply IH to H3 with G = A1 :: B1 :: K, A = A, B = B.
+      -- % Obligation subgoal: mset (par A B :: A1 :: B1 :: K) = mset (A1 :: B1 :: G')
+         assert is_list K. apply perm_is_list to H6. case H8. search.
+         assert perm (A1 :: B1 :: K) (A1 :: B1 :: K). apply perm_refl to H8. search.
+         search.
+      -- % Mainline subgoal:
+         assert is_list K. apply perm_is_list to H6. case H9. search.
+         assert perm (par A1 B1 :: A :: B :: K) (A :: B :: par A1 B1 :: K).
+           apply perm_refl to H9. search.
+         apply perm_cons to H6 with X = B.
+         apply perm_cons to H11 with X = A.
+         apply perm_trans to H10 H12.
+         assert perm (A1 :: B1 :: A :: B :: K) (A :: B :: A1 :: B1 :: K).
+           apply perm_refl to H9. search.
+         unfold 2. exists A :: B :: K, B1, A1. search.
+- % 3. Tens
+  case H2. apply perm_tail to H6. case H7.
+  apply append_split_remove to H3 H9. case H10.
+  + apply IH to H4 with G = A1 :: G1', A = A, B = B.
+    * % Obligation subgoal: mset (par A B :: A1 :: G1') = mset (A1 :: G1)
+      assert is_list G1'. apply mll_is_list to H4. case H13.
+        apply remove_is_list_rev to H11 H14. search.
+      assert perm (A1 :: G1') (A1 :: G1'). apply perm_refl to H13. search.
+      search.
+    * % Mainline subgoal:
+      assert is_list K. apply perm_is_list to H8. case H14. search.
+      assert perm (tens A1 B1 :: A :: B :: K) (A :: B :: tens A1 B1 :: K).
+        apply perm_refl to H14. search.
+      apply perm_cons to H8 with X = B.
+      apply perm_cons to H16 with X = A.
+      apply perm_trans to H15 H17.
+      assert perm (A :: B :: A1 :: G1') (A1 :: A :: B :: G1').
+        assert is_list G1'. apply mll_is_list to H13. case H19. case H20. case H21. search.
+        apply perm_refl to H19. search.
+      unfold 3. exists A :: B :: K, B1, A1, A :: B :: G1', G2. search.
+  + apply IH to H5 with G = B1 :: G2', A = A, B = B.
+    * % Obligation subgoal: mset (par A B :: B1 :: G2') = mset (B1 :: G2)
+      assert is_list G2'. apply mll_is_list to H5. case H13.
+        apply remove_is_list_rev to H11 H14. search.
+      assert perm (B1 :: G2') (B1 :: G2'). apply perm_refl to H13. search.
+      search.
+    * % Mainline subgoal:
+      Hg2 : assert is_list G2'. apply mll_is_list to H5. case H14.
+        apply remove_is_list_rev to H11 H15. search.
+      apply append_cons_right_mset to H12 Hg2 with X = B.
+      apply append_cons_right_mset to H14 _ with X = A.
+      assert perm (A :: B :: B1 :: G2') (B1 :: A :: B :: G2').
+        apply perm_refl to Hg2. search.
+      Hm1 : assert mset (A :: B :: K) = mset W'1.
+      -- case H15.
+         ++ case H17 ; search.
+         ++ Hp_ab : assert perm (A :: B :: K) (A :: W').
+            case H17.
+            ** search.
+            ** apply perm_trans to Hp_ab _ with M = W'1 ; search.
+      -- Hk1 : assert is_list (tens A1 B1 :: K).
+           Hp : apply perm_is_list to H8. case Hp. search.
+         Hk : assert is_list K. case Hk1. search.
+         Hp2 : assert perm (tens A1 B1 :: A :: B :: K) (A :: B :: tens A1 B1 :: K).
+           apply perm_refl to Hk. search.
+         Hp3 : apply perm_cons to H8 with X = B.
+         Hp4 : apply perm_cons to Hp3 with X = A.
+         Hp5 : apply perm_trans to Hp2 Hp4.
+         Hm2 : assert mset (tens A1 B1 :: W'1) = mset (A :: B :: G).
+         ++ case Hm1. case H19.
+            ** search.
+            ** Hp_sym : assert perm W'1 (A :: B :: K).
+                 backchain perm_sym.
+               Hp_c : apply perm_cons to Hp_sym with X = tens A1 B1.
+               apply perm_trans to Hp_c Hp5. search.
+         ++ unfold 3. exists W'1, B1, A1. split.
+            ** case Hm2 ; search.
+            ** exists G2, A :: B :: G2'. search.
+
+Theorem mll_cut :
+  forall G D A B, dual A B -> mll (mset (A :: G)) -> mll (mset (B :: D)) ->
+  forall W, append G D W -> mll (mset W).
+induction on 1. induction on 2. intros.
+Hd : assert is_list D. Hmlld : apply mll_is_list to H3. case Hmlld. search.
+Hg : assert is_list G. Hmllg : apply mll_is_list to H2. case Hmllg. search.
+case H2.
+- % 1. Identity
+  case H5.
+  + case H1. case H4. case H6. search.
+  + apply perm_tail to H6. case H7.
+    * case H1.
+      apply append_mset_left to H4 _ Hd with G' = natom A1 :: nil.
+      case H9. case H11. case H10 ; search.
+    * case H9.
+      ++ case H1.
+      ++ case H10.
+- % 2. Par
+  case H5.
+  + case H1.
+  + apply perm_tail to H7. case H8.
+    * case H1.
+    * Hp_g : apply perm_sym to H9.
+      Hm_g : assert mset G = mset (par A1 B1 :: K).
+      apply append_mset_left to H4 Hm_g Hd.
+      case H11.
+      Ha : assert append (A1 :: B1 :: K) D (A1 :: B1 :: W1).
+      apply IH1 to H1 H6 H3 with G = A1 :: B1 :: K.
+      -- Hl : assert is_list K.
+           apply mll_is_list to H6. case H14. case H15.
+           apply remove_is_list_rev to H10 H16. search.
+         assert perm (A :: A1 :: B1 :: K) (A1 :: B1 :: G1).
+           apply perm_refl to Hl. search.
+         search.
+      -- Hres : apply H14 to Ha.
+         unfold 2. exists W1, B1, A1. split.
+         ++ case H12.
+            ** search.
+            ** right. backchain perm_sym.
+         ++ search.
+- % 3. Tens
+  case H5.
+  + % 3a. Principal Tens
+    case H1. apply par_inv to H3.
+    apply append_assoc to H6 H4.
+    apply append_cons_right_mset to H12 Hd with X = AA.
+    Hbd : assert mll (mset (BB :: AA :: D)).
+      assert perm (AA :: BB :: D) (BB :: AA :: D).
+        apply perm_refl to Hd. search.
+      search.
+    Hcut_b : apply IH to H10 H8 Hbd.
+    Hm_b : apply Hcut_b to H14.
+    Haa : assert mll (mset (AA :: W2)).
+      case H15 ; search.
+    Hcut_a : apply IH to H9 H7 Haa.
+    apply Hcut_a to H13. search.
+  + % 3b. Perm Tens
+    apply perm_tail to H9. case H10.
+    * % Principal Tens (via perm)
+      case H1. apply par_inv to H3.
+      Hp_g : apply perm_sym to H11.
+      Hm_g : assert mset G = mset G1.
+      apply append_mset_left to H4 Hm_g Hd.
+      apply append_assoc to H6 H15.
+      apply append_cons_right_mset to H17 Hd with X = AA.
+      Hbd : assert mll (mset (BB :: AA :: D)).
+        assert perm (AA :: BB :: D) (BB :: AA :: D).
+          apply perm_refl to Hd. search.
+        search.
+      Hcut_b : apply IH to H13 H8 Hbd.
+      Hm_b : apply Hcut_b to H19.
+      Haa : assert mll (mset (AA :: W2)).
+        case H20 ; search.
+      Hcut_a : apply IH to H12 H7 Haa.
+      Hm_a : apply Hcut_a to H18.
+      case H16 ; search.
+    * % Commutative Tens
+      apply append_split_remove to H6 H12. case H13.
+      -- Hp_g : apply perm_sym to H11.
+         Hm_g : assert mset G = mset (tens A1 B1 :: K).
+         apply append_mset_left to H4 Hm_g Hd.
+         case H16.
+         Hg3 : assert is_list G3.
+           Hmll3 : apply mll_is_list to H8. case Hmll3. search.
+         apply append_comm_mset to H15 Hg3.
+         Hm_k : assert mset K = mset W'1.
+           case H20 ; search.
+         apply append_mset_left to H18 Hm_k Hd.
+         apply append_assoc to H19 H21.
+         Ha : assert append (A1 :: G1') D (A1 :: W3).
+         Hcut : apply IH1 to H1 H7 H3 with G = A1 :: G1'.
+         ++ Hg1' : assert is_list G1'.
+              Hmll2 : apply mll_is_list to H7. case Hmll2.
+              apply remove_is_list_rev to H14 H25. search.
+            assert perm (A :: A1 :: G1') (A1 :: G2).
+              apply perm_refl to Hg1'. search.
+            search.
+         ++ Hm_l : apply Hcut to Ha.
+            Hw3 : assert is_list W3.
+              Hmll_w3 : apply mll_is_list to Hm_l. case Hmll_w3. search.
+            apply append_comm_mset to H24 Hw3.
+            Hm_2 : assert mset W1 = mset W'3.
+            ** case H22.
+               --- case H26 ; search.
+               --- case H26.
+                   +++ search.
+                   +++ assert perm W1 W'3.
+                         backchain perm_trans with K = W'2.
+                       search.
+            ** Hm_c : apply mset_cons to Hm_2 with X = tens A1 B1.
+               Hm_w : assert mset W = mset (tens A1 B1 :: W'3).
+               --- case H17.
+                   +++ case Hm_c ; search.
+                   +++ case Hm_c.
+                       *** search.
+                       *** assert perm W (tens A1 B1 :: W'3).
+                             backchain perm_trans with K = tens A1 B1 :: W1.
+                           search.
+               --- unfold 3. exists W'3, B1, A1. split.
+                   +++ case Hm_w. case H27.
+                       *** search.
+                       *** right. backchain perm_sym.
+                   +++ exists W3, G3. search.
+      -- Hp_g : apply perm_sym to H11.
+         Hm_g : assert mset G = mset (tens A1 B1 :: K).
+         apply append_mset_left to H4 Hm_g Hd.
+         case H16.
+         apply append_assoc to H15 H18.
+         Ha : assert append (B1 :: G2') D (B1 :: W3).
+         Hcut : apply IH1 to H1 H8 H3 with G = B1 :: G2'.
+         ++ Hg2' : assert is_list G2'.
+              Hmll3 : apply mll_is_list to H8. case Hmll3.
+              apply remove_is_list_rev to H14 H21. search.
+            assert perm (A :: B1 :: G2') (B1 :: G3).
+              apply perm_refl to Hg2'. search.
+            search.
+         ++ Hm_r : apply Hcut to Ha.
+            unfold 3. exists W1, B1, A1. split.
+            ** case H17.
+               --- search.
+               --- right. backchain perm_sym.
+            ** exists G2, W3. search.
