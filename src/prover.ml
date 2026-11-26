@@ -61,6 +61,16 @@ let add_global_consts ?typarams cs =
   sr := List.fold_left Subordination.update !sr (List.map snd cs) ;
   sign := add_consts ?typarams !sign cs
 
+let add_sealed_type (info : Sealed.info) =
+  add_global_types [info.name] (Term.kind (List.length info.typarams)) ;
+  let sealed_ty =
+    tybase
+      (Tycons (info.name, List.map (fun a -> tybase (Tygenvar a)) info.typarams))
+  in
+  add_global_consts ~typarams:info.typarams
+    [(info.name, tyarrow [info.underlying] sealed_ty)] ;
+  Sealed.add info
+
 let close_types sign clauses atys =
   List.iter (kind_check sign) (List.map tybase atys);
   let tys = List.map tybase atys in
@@ -260,7 +270,16 @@ let print_theorem name (tys, thm) fmt =
     (!display_name name) (gen_to_string tys) format_metaterm thm
 
 let show name fmt =
-  print_theorem name (get_generic_lemma name) fmt
+  match Sealed.lookup name with
+  | Some info ->
+      Format.fprintf fmt "Seal %s%s := %s with %s.@."
+        (!display_name info.name)
+        (if info.typarams = [] then ""
+         else " " ^ String.concat " " info.typarams)
+        (ty_to_string info.underlying)
+        (!display_name info.rel_name)
+  | None ->
+      print_theorem name (get_generic_lemma name) fmt
 
 (* Splitting theorems *)
 
@@ -798,6 +817,10 @@ let rec warn_witness sq = function
       List.iter (fun (_, ut) -> warn_term_vars sq (uterm_to_term ut)) bs ;
       warn_witness sq w
   | WUnfold (_, _, ws) -> List.iter (warn_witness sq) ws
+  | WSealed w -> warn_witness sq w
+  | WHypSealed (h, ws) ->
+      warn_hyp_name sq h ;
+      List.iter (warn_witness sq) ws
   | WTrue | WReflexive | WMagic -> ()
 
 let next_restriction sq =
@@ -2512,9 +2535,7 @@ let saturate sq ?hint ?depth lemmas
                     with
                     | Some cpairs ->
                         let nhs =
-                          List.map
-                            (fun (t1, t2) -> Eq (t1, t2))
-                            cpairs @ nhs
+                          cpairs_to_metaterms cpairs @ nhs
                         in
                         release sq ~ts ~nvs ~nhs forms
                     | None -> []

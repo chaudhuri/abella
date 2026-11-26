@@ -96,6 +96,7 @@ type top_command =
   | Kind          of id list * knd
   | Type          of id list * ty
   | Close         of aty list
+  | Seal          of id * id list * ty * qualid * qualid * qualid
   | SSplit        of id * id list
   | Suspend       of uterm * id list option
   | TopCommon     of common_command
@@ -115,6 +116,7 @@ type compiled =
   | CKind         of id list * knd
   | CType         of id list * string list * ty
   | CClose        of (aty * aty list) list
+  | CSeal         of Sealed.info
   | CSuspend      of guard
 
 type witness =
@@ -128,6 +130,8 @@ type witness =
   | WExists       of (id * uterm) list * witness
   | WReflexive
   | WUnfold       of id * int * witness list
+  | WSealed       of witness
+  | WHypSealed    of id * witness list
   | WMagic
 
 let witness_to_string =
@@ -154,6 +158,11 @@ let witness_to_string =
     | WUnfold(id,n,ws) ->
         let ws = List.map aux ws |> String.concat ", " in
         Printf.sprintf "unfold(%s, %d, %s)" id n ws
+    | WSealed w ->
+        "sealed(" ^ aux w ^ ")"
+    | WHypSealed(id, ws) ->
+        let ws = List.map aux ws |> String.concat ", " in
+        Printf.sprintf "apply %s with [%s]" id ws
     | WMagic -> "*"
   in
   aux
@@ -383,6 +392,14 @@ let top_command_to_string tc =
         sprintf "Type %s %s" (id_list_to_string ids) (ty_to_string ty)
     | Close atys ->
         sprintf "Close %s" (aty_list_to_string atys)
+    | Seal (name, params, ty, rel, sym, trans) ->
+        sprintf "Seal %s%s := %s with %s by %s, %s"
+          name
+          (if params = [] then "" else " " ^ String.concat " " params)
+          (ty_to_string ty)
+          (qualid_to_string rel)
+          (qualid_to_string sym)
+          (qualid_to_string trans)
     | SSplit(id, ids) ->
         if ids <> [] then
           sprintf "Split %s as %s" id (id_list_to_string ids)

@@ -83,7 +83,7 @@ let freshen_nameless_def ~sr ?(support=[]) ~ts head body =
   let fresh_names = fresh_nameless_alist ~sr ~support ~tag:Logic ~ts tids in
   let fresh_head = replace_term_vars fresh_names head in
   let fresh_body = replace_metaterm_vars fresh_names body in
-  (fresh_head, fresh_body)
+  (fresh_names, fresh_head, fresh_body)
 
 let freshen_nameless_bindings ~sr ~support ~ts bindings term =
   let alist = fresh_nameless_alist ~sr ~support ~tag:Logic ~ts bindings in
@@ -240,9 +240,6 @@ let stateless_case_to_case case =
     new_vars = case.stateless_new_vars ;
     new_hyps = case.stateless_new_hyps }
 
-let cpairs_to_eqs cpairs = List.map (fun (x, y) -> Eq(x, y)) cpairs
-
-(* This handles asynchrony on the left *)
 let rec recursive_metaterm_case ~used ~sr term =
   match normalize term with
   | True -> Some empty_case
@@ -253,7 +250,7 @@ let rec recursive_metaterm_case ~used ~sr term =
           Some {
             (* Names created perhaps by unification *)
             stateless_new_vars = term_vars_alist Eigen [a;b] ;
-            stateless_new_hyps = cpairs_to_eqs cpairs
+            stateless_new_hyps = cpairs_to_metaterms cpairs
           }
       | None -> None
       end
@@ -472,7 +469,7 @@ let case_aux ~used ~sr ~clauses ~mutual ~defs ~global_support term =
               [{ bind_state = get_bind_state () ;
                  new_vars = case.stateless_new_vars @ used ;
                  new_hyps =
-                   cpairs_to_eqs cpairs @
+                   cpairs_to_metaterms cpairs @
                    List.map wrapper case.stateless_new_hyps }]
           end
       | None -> []
@@ -500,7 +497,8 @@ let case_aux ~used ~sr ~clauses ~mutual ~defs ~global_support term =
             List.flatten_map ~guard:unwind_state begin fun permuted ->
               let permuted_tys = List.map (tc []) permuted in
               if not (unifyty_list_compat ptys permuted_tys) then []
-              else
+              else begin
+                ensure_no_sealed_nabla_tys ptys ;
                 let support = List.minus support permuted in
                 let head =
                   replace_term_vars
@@ -509,6 +507,7 @@ let case_aux ~used ~sr ~clauses ~mutual ~defs ~global_support term =
                     head
                 in
                 make_case ~support ~used (head, body) term
+              end
             end
           end
         end
@@ -550,7 +549,7 @@ let case_aux ~used ~sr ~clauses ~mutual ~defs ~global_support term =
               let body = List.map rewrap_antecedent fresh_body in
               Some { bind_state = get_bind_state () ;
                      new_vars = new_vars ;
-                     new_hyps = cpairs_to_eqs cpairs @ body }
+                     new_hyps = cpairs_to_metaterms cpairs @ body }
           | None -> None
         end
       end clause
@@ -767,12 +766,12 @@ let unfold_defs ~sr ~mdefs clause_sel ~ts goal r =
           ids nominals
       in
       let head = replace_term_vars alist head in
-      let head, body = freshen_nameless_def ~sr ~support ~ts head body in
+      let vars, head, body = freshen_nameless_def ~sr ~support ~ts head body in
       let msg = msg_cannot_fully_infer_def_clause head body in
       match try_right_unify_cpairs_fully_inferred ~msg head goal with
       | None -> []
       | Some cpairs ->
-          [(get_bind_state (), cpairs, normalize (wrapper body), i)]
+          [(get_bind_state (), vars, cpairs, normalize (wrapper body), i)]
     end in
   defs |>
   List.map begin fun {head ; body} ->
@@ -810,20 +809,55 @@ let exclaim msg vars head body =
 
 let unfold ~sr ~mdefs ~used clause_sel sol_sel goal0 =
   match goal0 with
+  | Eq(a, b) ->
+      begin match reduce_sealed_eq a b with
+      | Some mt -> [mt]
+      | None -> failwith "Cannot unfold this equality"
+      end
   | Pred(_, Smaller _) | Pred(_, Equal _) ->
       failwith "Cannot unfold inductively restricted predicate"
   | Pred(goal, r) ->
-      (* Find suitable solutions without lingering conflict pairs *)
-      let rec select_non_cpairs emit list =
+      (* Find suitable solutions without lingering non-sealed conflict pairs *)
+      let rec partition_sealed acc = function
+        | [] -> Some (List.rev acc)
+        | (x, y) :: cs ->
+            match reduce_sealed_eq x y with
+            | Some mt -> partition_sealed (mt :: acc) cs
+            | None -> None
+      in
+      let rec select_unfoldings emit list =
         match list with
-        | (state, [], body, _)::rest ->
+        | (state, vars, cpairs, body, _)::rest ->
             set_bind_state state;
-            select_non_cpairs (Metaterm.map_terms Term.deep_copy body :: emit) rest
-        | _::rest -> select_non_cpairs emit rest
+            begin match partition_sealed [] cpairs with
+            | Some sealed_mts ->
+                let body =
+                  if sealed_mts = [] then body
+                  else
+                    let conjs =
+                      sealed_mts @ (if body = True then [] else [body])
+                    in
+                    let body' = conjoin conjs in
+                    let new_vars =
+                      List.map (fun (x, xv) -> (x, find_vars Logic [xv])) vars
+                    in
+                    let quant_vars =
+                      List.fold_left
+                        (fun vs (x, nvs) ->
+                           if nvs = [] then vs else (x, nvs) :: vs)
+                        [] new_vars
+                    in
+                    if quant_vars = [] then body'
+                    else existentially_close ~used quant_vars body'
+                in
+                select_unfoldings
+                  (Metaterm.map_terms Term.deep_copy body :: emit) rest
+            | None -> select_unfoldings emit rest
+            end
         | [] -> emit
       in
       let unfoldings = unfold_defs ~sr ~mdefs clause_sel ~ts:0 goal r in
-      begin match select_non_cpairs [] unfoldings with
+      begin match select_unfoldings [] unfoldings with
       | [] -> failwith "No matching clauses"
       | [case1] -> [case1]
       | cases -> begin
@@ -1070,18 +1104,45 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       hyps |>
       List.iter ~guard:unwind_state begin fun (id, hyp) ->
         let wmatch = match witness with
-          | WMagic -> true
-          | WHyp h when h = id -> true
-          | _ -> false
+          | WMagic -> `Any
+          | WHyp h when h = id -> `Exact
+          | WHypSealed (h, ws) when h = id -> `Sealed ws
+          | _ -> `Skip
         in
-        if wmatch then
+        if wmatch <> `Skip then
         let pmatch = match hyp, goal with
           | Pred(_, rh), Pred(_, rg)
           | Obj(_, rh), Obj(_, rg) -> satisfies rh rg
           | _ -> true
         in
         if pmatch then
-          all_meta_right_permute_unify ~sc:(fun () -> sc (WHyp id)) goal hyp
+          all_meta_right_permute_unify_cpairs goal hyp
+            ~sc:begin fun cpairs ->
+              match cpairs, wmatch with
+              | [], (`Any | `Exact) -> sc (WHyp id)
+              | _ :: _, (`Any | `Sealed _) when n > 0 ->
+                  if List.for_all
+                       (fun (a, b) -> reduce_sealed_eq a b <> None) cpairs
+                  then
+                    let rec prove_all eqs ws ~sc =
+                      match eqs, ws with
+                      | [], [] -> sc []
+                      | eq :: rest, w :: ws ->
+                          metaterm_aux (n - 1) hyps eq ts ~witness:w
+                            ~sc:(fun w' ->
+                                prove_all rest ws
+                                  ~sc:(fun ws' -> sc (w' :: ws')))
+                      | _ -> ()
+                    in
+                    let eqs = List.map (fun (a, b) -> Eq (a, b)) cpairs in
+                    let ws = match wmatch with
+                      | `Sealed ws -> ws
+                      | `Any -> List.map (fun _ -> WMagic) eqs
+                      | `Exact | `Skip -> []
+                    in
+                    prove_all eqs ws ~sc:(fun ws' -> sc (WHypSealed (id, ws')))
+              | _ -> ()
+            end
       end in
     match goal with
     | True -> begin
@@ -1092,10 +1153,43 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
     | False -> ()
     | Eq(left, right) -> begin
         match witness with
-        | WMagic | WReflexive ->
+        | WMagic ->
+            unwind_state
+              (fun () -> if try_right_unify left right then sc WReflexive)
+              () ;
+            if n > 0 then
+              unwind_state
+                (fun () ->
+                   match reduce_sealed_eq_parts left right with
+                   | Some (e1, e2, rel_const) ->
+                       let try_sub mt =
+                         metaterm_aux (n - 1) hyps mt ts
+                           ~sc:(fun w -> sc (WSealed w)) ~witness:WMagic
+                       in
+                       try_sub (Eq (e1, e2)) ;
+                       try_sub (Pred (app rel_const [e1; e2], Irrelevant)) ;
+                       try_sub (Pred (app rel_const [e2; e1], Irrelevant))
+                   | None -> ())
+                ()
+        | WReflexive ->
             unwind_state
               (fun () -> if try_right_unify left right then sc WReflexive)
               ()
+        | WSealed w ->
+            if n > 0 then
+              unwind_state
+                (fun () ->
+                   match reduce_sealed_eq_parts left right with
+                   | Some (e1, e2, rel_const) ->
+                       let try_sub mt =
+                         metaterm_aux (n - 1) hyps mt ts
+                           ~sc:(fun w -> sc (WSealed w)) ~witness:w
+                       in
+                       try_sub (Eq (e1, e2)) ;
+                       try_sub (Pred (app rel_const [e1; e2], Irrelevant)) ;
+                       try_sub (Pred (app rel_const [e2; e1], Irrelevant))
+                   | None -> ())
+                ()
         | _ -> bad_witness ()
       end
     | Or(left, right) -> begin
@@ -1239,11 +1333,19 @@ let search ~depth:n ~hyps ~clauses ~def_unfold ~sr ~retype
       in
       let doit () =
         unfold_defs ~sr ~mdefs csel ~ts goal r |>
-        List.iter begin fun (state, cpairs, body, i) ->
+        List.iter begin fun (state, _vars, cpairs, body, i) ->
           set_bind_state state ;
+          let sealed_cpairs, other_cpairs =
+            List.partition (fun (x, y) -> reduce_sealed_eq x y <> None) cpairs
+          in
+          let sealed_eqs = List.map (fun (x, y) -> Eq (x, y)) sealed_cpairs in
+          let body =
+            if sealed_eqs = [] then body
+            else conjoin (sealed_eqs @ (if body = True then [] else [body]))
+          in
           metaterm_aux subn hyps body ts
             ~witness
-            ~sc:(fun w -> if try_unify_cpairs cpairs then
+            ~sc:(fun w -> if try_unify_cpairs other_cpairs then
                     sc (WUnfold(p, i, [w])))
         end in
       unwind_state doit ()
@@ -1309,7 +1411,14 @@ let apply_arrow term args =
                right_unify left.right arg.right ;
                right
            | Arrow(left, right), Some arg ->
-               meta_right_unify left arg ; right
+               let cpairs = meta_right_unify_cpairs left arg in
+               List.iter (fun (a, b) ->
+                   if reduce_sealed_eq a b = None then
+                     raise (UnifyError NotLLambda))
+                 cpairs ;
+               obligations :=
+                 (List.map (fun (a, b) -> Eq (a, b)) cpairs) @ !obligations ;
+               right
            | Arrow(left, right), None ->
                obligations := left::!obligations ;
                right
@@ -1377,6 +1486,7 @@ let apply ?(used_nominals=[]) ~sr term args =
                 List.iter2 (fun ty1 ty2 ->
                     unify_constraints ~enable_bind:true [(ty1,ty2,def_cinfo)])
                   nabla_tys (List.map (tc []) nominals);
+                ensure_no_sealed_nabla_tys nabla_tys ;
                 let support = List.minus support nominals in
                 let raised_body =
                   freshen_nameless_bindings ~sr ~support ~ts:0 foralls body
@@ -1478,15 +1588,25 @@ let backchain_check_restrictions hr gr =
 let backchain_arrow term goal =
   let obligations, head = decompose_arrow term in
   backchain_check_restrictions (term_to_restriction head) (term_to_restriction goal) ;
-  begin match head, goal with
-  | Obj ({mode = Async ; _} as hobj, _), Obj ({mode = Async ; _} as gobj, _) ->
-      right_unify hobj.right gobj.right ;
-      Context.backchain_reconcile hobj.context gobj.context
-  | _, _ -> begin
-      try meta_right_unify head goal with
-      | Unify.UnifyFailure fl -> raise (Unify.UnifyFailure (Unify.FailTrail (1, fl)))
-    end
-  end ;
+  let sealed_obligations =
+    match head, goal with
+    | Obj ({mode = Async ; _} as hobj, _), Obj ({mode = Async ; _} as gobj, _) ->
+        right_unify hobj.right gobj.right ;
+        Context.backchain_reconcile hobj.context gobj.context ;
+        []
+    | _, _ -> begin
+        try
+          let cpairs = meta_right_unify_cpairs head goal in
+          List.iter (fun (a, b) ->
+              if reduce_sealed_eq a b = None then
+                raise (UnifyError NotLLambda))
+            cpairs ;
+          List.map (fun (a, b) -> Eq (a, b)) cpairs
+        with
+        | Unify.UnifyFailure fl -> raise (Unify.UnifyFailure (Unify.FailTrail (1, fl)))
+      end
+  in
+  let obligations = obligations @ sealed_obligations in
   let tms = term :: goal :: obligations in
   if metaterms_contain_tyvar tms then
     failwith "Types of variables are not fully determined"
@@ -1512,6 +1632,7 @@ let backchain ~sr ?(used_nominals=[]) term goal =
             List.iter2 (fun ty1 ty2 ->
                 unify_constraints ~enable_bind:true [(ty1,ty2,def_cinfo)])
               nabla_tys (List.map (tc []) nominals);
+            ensure_no_sealed_nabla_tys nabla_tys ;
             let support = List.minus support nominals in
             let raised_body =
               freshen_nameless_bindings ~sr ~support ~ts:0 bindings body

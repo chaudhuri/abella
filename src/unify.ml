@@ -110,6 +110,11 @@ let unifyty_list_compat tys1 tys2 =
 
 let db_type tyctx i = snd (List.nth tyctx (i - 1))
 
+type sealed_mode =
+  | Sealed_never
+  | Sealed_syntactic
+  | Sealed_try_syntactic
+
 (* An explicit handler is specified for how to deal with
    non-llambda conflict pairs *)
 module type Param =
@@ -117,6 +122,7 @@ sig
   val instantiatable : tag
   val constant_like  : tag
   val handler : term -> term -> unit
+  val sealed_mode : sealed_mode
 end
 
 module Make (P:Param) =
@@ -135,6 +141,8 @@ let constant tag =
   tag = Constant || tag = constant_like || tag = Nominal
 let variable tag =
   tag = instantiatable
+let is_sealed_ctor_var v =
+  v.tag = Constant && Sealed.is_sealed_ctor v.name
 
 (* Return the number of abstractions need to make a term closed *)
 let closing_depth t =
@@ -539,7 +547,7 @@ let makesubst tyctx h1 t2 a1 n =
    * argument is head normalized. Exceptions can be
    * raised if unification fails or if LLambda conditions are found
    * to be violated. *)
-  let rec nested_subst tyctx c lev =
+  let rec nested_subst ~under_sealed tyctx c lev =
     match observe c with
       | Var v when constant v.tag ->
           (* Can [h1] depend on [c] ?
@@ -547,15 +555,21 @@ let makesubst tyctx h1 t2 a1 n =
            * If not, [c] must belong to the argument list. *)
           if v.ts <= ts1 then c else
             let j = cindex v a1 n in
-              if j = 0 then fail Generic ;
+              if j = 0 then
+                (if under_sealed then raise (UnifyError NotLLambda)
+                 else fail Generic) ;
               db (j+lev)
       | DB i ->
           if i<=lev then c else
             let j = bvindex (i-lev) a1 n in
-              if j = 0 then fail Generic ;
+              if j = 0 then
+                (if under_sealed then raise (UnifyError NotLLambda)
+                 else fail Generic) ;
               db (j+lev)
       | Var v when variable v.tag ->
-          if eq c h1 then fail OccursCheck ;
+          if eq c h1 then
+            (if under_sealed then raise (UnifyError NotLLambda)
+             else fail OccursCheck) ;
           let (changed,a1',a2') = raise_and_invert ts1 v.ts a1 [] lev in
             if changed
                || (ts1 < v.ts && v.tag = Logic) (* See: #171 *) then
@@ -567,19 +581,27 @@ let makesubst tyctx h1 t2 a1 n =
               app c a1'
       | Lam (idtys,t) ->
           lambda idtys
-            (nested_subst (List.rev_app idtys tyctx) t (lev + List.length idtys))
+            (nested_subst ~under_sealed
+               (List.rev_app idtys tyctx) t (lev + List.length idtys))
       | App (h2,a2) ->
           begin match observe h2 with
             | Var hv2 when constant hv2.tag ->
-                let h2' = nested_subst tyctx h2 lev in
+                let h2' = nested_subst ~under_sealed tyctx h2 lev in
+                let under_sealed' = under_sealed || is_sealed_ctor_var hv2 in
                 let a2' =
-                  List.map (fun x -> nested_subst tyctx (hnorm x) lev) a2
+                  List.map
+                    (fun x ->
+                       nested_subst ~under_sealed:under_sealed'
+                         tyctx (hnorm x) lev)
+                    a2
                 in
                   app h2' a2'
             | DB _ ->
-                let h2' = nested_subst tyctx h2 lev in
+                let h2' = nested_subst ~under_sealed tyctx h2 lev in
                 let a2' =
-                  List.map (fun x -> nested_subst tyctx (hnorm x) lev) a2
+                  List.map
+                    (fun x -> nested_subst ~under_sealed tyctx (hnorm x) lev)
+                    a2
                 in
                   app h2' a2'
             | Var hv2 when variable hv2.tag ->
@@ -674,18 +696,25 @@ let makesubst tyctx h1 t2 a1 n =
                     make_non_llambda_subst lev hv1 a1 t2
             | App _ | Lam _
             | Var _ | DB _ ->
-                nested_subst tyctx t2 lev
+                nested_subst ~under_sealed:false tyctx t2 lev
             | Susp _ | Ptr _ ->
                 [%bug] "toplevel_subst: unexpected suspension or pointer head"
           end
       | Ptr _ -> [%bug] "toplevel_subst: unexpected pointer term"
       | _ ->
-          nested_subst tyctx t2 lev
+          nested_subst ~under_sealed:false tyctx t2 lev
   in
   let a1ids = gen_binder_ids (List.length a1) in
   let a1tys = List.map (tc tyctx) a1 in
     ensure_flex_args a1 ts1 ;
     lambda (List.combine a1ids a1tys) (toplevel_subst tyctx t2 0)
+
+let makesubst_safe tyctx h1 t2 a1 n =
+  let st = get_scoped_bind_state () in
+  try makesubst tyctx h1 t2 a1 n
+  with UnifyError NotLLambda ->
+    set_scoped_bind_state st ;
+    raise (UnifyError NotLLambda)
 
 (** Unifying the arguments of two rigid terms with the same head, these
   * arguments being given as lists. Exceptions are raised if
@@ -728,7 +757,7 @@ and unify_app_term tyctx h1 a1 t1 t2 =
   match observe h1,observe t2 with
     | Var hv1, _ when variable hv1.tag ->
         let n = List.length a1 in
-          bind h1 (makesubst tyctx h1 t2 a1 n)
+          bind h1 (makesubst_safe tyctx h1 t2 a1 n)
     | Var v1, App (h2,a2) when constant v1.tag ->
         begin match observe h2 with
           | Var v2 when constant v2.tag ->
@@ -737,15 +766,34 @@ and unify_app_term tyctx h1 a1 t1 t2 =
                    identify the two constants by unifying their types *)
                 (if not (unifyty v1.ty v2.ty) then
                     fail (ConstClash (h1, h2)));
-                unify_list tyctx a1 a2
+                if is_sealed_ctor_var v1 then begin
+                  if List.length a1 = List.length a2 && List.for_all2 eq a1 a2 then
+                    ()
+                  else
+                    match P.sealed_mode with
+                    | Sealed_never -> raise (UnifyError NotLLambda)
+                    | Sealed_syntactic -> unify_list tyctx a1 a2
+                    | Sealed_try_syntactic ->
+                        let st = get_scoped_bind_state () in
+                        try unify_list tyctx a1 a2
+                        with UnifyFailure _ | UnifyError NotLLambda ->
+                          set_scoped_bind_state st ;
+                          raise (UnifyError NotLLambda)
+                end else
+                  unify_list tyctx a1 a2
                 end
+              else if is_sealed_ctor_var v1 || is_sealed_ctor_var v2 then
+                raise (UnifyError NotLLambda)
               else
                 fail (ConstClash (h1,h2))
           | DB _ ->
-              fail (ConstClash (h1,h2))
+              if is_sealed_ctor_var v1 then
+                raise (UnifyError NotLLambda)
+              else
+                fail (ConstClash (h1,h2))
           | Var hv2 when variable hv2.tag ->
               let m = List.length a2 in
-                bind h2 (makesubst tyctx h2 t1 a2 m)
+                bind h2 (makesubst_safe tyctx h2 t1 a2 m)
           | Var v when not (variable v.tag || constant v.tag) ->
               raise (UnifyError NotLLambda)
           | _ -> [%bug] "unify_app_term: unexpected application head"
@@ -760,8 +808,12 @@ and unify_app_term tyctx h1 a1 t1 t2 =
               fail (ConstClash (h1,h2))
           | Var v when variable v.tag ->
               let m = List.length a2 in
-                bind h2 (makesubst tyctx h2 t1 a2 m)
-          | Var v when constant v.tag -> fail (ConstClash (h1,h2))
+                bind h2 (makesubst_safe tyctx h2 t1 a2 m)
+          | Var v when constant v.tag ->
+              if is_sealed_ctor_var v then
+                raise (UnifyError NotLLambda)
+              else
+                fail (ConstClash (h1,h2))
           | Var v when not (variable v.tag || constant v.tag) ->
               raise (UnifyError NotLLambda)
           | _ -> [%bug] "unify_app_term: unexpected application head"
@@ -772,7 +824,12 @@ and unify_app_term tyctx h1 a1 t1 t2 =
         [%bug] "unify_app_term: unexpected lambda, pointer, or suspension"
     | Var v, _ when not (variable v.tag || constant v.tag) ->
         raise (UnifyError NotLLambda)
-    | _ -> fail (ConstClash (h1,t2))
+    | _ ->
+        begin match observe h1 with
+          | Var v1 when is_sealed_ctor_var v1 ->
+              raise (UnifyError NotLLambda)
+          | _ -> fail (ConstClash (h1,t2))
+        end
 
 (* Unify [v1 = t2].
  * [t1] should be the term decomposed as [Var v1]. *)
@@ -782,7 +839,7 @@ and unify_var_term tyctx v1 t1 t2 =
   else if rigid_path_check v1 t2 then
     bind t1 t2
   else
-    bind t1 (makesubst tyctx t1 t2 [] 0)
+    bind t1 (makesubst_safe tyctx t1 t2 [] 0)
 
 (* Unify [Lam(tys1,t1) = t2]. *)
 and unify_lam_term tyctx tys1 t1 t2 =
@@ -948,6 +1005,7 @@ module Right =
           let instantiatable = Logic
           let constant_like = Eigen
           let handler = standard_handler
+          let sealed_mode = Sealed_syntactic
         end)
 
 module Left =
@@ -955,6 +1013,7 @@ module Left =
           let instantiatable = Eigen
           let constant_like = Constant
           let handler = standard_handler
+          let sealed_mode = Sealed_never
         end)
 
 let right_unify ?used:(used=[]) t1 t2 =
@@ -992,6 +1051,7 @@ let try_left_unify_cpairs ~used t1 t2 =
             let instantiatable = Eigen
             let constant_like = Constant
             let handler = cpairs_handler
+            let sealed_mode = Sealed_never
           end)
   in
     try
@@ -1021,6 +1081,7 @@ let try_right_unify_cpairs t1 t2 =
                  let instantiatable = Logic
                  let constant_like = Eigen
                  let handler = cpairs_handler
+                 let sealed_mode = Sealed_try_syntactic
                end)
        in
          RightCpairs.pattern_unify ~used:[] t1 t2 ;

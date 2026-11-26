@@ -268,6 +268,8 @@ let install_compiled_decl ?strat_errors ?(subordinate=false) decl =
   | CType (ids, typarams, ty) ->
       Prover.add_global_consts ~typarams
         (List.map (fun id -> (id, ty)) ids)
+  | CSeal info ->
+      Prover.add_sealed_type info
   | CImport _
   | CClose _
   | CSuspend _ ->

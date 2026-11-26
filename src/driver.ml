@@ -1314,6 +1314,121 @@ and exec_resolved_top input thm_id =
                   (aty, Subordination.subordinates !sr aty))
                 atys)) ;
         Process_top
+    | Seal (name, params, tau, rel, sym, trans) ->
+        if is_capital_name name then
+          failwithf "Sealed type name %s may not begin with a capital letter" name ;
+        let (ktable, ctable) = !sign in
+        if Itab.mem name ktable then
+          failwithf "Type constructor %s is already declared" name ;
+        if Itab.mem name ctable then
+          failwithf "Constant %s is already declared" name ;
+        List.iter (fun p ->
+            if not (is_capital_name p) then
+              failwithf "Type parameter %s must begin with a capital letter" p ;
+            if List.mem p (bound_params ()) then
+              failwithf "Type parameter %s shadows a module parameter" p)
+          params ;
+        begin match List.find_duplicate params with
+        | Some p -> failwithf "Duplicate type parameter %s" p
+        | None -> ()
+        end ;
+        let tau_params = get_typaram tau in
+        begin match List.minus tau_params params with
+        | [] -> ()
+        | p :: _ ->
+            failwithf "Unbound type variable %s in sealed type definition" p
+        end ;
+        kind_check !sign tau ;
+        if Term.contains_prop tau then
+          failwithf "Sealed type %s cannot have underlying type containing prop: %s"
+            name (ty_to_string tau) ;
+        let rel_name = qualid_to_string rel in
+        let sym_name = qualid_to_string sym in
+        let trans_name = qualid_to_string trans in
+        let bstate = Term.get_scoped_bind_state () in
+        let schem = !Term.schematic_instantiations in
+        let rel_ty =
+          let rec deep_ty ty =
+            match observe_ty ty with
+            | Ty (tys, bty) ->
+                let bty = match bty with
+                  | Tycons (c, args) -> Tycons (c, List.map deep_ty args)
+                  | _ -> bty
+                in
+                Ty (List.map deep_ty tys, bty)
+          in
+          try
+            let rty = Typing.lookup_const !sign rel_name in
+            let expected = tyarrow [tau; tau] propty in
+            if not (Unify.unifyty rty expected) then
+              failwithf "Relation %s does not have type %s"
+                rel_name (ty_to_string expected) ;
+            let rty = deep_ty rty in
+            if Term.ty_contains_tyvar rty then
+              failwithf "Relation %s has underconstrained type %s"
+                rel_name (ty_to_string rty) ;
+            rty
+          with e ->
+            Term.set_scoped_bind_state bstate ;
+            Term.schematic_instantiations := schem ;
+            raise e
+        in
+        Term.set_scoped_bind_state bstate ;
+        Term.schematic_instantiations := schem ;
+        let rel_const = Term.const rel_name rel_ty in
+        let rel_app a b = Pred (Term.app rel_const [a; b], Irrelevant) in
+        let check_per_lemma kind lemma_name expected_body =
+          let (ltys, lstmt) = Prover.get_generic_lemma lemma_name in
+          if Prover.get_lemma_tag lemma_name = Unfinished then
+            failwithf "Cannot use unfinished lemma %s for %s of sealed type %s"
+              lemma_name kind name ;
+          let bstate = Term.get_scoped_bind_state () in
+          let schem = !Term.schematic_instantiations in
+          let ok =
+            try
+              let sub = ids_to_fresh_tyctx ltys in
+              let lstmt = Metaterm.map_on_tys (apply_sub_ty sub) lstmt in
+              let rec peel_foralls = function
+                | Binding (Forall, tids, body) ->
+                    let alist =
+                      List.map (fun (id, ty) ->
+                          (id, Term.fresh ~tag:Logic 1 ty))
+                        tids
+                    in
+                    peel_foralls (replace_metaterm_vars alist body)
+                | body -> body
+              in
+              let lbody = peel_foralls lstmt in
+              let matched = Unify.try_with_state ~fail:false (fun () ->
+                  Metaterm.meta_right_unify expected_body lbody ;
+                  true)
+              in
+              matched && not (Metaterm.metaterms_contain_tyvar [lbody])
+            with _ -> false
+          in
+          Term.set_scoped_bind_state bstate ;
+          Term.schematic_instantiations := schem ;
+          if not ok then
+            failwithf "Lemma %s does not prove %s for %s"
+              lemma_name kind name
+        in
+        let x = Term.var Constant "X" 1 tau in
+        let y = Term.var Constant "Y" 1 tau in
+        let z = Term.var Constant "Z" 1 tau in
+        check_per_lemma "symmetry" sym_name
+          (Arrow (rel_app x y, rel_app y x)) ;
+        check_per_lemma "transitivity" trans_name
+          (Arrow (rel_app x y, Arrow (rel_app y z, rel_app x z))) ;
+        let info : Sealed.info = {
+          name ;
+          typarams = params ;
+          underlying = observe_ty tau ;
+          rel_name ;
+          rel_ty ;
+        } in
+        Prover.add_sealed_type info ;
+        compile (CSeal info) ;
+        Process_top
     end
   in
   if not !Setup.annotate && not !Setup.quiet then Output.blank_line () ;

@@ -16,5 +16,6 @@ let () =
       Test_thm.tests ;
       Test_tactics.tests ;
       Test_prover.tests ;
+      Test_sealed.tests ;
       Test_web.tests ;
     ]

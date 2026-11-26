@@ -749,14 +749,63 @@ let normalize ?used term =
   |> normalize_nominals
   |> normalize_binders ?used
 
+let ensure_no_sealed_nabla_tys tys =
+  List.iter
+    (fun ty ->
+       if Sealed.is_sealed_target_ty ty then
+         failwithf "Cannot instantiate nabla quantification at sealed type %s"
+           (ty_to_string ty))
+    tys
+
 let make_nabla_alist tids body =
   let (id_names, id_tys) = List.split tids in
+  ensure_no_sealed_nabla_tys id_tys ;
   let nominals = fresh_nominals id_tys body in
     List.combine id_names nominals
 
 (* Unification *)
 
 open Unify
+
+let reduce_sealed_eq_parts t1 t2 =
+  let t1 = hnorm t1 in
+  let t2 = hnorm t2 in
+  match observe t1, observe t2 with
+  | App (h1, [e1]), App (h2, [e2]) ->
+      begin match observe h1, observe h2 with
+      | Var v1, Var v2
+        when v1.tag = Constant && v2.tag = Constant && v1.name = v2.name ->
+          begin match Sealed.lookup v1.name with
+          | Some info when Unify.unifyty_compat v1.ty v2.ty ->
+              let Ty (_, target) = observe_ty v1.ty in
+              let tyargs =
+                match target with
+                | Tycons (_, args) -> args
+                | _ -> [%bug] "reduce_sealed_eq_parts: expected Tycons"
+              in
+              let sub = List.combine info.typarams tyargs in
+              let rel_ty' = apply_sub_ty sub info.rel_ty in
+              let rel_const = const info.rel_name rel_ty' in
+              Some (e1, e2, rel_const)
+          | _ -> None
+          end
+      | _ -> None
+      end
+  | _ -> None
+
+let reduce_sealed_eq t1 t2 =
+  match reduce_sealed_eq_parts t1 t2 with
+  | Some (e1, e2, rel_const) ->
+      Some (Or (Eq (e1, e2), Pred (app rel_const [e1; e2], Irrelevant)))
+  | None -> None
+
+let cpairs_to_metaterms cpairs =
+  List.map
+    (fun (x, y) ->
+       match reduce_sealed_eq x y with
+       | Some mt -> mt
+       | None -> Eq (x, y))
+    cpairs
 
 let rec meta_right_unify t1 t2 =
   match t1, t2 with
@@ -857,6 +906,95 @@ let all_meta_right_permute_unify ~sc t1 t2 =
                (fun perm_support_t1 ->
                   let alist = List.combine support_t2_names perm_support_t1 in
                     if try_meta_right_unify t1 (replace_metaterm_vars alist t2) then sc ()))
+
+let rec meta_right_unify_cpairs t1 t2 =
+  match t1, t2 with
+    | True, True -> []
+    | False, False -> []
+    | Eq(l1, r1), Eq(l2, r2) ->
+        if not (unifyty (tc [] l1) (tc [] l2)) then
+          raise (UnifyFailure Generic) ;
+        let cp1 =
+          match try_right_unify_cpairs l1 l2 with
+          | Some cp -> cp
+          | None -> raise (UnifyFailure Generic)
+        in
+        let cp2 =
+          match try_right_unify_cpairs r1 r2 with
+          | Some cp -> cp
+          | None -> raise (UnifyFailure Generic)
+        in
+        cp1 @ cp2
+    | Obj (o1, _), Obj (o2, _)
+        when Context.equiv o1.context o2.context ->
+        right_unify o1.right o2.right ;
+        begin match o1.mode, o2.mode with
+        | Async, Async -> ()
+        | Sync f1, Sync f2 ->
+            right_unify f1 f2
+        | _ -> raise (UnifyFailure Generic)
+        end ;
+        []
+    | Pred(t1, _), Pred(t2, _) ->
+        begin match try_right_unify_cpairs t1 t2 with
+        | Some cp -> cp
+        | None -> raise (UnifyFailure Generic)
+        end
+    | And(l1, r1), And(l2, r2)
+    | Or(l1, r1), Or(l2, r2)
+    | Arrow(l1, r1), Arrow(l2, r2) ->
+        let cp1 = meta_right_unify_cpairs l1 l2 in
+        let cp2 = meta_right_unify_cpairs r1 r2 in
+        cp1 @ cp2
+    | Binding(b1, tids1, t1), Binding(b2, tids2, t2)
+      when b1 = b2 &&
+           List.length tids1 = List.length tids2 &&
+           tids_unifyable tids1 tids2 ->
+        List.iter2
+          (fun (_, ty1) (_, ty2) ->
+             if not (unifyty ty1 ty2) then raise (UnifyFailure Generic))
+          tids1 tids2 ;
+        let new_bindings1 =
+          List.map (fun (_, ty) -> fresh ~tag:Constant (max_int-1) ty) tids1
+        in
+        let new_bindings2 =
+          List.map2
+            (fun binding1 (_, ty) ->
+               let v1 = term_to_var binding1 in
+               var Constant v1.name (max_int-1) ty)
+            new_bindings1 tids2
+        in
+        let alist1 = List.combine (List.map fst tids1) new_bindings1 in
+        let alist2 = List.combine (List.map fst tids2) new_bindings2 in
+        meta_right_unify_cpairs
+          (replace_metaterm_vars alist1 t1)
+          (replace_metaterm_vars alist2 t2)
+    | _, _ -> raise (UnifyFailure Generic)
+
+let try_meta_right_unify_cpairs t1 t2 =
+  try_with_state ~fail:None
+    (fun () -> Some (meta_right_unify_cpairs t1 t2))
+
+let all_meta_right_permute_unify_cpairs ~sc t1 t2 =
+  let support_t1 = metaterm_support t1 in
+  let support_t2 = metaterm_support t2 in
+    if List.length support_t1 < List.length support_t2 then
+      ()
+    else
+      let support_t2_names = List.map term_to_name support_t2 in
+        support_t1
+        |> List.permute (List.length support_t2)
+        |> List.find_all begin fun perm_support_t1 ->
+                         List.for_all2 (fun v1 v2 -> eq_ty (term_to_var v1).ty (term_to_var v2).ty)
+                                       perm_support_t1 support_t2
+                         end
+        |> List.iter
+            (unwind_state
+               (fun perm_support_t1 ->
+                  let alist = List.combine support_t2_names perm_support_t1 in
+                  match try_meta_right_unify_cpairs t1 (replace_metaterm_vars alist t2) with
+                  | Some cpairs -> sc cpairs
+                  | None -> ()))
 
 (* Check for derivability between objects under permutations. Need
    goal.right to unify with hyp.right and also hyp.context subcontext

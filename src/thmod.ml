@@ -435,7 +435,7 @@ let resolve_top cmd =
   | TopCommon (Show name) ->
       TopCommon (Show (resolve_id name))
   | Import _ | ImportModule _ | Module _ | End _ | Specification _
-  | Close _ | Suspend _ | TopCommon _ -> cmd
+  | Close _ | Seal _ | Suspend _ | TopCommon _ -> cmd
 
 let resolve_hyp_or_item ~is_hyp name =
   if not (is_dotted name) && is_hyp name then name
@@ -463,6 +463,10 @@ let rec resolve_witness ~is_hyp w =
   | WUnfold (name, n, ws) ->
       WUnfold (resolve_id name, n,
                List.map (resolve_witness ~is_hyp) ws)
+  | WSealed w ->
+      WSealed (resolve_witness ~is_hyp w)
+  | WHypSealed (id, ws) ->
+      WHypSealed (id, List.map (resolve_witness ~is_hyp) ws)
 
 let resolve_ewitness ew =
   match ew with
@@ -552,7 +556,7 @@ let sort_of_compiled = function
   | CDefine _ -> Some Define
   | CTheorem (_, _, _, Axiomatic) -> Some Axiom
   | CTheorem _ -> Some Theorem
-  | CImport _ | CClose _ | CSuspend _ -> None
+  | CImport _ | CClose _ | CSeal _ | CSuspend _ -> None
 
 let items_of_compiled ?(local=last_segment) citem =
   match citem with
@@ -584,7 +588,7 @@ let items_of_compiled ?(local=last_segment) citem =
               sort = (if fin = Axiomatic then Axiom else Theorem) ;
               ty = None ;
               typarams = typarams }]
-  | CImport _ | CClose _ | CSuspend _ -> []
+  | CImport _ | CClose _ | CSeal _ | CSuspend _ -> []
 
 let check_shadowing sc new_items =
   let enclosing = enclosing_items () in
@@ -766,7 +770,7 @@ let sign_of_content content =
               (fun ctable (id, ty) ->
                  Itab.add id {pty = {vars = typarams ; ty} ; how = `defined} ctable)
               ctable idtys
-        | CTheorem _ | CKind _ | CImport _ | CClose _ | CSuspend _ -> ctable)
+        | CTheorem _ | CKind _ | CImport _ | CClose _ | CSeal _ | CSuspend _ -> ctable)
       Itab.empty content
   in
   (ktable, ctable)
@@ -851,6 +855,8 @@ let check_module_body cmd =
       failwith "Specification is not allowed in a module"
   | Close _ ->
       failwith "Close is not allowed in a module"
+  | Seal _ ->
+      failwith "Seal is not allowed in a module"
   | Suspend _ ->
       failwith "Suspend is not allowed in a module"
   | TopCommon Quit ->
@@ -871,6 +877,8 @@ let check_thmod_structure cmd =
       failwith "Specification is not allowed in a .thmod"
   | Close _ ->
       failwith "Close is not allowed in a .thmod"
+  | Seal _ ->
+      failwith "Seal is not allowed in a .thmod"
   | Suspend _ ->
       failwith "Suspend is not allowed in a .thmod"
   | TopCommon Quit ->
@@ -1014,7 +1022,7 @@ let map_compiled r comp =
         (List.map r.const ids, List.map r.tyvar typarams, map_ty r ty)
   | CKind (ids, knd) ->
       CKind (List.map r.tycons ids, knd)
-  | CImport _ | CClose _ | CSuspend _ -> comp
+  | CImport _ | CClose _ | CSeal _ | CSuspend _ -> comp
 
 let map_compiled_types f comp =
   let map_clause cl =
@@ -1032,7 +1040,7 @@ let map_compiled_types f comp =
          List.map map_clause clauses)
   | CType (ids, typarams, ty) ->
       CType (ids, typarams, f ty)
-  | CKind _ | CImport _ | CClose _ | CSuspend _ -> comp
+  | CKind _ | CImport _ | CClose _ | CSeal _ | CSuspend _ -> comp
 
 let rec map_term_constants f t =
   match observe (hnorm t) with
@@ -1078,13 +1086,13 @@ let ids_of_compiled = function
   | CTheorem (id, _, _, _) -> [id]
   | CDefine (_, _, idtys, _) -> List.map fst idtys
   | CType (ids, _, _) | CKind (ids, _) -> ids
-  | CImport _ | CClose _ | CSuspend _ -> []
+  | CImport _ | CClose _ | CSeal _ | CSuspend _ -> []
 
 let const_ids decls =
   List.unique (List.flatten_map (function
       | CType (ids, _, _) -> ids
       | CDefine (_, _, idtys, _) -> List.map fst idtys
-      | CTheorem _ | CKind _ | CImport _ | CClose _ | CSuspend _ -> [])
+      | CTheorem _ | CKind _ | CImport _ | CClose _ | CSeal _ | CSuspend _ -> [])
     decls)
 
 let kind_ids decls =
@@ -1101,7 +1109,7 @@ let typarams_of_compiled = function
   | CTheorem (_, tys, _, _) -> tys
   | CDefine (_, typarams, _, _) -> typarams
   | CType (_, typarams, _) -> typarams
-  | CKind _ | CImport _ | CClose _ | CSuspend _ -> []
+  | CKind _ | CImport _ | CClose _ | CSeal _ | CSuspend _ -> []
 
 let tyvars_of_compiled comp =
   let vars = ref [] in
@@ -1322,7 +1330,7 @@ let summary_to_string ~name ~params ~prefix content =
     | CTheorem (id, tys, stmt, _) ->
         line "  Theorem %s%s : %s." id (gen_to_string tys)
           (metaterm_to_string stmt)
-    | CImport _ | CClose _ | CSuspend _ ->
+    | CImport _ | CClose _ | CSeal _ | CSuspend _ ->
         failwith "Unexpected declaration in module summary"
   end content ;
   line "End %s." name ;
@@ -1578,7 +1586,7 @@ let target_local_names ~renamer decls =
     List.flatten_map (function
         | CType (ids, _, _) -> ids
         | CDefine (_, _, idtys, _) -> List.map fst idtys
-        | CTheorem _ | CKind _ | CImport _ | CClose _ | CSuspend _ -> [])
+        | CTheorem _ | CKind _ | CImport _ | CClose _ | CSeal _ | CSuspend _ -> [])
       decls
     |> List.map renamer.Ren.const
   in
@@ -1596,7 +1604,7 @@ let replay_imported_decls ~record decls =
     match decl with
     | CImport _ ->
         failwith "Unexpected import in a compiled reasoning module"
-    | CClose _ | CSuspend _ ->
+    | CClose _ | CSeal _ | CSuspend _ ->
         failwith "Unexpected command in a compiled reasoning module"
     | _ ->
         Artifact.install_compiled_decl
@@ -1789,7 +1797,7 @@ let import_module
           in
           Some (CDefine (flavor, typarams, idtys, clauses))
       | CType _ | CKind _ -> Some decl
-      | CImport _ | CClose _ | CSuspend _ ->
+      | CImport _ | CClose _ | CSeal _ | CSuspend _ ->
           failwith "Unexpected declaration in a reasoning module"
     end materialized
   in

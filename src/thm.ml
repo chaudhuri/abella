@@ -156,6 +156,16 @@ module Replacement = struct
           ~what:"declared constant"
           ~mem:(fun id -> Itab.mem id repl.map) ;
         comp
+    | CSeal info ->
+        check_no_existing [info.name]
+          ~what:"sealed type"
+          ~mem:(fun id -> Itab.mem id repl.map) ;
+        let rel_name =
+          match Itab.find_opt info.rel_name repl.map with
+          | Some defn -> defn.name
+          | None -> info.rel_name
+        in
+        CSeal { info with rel_name }
     | CSuspend _
     | CClose _ -> comp
 end

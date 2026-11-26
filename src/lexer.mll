@@ -36,6 +36,7 @@
     "Module",        RMODULE ;
     "Query",         QUERY ;
     "Quit",          QUIT ;
+    "Seal",          SEAL ;
     "Set",           SET ;
     "Show",          SHOW ;
     "Specification", SPECIFICATION ;

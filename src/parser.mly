@@ -166,7 +166,7 @@
 %token ALL AS BY FROM KEEP ON TO WITH
 
 /* Top-level and interactive commands */
-%token AXIOM BACK CLOSE CODEFINE DEFINE IMPORT QUERY QUIT RESET SET SHOW
+%token AXIOM BACK CLOSE CODEFINE DEFINE IMPORT QUERY QUIT RESET SEAL SET SHOW
 %token SPECIFICATION SSPLIT SUSPEND THEOREM
 
 /* Signature and module structure */
@@ -184,6 +184,7 @@
 
 /* Lower */
 
+%nonassoc WITH
 %nonassoc COMMA
 %right RARROW
 %left OR
@@ -460,7 +461,7 @@ aty:
     }
 
 ty:
-  | a=aty
+  | a=aty %prec RARROW
     { Typing.desugar_ty (Term.tybase a) }
   | a=ty; RARROW; b=ty
     { Term.tyarrow [a] b }
@@ -884,6 +885,9 @@ pure_top_command:
     { Types.Type(List.map deloc_id cs, ty) }
   | CLOSE; tys=aty_list; DOT
     { Types.Close(tys) }
+  | SEAL; x=loc_id; params=list(loc_id); DEFEQ; ty=ty; WITH; rel=qualid;
+    BY; sym=qualid; COMMA; trans=qualid; DOT
+    { Types.Seal(deloc_id x, List.map deloc_id params, ty, rel, sym, trans) }
   | SSPLIT; thm=loc_item;
     cs=loption(AS; cs=id_list {cs}); DOT
     { Types.SSplit(deloc_id thm, List.map deloc_id cs) }

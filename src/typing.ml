@@ -195,6 +195,13 @@ let check_const (ktable, ctable) (id, pty) =
   if is_capital_name id then
     failwithf "Constants may not begin with a capital letter: %s" id ;
 
+  begin match observe_ty pty.ty with
+  | Ty (_, Tycons (tname, _)) when Sealed.is_sealed_type tname ->
+      failwithf "Cannot declare constant %s with sealed target type %s"
+        id tname
+  | _ -> ()
+  end ;
+
   kind_check_poly (ktable, ctable) pty
 
 let add_poly_consts ?(how=`declared) (ktable, ctable) idptys =
@@ -696,13 +703,48 @@ let check_meta_quantification t =
     match t with
     | True | False | Eq _ | Obj _ | Pred _ -> ()
     | And(a, b) | Or(a, b) | Arrow(a, b) -> aux a; aux b
-    | Binding(_, tids, body) ->
+    | Binding(b, tids, body) ->
         List.iter
-          check_meta_logic_quantification_type
+          (fun ty ->
+             check_meta_logic_quantification_type ty ;
+             if b = Nabla && Sealed.is_sealed_target_ty ty then
+               failwithf "Cannot use nabla quantification at sealed type %s"
+                 (ty_to_string ty))
           (List.map snd tids) ;
         aux body
   in
   aux t
+
+let rec term_contains_sealed t =
+  match observe (hnorm t) with
+  | Var v -> Sealed.contains_sealed_ty v.ty
+  | DB _ -> false
+  | Lam (idtys, body) ->
+      List.exists (fun (_, ty) -> Sealed.contains_sealed_ty ty) idtys
+      || term_contains_sealed body
+  | App (h, args) ->
+      term_contains_sealed h || List.exists term_contains_sealed args
+  | _ -> false
+
+let ensure_no_sealed_in_obj mt =
+  let check_obj obj =
+    let bad =
+      List.exists term_contains_sealed obj.context
+      || term_contains_sealed obj.right
+      || (match obj.mode with
+          | Sync f -> term_contains_sealed f
+          | Async -> false)
+    in
+    if bad then
+      failwith "Sealed types cannot appear in specification logic sequents"
+  in
+  let rec aux = function
+    | True | False | Eq _ | Pred _ -> ()
+    | Obj (obj, _) -> check_obj obj
+    | And (a, b) | Or (a, b) | Arrow (a, b) -> aux a ; aux b
+    | Binding (_, _, body) -> aux body
+  in
+  aux mt
 
 (* Equality may not compare terms whose types contain [prop].
    Schematic type variables are allowed here since they can never
@@ -787,6 +829,7 @@ let type_umetaterm ~sr ~sign ?(ctx=[]) t =
   metaterm_ensure_subordination sr result ;
   check_meta_quantification result ;
   ensure_no_prop_equality result ;
+  ensure_no_sealed_in_obj result ;
   result
 
 let type_udef ~sr ~sign (head, body) =
@@ -824,6 +867,8 @@ let type_udef ~sr ~sign (head, body) =
   check_meta_quantification rbody ;
   ensure_no_prop_equality rhead ;
   ensure_no_prop_equality rbody ;
+  ensure_no_sealed_in_obj rhead ;
+  ensure_no_sealed_in_obj rbody ;
   (rhead, rbody)
 
 let type_udefs ~sr ~sign udefs =
