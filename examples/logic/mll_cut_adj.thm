@@ -61,58 +61,6 @@ intros Had.
 - search.
 - case Hsub.
 
-Define remove : A -> list A -> list A -> prop by
-  remove X (X :: L) L
-; remove X (Y :: L) (Y :: K) := remove X L K.
-
-Theorem remove_swap [A] : forall (X : A) Y L L1 L2,
-  remove X L L1 -> remove Y L L2 ->
-  (X = Y /\ L1 = L2) \/ exists K, remove Y L1 K /\ remove X L2 K.
-IH: induction on 1. intros Hrem1 Hrem2.
-[H11 H12 | Hsub1]: case Hrem1.
-- [H21 H22 | Hsub2]: case Hrem2.
-  + left. split.
-    * search.
-    * search.
-  + right. exists K. split.
-    * search.
-    * search.
-- [H21 H22 | Hsub2]: case Hrem2.
-  + right. exists K. split.
-    * search.
-    * search.
-  + [Hdisj]: apply IH to Hsub1 Hsub2.
-    [Heq | Hrem3 Hrem4]: case Hdisj.
-    * left. split.
-      -- search.
-      -- search.
-    * right. exists (Y1 :: K2). split.
-      -- search.
-      -- search.
-
-Theorem adj_to_remove [A] : forall (K : list A) X L,
-  adj K X L -> remove X L K.
-IH: induction on 1. intros Had.
-[ | Hsub]: case Had.
-- search.
-- [Hrem]: apply IH to Hsub.
-  search.
-
-Theorem remove_to_adj [A] : forall (X : A) L K,
-  remove X L K -> adj K X L.
-IH: induction on 1. intros Hrem.
-[ | Hsub]: case Hrem.
-- search.
-- [Had]: apply IH to Hsub.
-  search.
-
-Theorem remove_cons [A] : forall (X Y : A) (L K : list A),
-  remove X L K -> remove X (Y :: L) (Y :: K).
-intros Hrem.
-[ | Hsub]: case Hrem.
-- search.
-- search.
-
 Theorem adj_cons [A] : forall (X Y : A) (L K : list A),
   adj K X L -> adj (Y :: K) X (Y :: L).
 intros Had.
@@ -225,46 +173,7 @@ intros Hperm.
 [Heq]: apply perm_nil_1 to HpermS.
 search.
 
-Theorem perm_remove [A] : forall (X : A) L K K',
-  perm L K -> remove X K K' ->
-  exists L', remove X L L' /\ perm L' K'.
-intros Hperm Hrem.
-[Hadj]: apply remove_to_adj to Hrem.
-[!Lw HadL HpermL]: apply perm_adj_rem to Hadj Hperm.
-witness Lw. split.
-- [HremL]: apply adj_to_remove to HadL.
-  search.
-- search.
-
-Theorem perm_tail [A] : forall (X : A) L K, perm L (X :: K) ->
-  exists L', remove X L L' /\ perm L' K.
-intros Hperm.
-[!Jw HadJ HpermJ]: apply perm_cons_2 to Hperm.
-witness Jw. split.
-- [HremJ]: apply adj_to_remove to HadJ.
-  search.
-- search.
-
 Seal mset A := list A with perm by perm_sym, perm_trans.
-
-Theorem remove_is_list [A] : forall (X : A) L L',
-  remove X L L' -> is_list L' -> is_list L.
-IH: induction on 1. intros Hrem Hl.
-[ | Hsub]: case Hrem.
-- search.
-- [Hl0]: case Hl.
-  [HlL]: apply IH to Hsub Hl0.
-  search.
-
-Theorem remove_is_list_rev [A] : forall (X : A) L L',
-  remove X L L' -> is_list L -> is_list L'.
-IH: induction on 1. intros Hrem Hl.
-[ | Hsub]: case Hrem.
-- [Hl0]: case Hl.
-  search.
-- [Hl0]: case Hl.
-  [HlL]: apply IH to Hsub Hl0.
-  search.
 
 Theorem mset_cons [A] : forall (X : A) G D,
   mset G = mset D -> mset (X :: G) = mset (X :: D).
@@ -301,15 +210,6 @@ intros Had Hl.
 [Hperm]: apply perm_refl to Hl.
 search.
 
-Theorem remove_mset [A] : forall (X : A) L K,
-  remove X L K -> is_list K -> mset (X :: K) = mset L.
-intros Hrem Hl.
-[Hadj]: apply remove_to_adj to Hrem.
-[Hm]: apply adj_mset to Hadj Hl.
-[ | Hperm]: case Hm.
-- search.
-- search.
-
 Define append : list A -> list A -> list A -> prop by
   append nil L L
 ; append (X :: L) K (X :: W) := append L K W.
@@ -336,20 +236,6 @@ IH: induction on 1. intros Happ.
 - search.
 - [HlG]: apply IH to Happ0.
   search.
-
-Theorem append_remove_left_rev [A] : forall (X : A) G D W' G',
-  remove X G G' -> append G' D W' ->
-  exists W, remove X W W' /\ append G D W.
-IH: induction on 1. intros Hrem Happ.
-[ | HsubR]: case Hrem.
-- exists (X :: W'). split.
-  + search.
-  + search.
-- [Happ0]: case Happ.
-  [!W1 HremW HappW]: apply IH to HsubR Happ0.
-  witness (Y :: W1). split.
-  + search.
-  + search.
 
 Theorem adj_1_append [A] : forall (J : list A) X K L JL,
   adj J X K -> append J L JL -> exists KL, append K L KL /\ adj JL X KL.
@@ -415,28 +301,6 @@ IH: induction on 1. intros Happ1 Happ2.
 - [Happ2']: case Happ2.
   [!W3 Happ3a Happ3b]: apply IH to Happ10 Happ2'.
   search.
-
-Theorem append_split_remove [A] : forall (X : A) G1 G2 G G',
-  append G1 G2 G -> remove X G G' ->
-  (exists G1', remove X G1 G1' /\ append G1' G2 G') \/
-  (exists G2', remove X G2 G2' /\ append G1 G2' G').
-IH: induction on 1. intros Happ Hrem.
-[ | Happ0]: case Happ.
-- right. exists G'. split.
-  + search.
-  + search.
-- [Hrem0 | HsubR]: case Hrem.
-  + left. exists L. split.
-    * search.
-    * search.
-  + [Hdisj]: apply IH to Happ0 HsubR.
-    [Hleft | Hright]: case Hdisj.
-    * left. exists (X1 :: G1'). split.
-      -- search.
-      -- search.
-    * right. exists G2'. split.
-      -- search.
-      -- search.
 
 Theorem append_split_adj [A] : forall (X : A) G1 G2 G G',
   append G1 G2 G -> adj G' X G ->
@@ -510,6 +374,26 @@ IH: induction on 1. intros Happ Hl.
       -- [HpermC]: apply perm_cons to HpermW with X = X.
         [HpermWW]: apply perm_trans to HpermC HpermW1.
         search.
+
+Theorem append_cons_right_mset_2 [A] : forall (X Y : A) G D W,
+  append G D W -> is_list D ->
+  exists W', append G (X :: Y :: D) W' /\ mset (X :: Y :: W) = mset W'.
+intros Happ Hl.
+[!W1 HappW1 HdisjW1]: apply append_cons_right_mset to Happ Hl with X = Y.
+[HlY]: apply is_list_cons to Hl with X = Y.
+[!W2 HappW2 HdisjW2]: apply append_cons_right_mset to HappW1 HlY with X = X.
+exists W2. split.
+- search.
+- [ | Hperm2]: case HdisjW2.
+  + [ | Hperm1]: case HdisjW1.
+    * search.
+    * [HpC]: apply perm_cons to Hperm1 with X = X.
+      search.
+  + [ | Hperm1b]: case HdisjW1.
+    * search.
+    * [HpC2]: apply perm_cons to Hperm1b with X = X.
+      [HpT]: apply perm_trans to HpC2 Hperm2.
+      search.
 
 Kind atm type.
 Kind form type.
@@ -659,7 +543,9 @@ IH: induction on 1. intros Hmll.
          [Hl1]: apply is_list_cons to Hk with X = B1.
          [Hl2]: apply is_list_cons to Hl1 with X = A1.
          [Hmeq]: apply adj_mset to Hc2 Hl2.
-         apply Hmeq.
+         [Heq | Hperm]: case Hmeq.
+         ++ search.
+         ++ search.
       -- [HlK]: assert (is_list K).
          [HlJK]: apply perm_1_is_list to HpermJ.
          [HlK2]: case HlJK.
@@ -672,3 +558,306 @@ IH: induction on 1. intros Hmll.
          [Hp4]: assert (perm (A1 :: B1 :: A :: B :: K) (A :: B :: A1 :: B1 :: K)).
          apply perm_refl to HlK. search.
          unfold 3. exists A :: B :: K, B1, A1. search.
+- case HmEqT.
+  rename H1 to HpermT.
+  [!Jw HadJ HpermJ]: apply perm_cons_2 to HpermT.
+    [!K Hsub]: case HadJ.
+    [HdisjS]: apply append_split_adj to HappT Hsub.
+    [!G1p HadL HappL | !G2p HadR HappR]: case HdisjS.
+    * [HlA]: apply mll_is_list to HmllA.
+      [HlA1]: case HlA.
+      [HlG1']: apply adj_is_list_rev to HadL HlA1.
+      [HmL]: apply IH to HmllA with G = A1 :: G1p, A = A, B = B.
+      -- [Hc1]: apply adj_cons to HadL with Y = A1.
+         [Hl1]: apply is_list_cons to HlG1' with X = A1.
+         [Hmeq]: apply adj_mset to Hc1 Hl1.
+         [Heq | Hperm]: case Hmeq.
+         ++ search.
+         ++ search.
+      -- [HlJw]: apply perm_1_is_list to HpermJ.
+         [HlK]: case HlJw.
+         [Hp0]: assert (perm (tens A1 B1 :: A :: B :: K) (A :: B :: tens A1 B1 :: K)).
+         apply perm_refl to HlK. search.
+         [Hp1]: apply perm_cons to HpermJ with X = B.
+         [Hp2]: apply perm_cons to Hp1 with X = A.
+         [Hp3]: apply perm_trans to Hp0 Hp2.
+         [Hp4]: assert (perm (A :: B :: A1 :: G1p) (A1 :: A :: B :: G1p)).
+         apply perm_refl to HlG1'. search.
+         unfold 4. exists A :: B :: K, B1, A1. split.
+         ++ search.
+         ++ exists A :: B :: G1p, G3. search.
+    * [HlB]: apply mll_is_list to HmllB.
+      [HlB1]: case HlB.
+      [HlG2']: apply adj_is_list_rev to HadR HlB1.
+      [HmR]: apply IH to HmllB with G = B1 :: G2p, A = A, B = B.
+      -- [Hc1]: apply adj_cons to HadR with Y = B1.
+         [Hl1]: apply is_list_cons to HlG2' with X = B1.
+         [Hmeq]: apply adj_mset to Hc1 Hl1.
+         [Heq | Hperm]: case Hmeq.
+         ++ search.
+         ++ search.
+      -- [HlJw]: apply perm_1_is_list to HpermJ.
+         [HlK]: case HlJw.
+         [HpT0]: assert (perm (tens A1 B1 :: A :: B :: K) (A :: B :: tens A1 B1 :: K)).
+         apply perm_refl to HlK. search.
+         [HpT1]: apply perm_cons to HpermJ with X = B.
+         [HpT2]: apply perm_cons to HpT1 with X = A.
+         [HpT3]: apply perm_trans to HpT0 HpT2.
+         [HpAB]: assert (perm (A :: B :: B1 :: G2p) (B1 :: A :: B :: G2p)).
+         apply perm_refl to HlG2'. search.
+         [!W2 HappW2 HdisjW2]: apply append_cons_right_mset_2 to HappR HlG2' with X = A, Y = B.
+         [ | HpermW]: case HdisjW2.
+         ++ unfold 4. exists W2, B1, A1. split.
+            ** search.
+            ** exists G2, A :: B :: G2p. search.
+         ++ [HpWs]: apply perm_sym to HpermW.
+            [HpWc]: apply perm_cons to HpWs with X = tens A1 B1.
+            [HpW]: apply perm_trans to HpWc HpT3.
+            unfold 4. exists W2, B1, A1. split.
+            ** search.
+            ** exists G2, A :: B :: G2p. search.
+- case HmEqB.
+  rename H1 to HpermB.
+  [!Jw HadJ HpermJ]: apply perm_cons_2 to HpermB.
+    [!K Hsub]: case HadJ.
+    [Hl0]: apply mll_is_list to HsubB.
+    [HlK]: apply adj_is_list_rev to Hsub Hl0.
+    [Hm0]: apply IH to HsubB with G = K, A = A, B = B.
+    -- [Hmeq]: apply adj_mset to Hsub HlK.
+       [Heq | Hperm]: case Hmeq.
+       ++ search.
+       ++ search.
+    -- [Hp0]: assert (perm (bot :: A :: B :: K) (A :: B :: bot :: K)).
+       apply perm_refl to HlK. search.
+       [Hp1]: apply perm_cons to HpermJ with X = B.
+       [Hp2]: apply perm_cons to Hp1 with X = A.
+       [Hp3]: apply perm_trans to Hp0 Hp2.
+       unfold 5. exists A :: B :: K. search.
+
+Theorem perm_of_mset_disj : forall (W1 Wd : list form),
+  (W1 = Wd \/ perm W1 Wd) -> is_list W1 -> is_list Wd -> perm W1 Wd.
+intros Hdisj Hl1 Hl2.
+[ | Hp]: case Hdisj.
+- backchain perm_refl.
+- search.
+
+Theorem tens_cut_left : forall (A1 B1 : form) (G2 We Wd W1 W : list form),
+  append G2 We Wd -> mll (mset (A1 :: We)) -> mll (mset (B1 :: G2)) ->
+  (W1 = Wd \/ perm W1 Wd) -> (W = tens A1 B1 :: W1 \/ perm W (tens A1 B1 :: W1)) ->
+  is_list We -> is_list W1 -> mll (mset W).
+intros HappE2 Hres HmllB HmWD HmWx HlWe HlW1.
+[HlWd]: apply append_is_list to HappE2 HlWe.
+[HpWD]: apply perm_of_mset_disj to HmWD HlW1 HlWd.
+[HpC]: apply perm_cons to HpWD with X = tens A1 B1.
+[HpCs]: apply perm_sym to HpC.
+[!Wd2 HappF HmF]: apply append_comm_mset to HappE2 HlWe.
+[ | HpermWx]: case HmWx.
+- [ | HpermF]: case HmF.
+  + [Hgoal]: assert 0 (mll (mset (tens A1 B1 :: Wd2))).
+    unfold 4. exists We, G2. search.
+    search.
+  + [HpC2]: apply perm_cons to HpermF with X = tens A1 B1.
+    [HpL]: apply perm_trans to HpC HpC2.
+    [HpLs]: apply perm_sym to HpL.
+    [Hgoal]: assert 0 (mll (mset (tens A1 B1 :: Wd2))).
+    unfold 4. exists We, G2. search.
+    search.
+- [HpWxs]: apply perm_sym to HpermWx.
+  [ | HpermF2]: case HmF.
+  + [HpE1]: apply perm_sym to HpC.
+    [HpE2]: apply perm_trans to HpE1 HpWxs.
+    [Hgoal]: assert 0 (mll (mset (tens A1 B1 :: Wd2))).
+    unfold 4. exists We, G2. search.
+    search.
+  + [Hp2b]: apply perm_cons to HpermF2 with X = tens A1 B1.
+    [Hp3b]: apply perm_trans to HpC Hp2b.
+    [Hp3s]: apply perm_sym to Hp3b.
+    [Hp4b]: apply perm_trans to Hp3s HpWxs.
+    [Hgoal]: assert 0 (mll (mset (tens A1 B1 :: Wd2))).
+    unfold 4. exists We, G2. search.
+    search.
+
+Theorem mll_cut :
+  forall G D A B, dual A B -> mll (mset (A :: G)) -> mll (mset (B :: D)) ->
+  forall W, append G D W -> mll (mset W).
+induction on 1. induction on 2. intros.
+Hd : assert (is_list D).
+Hmlld : apply mll_is_list to H3.
+case Hmlld.
+search.
+Hg : assert (is_list G).
+Hmllg : apply mll_is_list to H2.
+case Hmllg.
+search.
+[HmEq | HmEq1 | HmEqP HsubP | HmEqT HappT HmllA HmllB | HmEqB HsubB] : case H2.
+- [ | HpermI]: case HmEq.
+  + case H1.
+    [HappA]: case H4.
+    case HappA.
+    search.
+  + [!J HadJ HpermJ]: apply perm_cons_2 to HpermI.
+    [ | !J1 Hsub]: case HadJ.
+    * case H1.
+      [HpJS]: apply perm_sym to HpermJ.
+      [HmG]: assert (mset G = mset (natom A1 :: nil)).
+      [!W' HappW' HmW]: apply append_mset_left to H4 HmG Hd.
+      [Happ1]: case HappW'.
+      [Happ2]: case Happ1.
+      [ | HpermW]: case HmW.
+      -- search.
+      -- search.
+    * [ | !J2 Hsub2]: case Hsub.
+      -- case H1.
+      -- case Hsub2.
+- [ | Hperm1]: case HmEq1.
+  + case H1.
+    [HadD]: assert (adj D bot (bot :: D)).
+    [HmD]: apply bot_inv_remove to H3 HadD.
+    case H4.
+    search.
+  + [!J HadJ HpermJ]: apply perm_cons_2 to Hperm1.
+    [ | !J1 Hsub]: case HadJ.
+    * case H1.
+      [HadD]: assert (adj D bot (bot :: D)).
+      [HmD]: apply bot_inv_remove to H3 HadD.
+      [HpJS]: apply perm_sym to HpermJ.
+      [HmG]: assert (mset G = mset nil).
+      [!W' HappW' HmW]: apply append_mset_left to H4 HmG Hd.
+      [Happ1]: case HappW'.
+      [ | HpermW]: case HmW.
+      -- search.
+      -- search.
+    * case Hsub.
+- [ | HpermP]: case HmEqP.
+  + case H1.
+  + [!J HadJ HpermJ]: apply perm_cons_2 to HpermP.
+    [ | !K Hsub]: case HadJ.
+    * case H1.
+    * [HpJS]: apply perm_sym to HpermJ.
+      [HmG]: assert (mset G = mset (par A1 B1 :: K)).
+      [!W1 HappW1 HmW1]: apply append_mset_left to H4 HmG Hd.
+      [HappW1c]: case HappW1.
+      [HlJK]: apply perm_1_is_list to HpermJ.
+      [HlK]: case HlJK.
+      [HpA]: assert (perm (A :: A1 :: B1 :: K) (A1 :: B1 :: G1)).
+      apply perm_refl to HlK. search.
+      [Ha]: assert (append (A1 :: B1 :: K) D (A1 :: B1 :: W2)).
+      [Hcut]: apply IH1 to H1 HsubP H3 with G = A1 :: B1 :: K, A = A, B = B.
+      [Hres]: apply Hcut to Ha.
+      unfold 3. exists W2, B1, A1. split.
+      ++ [ | HpermW]: case HmW1.
+         ** search.
+         ** right. backchain perm_sym.
+      ++ search.
+- [ | HpermT]: case HmEqT.
+  + [Hda Hdb]: case H1.
+    [Hpar]: apply par_inv to H3.
+    [HlB]: apply mll_is_list to HmllB.
+    [HlB1]: case HlB.
+    [!W1 Happ1 Happ2]: apply append_assoc to HappT H4.
+    [!W' HappW' HdisjW']: apply append_cons_right_mset to Happ1 Hd with X = AA.
+    [Hswap]: assert 0 (perm (AA :: BB :: D) (BB :: AA :: D)).
+    apply perm_refl to Hd. search.
+    [Hbd]: assert 0 (mll (mset (BB :: AA :: D))).
+    search.
+    [HcutB]: apply IH to Hdb HmllB Hbd.
+    [HmB]: apply HcutB to HappW'.
+    [Haa]: assert 0 (mll (mset (AA :: W1))).
+    [ | HpermW']: case HdisjW'.
+    * search.
+    * search.
+    * [HcutA]: apply IH to Hda HmllA Haa.
+      [HresA]: apply HcutA to Happ2.
+      search.
+  + [!J HadJ HpermJ]: apply perm_cons_2 to HpermT.
+    [ | !K Hsub]: case HadJ.
+    * [Hda Hdb]: case H1.
+      [Hpar]: apply par_inv to H3.
+      [HpJS]: apply perm_sym to HpermJ.
+      [HmG]: assert 0 (mset G = mset G1).
+      search.
+      [!W' HappW' HmW']: apply append_mset_left to H4 HmG Hd.
+      [HlB]: apply mll_is_list to HmllB.
+      [HlB1]: case HlB.
+      [!W1 Happ1 Happ2]: apply append_assoc to HappT HappW'.
+      [!W2 HappW2 HdisjW2]: apply append_cons_right_mset to Happ1 Hd with X = AA.
+      [Hswap]: assert 0 (perm (AA :: BB :: D) (BB :: AA :: D)).
+      apply perm_refl to Hd. search.
+      [Hbd]: assert 0 (mll (mset (BB :: AA :: D))).
+      search.
+      [HcutB]: apply IH to Hdb HmllB Hbd.
+      [HmB]: apply HcutB to HappW2.
+      [Haa]: assert 0 (mll (mset (AA :: W1))).
+      [ | HpermW2]: case HdisjW2.
+      -- search.
+      -- search.
+      -- [HcutA]: apply IH to Hda HmllA Haa.
+         [HresA]: apply HcutA to Happ2.
+         [ | HpermW']: case HmW'.
+         ++ search.
+         ++ search.
+    * [HpJS2]: apply perm_sym to HpermJ.
+      [HmG2]: assert 0 (mset G = mset (tens A1 B1 :: K)).
+      search.
+      [!Wx HappX HmWx]: apply append_mset_left to H4 HmG2 Hd.
+      [HappW1c]: case HappX.
+      [HdisjS]: apply append_split_adj to HappT Hsub.
+      [!G1p HadL HappL | !G2p HadR HappR]: case HdisjS.
+      ** [HlA]: apply mll_is_list to HmllA.
+         [HlA1]: case HlA.
+         [HlG1']: apply adj_is_list_rev to HadL HlA1.
+         [HlAG]: apply is_list_cons to HlG1' with X = A1.
+         [HpA]: assert 0 (perm (A :: A1 :: G1p) (A1 :: G2)).
+         apply perm_refl to HlAG. search.
+         [HlB]: apply mll_is_list to HmllB.
+         [HlB1]: case HlB.
+         [HlWx']: apply append_is_list to HappW1c Hd.
+         [!Wc HappC HmC]: apply append_comm_mset to HappL HlB1.
+         [HmK]: assert 0 (mset K = mset Wc).
+         [ | HpermC]: case HmC.
+         ++ search.
+         ++ search.
+         ++ [!Wd HappD HmD]: apply append_mset_left to HappW1c HmK Hd.
+         [!We HappE1 HappE2]: apply append_assoc to HappC HappD.
+         [HlWe]: apply append_is_list to HappE1 Hd.
+         [Ha]: assert 0 (append (A1 :: G1p) D (A1 :: We)).
+         search.
+         [Hcut]: apply IH1 to H1 HmllA H3 with G = A1 :: G1p, A = A, B = B.
+         [Hres]: apply Hcut to Ha.
+         [Hfin]: apply tens_cut_left to HappE2 Hres HmllB HmD HmWx HlWe HlWx'.
+         search.
+      ** [HlB]: apply mll_is_list to HmllB.
+         [HlB1]: case HlB.
+         [HlG2p]: apply adj_is_list_rev to HadR HlB1.
+         [HlBG]: apply is_list_cons to HlG2p with X = B1.
+         [HpA]: assert 0 (perm (A :: B1 :: G2p) (B1 :: G3)).
+         apply perm_refl to HlBG. search.
+         [!W3 HappA1 HappA2]: apply append_assoc to HappR HappW1c.
+         [Ha]: assert 0 (append (B1 :: G2p) D (B1 :: W3)).
+         search.
+         [Hcut]: apply IH1 to H1 HmllB H3 with G = B1 :: G2p, A = A, B = B.
+         [Hres]: apply Hcut to Ha.
+         [ | HpermWx]: case HmWx.
+         ++ unfold 4. exists G2, W3. search.
+         ++ [HpWs]: apply perm_sym to HpermWx.
+            unfold 4. exists W1, B1, A1, G2, W3. search.
+- [ | HpermB]: case HmEqB.
+  + case H1.
+  + [!J HadJ HpermJ]: apply perm_cons_2 to HpermB.
+    [ | !K Hsub]: case HadJ.
+    * case H1.
+    * [HpJS]: apply perm_sym to HpermJ.
+      [HmG]: assert (mset G = mset (bot :: K)).
+      [!Wx HappX HmWx]: apply append_mset_left to H4 HmG Hd.
+      [HappW1c]: case HappX.
+      [Hl0]: apply mll_is_list to HsubB.
+      [HlK]: apply adj_is_list_rev to Hsub Hl0.
+      [HpA]: assert (perm (A :: K) G1).
+      apply perm_refl to HlK. search.
+      [Hcut]: apply IH1 to H1 HsubB H3 with G = K, A = A, B = B.
+      [Hres]: apply Hcut to HappW1c.
+         [HbotW]: assert 0 (mll (mset (bot :: W1))).
+         unfold 5. search.
+         [ | HpermW]: case HmWx.
+         ++ search.
+         ++ search.
